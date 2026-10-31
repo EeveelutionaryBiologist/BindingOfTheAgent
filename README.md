@@ -5,9 +5,9 @@ ever-deeper codebases. Shoot tokens at bugs, pick up items of questionable value
 
 ## Play
 
-Basically ripped straight from Binding Of Isaac.
-
 **Double-click `index.html`.** That's it. Any current Chromium, Edge or Firefox works.
+
+Controls are basically ripped straight from Binding Of Isaac.
 
 | Action | Key |
 |---|---|
