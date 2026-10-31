@@ -393,6 +393,31 @@
   const URGENT_SHOT = { color: '#e04848' };         // "Urgent request" (rot)
   const SCOPE_SHOT = { color: '#f08a3c' };          // "Scope change" (orange, richtet sich neu aus)
 
+  /**
+   * Tempo der Stakeholderin (Sekunden; Index 0 = Phase 1, Index 1 = Phase 2).
+   * Balance-Pass 2026-10-31: Sie kann schon auf Etage 1 auftauchen und war dort zu aggressiv
+   * (~8 Schuss/s in Phase 1, ~12 in Phase 2, kaum Pausen). Die Pausen zwischen den Angriffen und
+   * zwischen den Faecher-Salven sind deshalb laenger. Die Werte laufen durch AI.cooldown: Auf Etage 1
+   * gelten sie unveraendert, tiefer unten schrumpfen sie (max. -25 %) ungefaehr auf das alte Tempo
+   * (Pause 1.1 / 0.8 s, Salvenabstand 0.55 / 0.45 s).
+   */
+  const STAKE_PACE = {
+    idle: [1.5, 1.1],       // Verschnaufpause nach Spirale und Faechern
+    fanGap: [0.7, 0.55],    // Abstand zwischen den einzelnen "Urgent"-Salven
+    retargetIdle: 1.2,      // Pause nach "Scope change" (nur Phase 2)
+  };
+  /**
+   * Abstand zwischen zwei Spiral-Schuessen (Phase 1 / Phase 2). Phase 1 war 0.13 s; die Spirale macht
+   * den Grossteil des Schussdrucks aus, deshalb etwas luftiger. Bewusst NICHT tiefenskaliert, damit
+   * die Spirale auf spaeten Etagen nicht dichter wird als vor dem Balance-Pass.
+   */
+  const STAKE_SPIRAL_GAP = [0.15, 0.12];
+  /** Phasenabhaengigen Tempowert holen und mit der Tiefe skalieren */
+  function stakePace(game, key, p2) {
+    const v = STAKE_PACE[key];
+    return AI.cooldown(game, Array.isArray(v) ? v[p2 ? 1 : 0] : v);
+  }
+
   /** Neuen Schwebe-Wegpunkt waehlen: oberer/mittlerer Raum, mit Abstand zum Spieler */
   function stakePickWaypoint(e, game) {
     const s = e.state, p = game.player, rng = game.rng;
@@ -482,7 +507,7 @@
           moveMult = 0.2;
           const arms = p2 ? 3 : 2;
           const rate = p2 ? 2.4 : 2.0;
-          const interval = p2 ? 0.12 : 0.13;
+          const interval = STAKE_SPIRAL_GAP[p2 ? 1 : 0];
           if (p2) {
             s.flipT -= dt;
             if (s.flipT <= 0) { s.spinDir = -s.spinDir; s.flipT = 1.0; }
@@ -494,7 +519,7 @@
             for (let k = 0; k < arms; k++) AI.shoot(game, e, s.spin + (k * TAU) / arms, sp, SPIRAL_SHOT);
             s.emit += interval;
           }
-          if (s.t <= 0) { s.mode = 'idle'; s.t = p2 ? 0.8 : 1.1; }
+          if (s.t <= 0) { s.mode = 'idle'; s.t = stakePace(game, 'idle', p2); }
           break;
         }
 
@@ -508,8 +533,8 @@
             AI.fanAngle(game, e, AI.angleTo(e, p) + off, n, spread, AI.shotSpeed(game, p2 ? 260 : 245), URGENT_SHOT);
             s.firstTell = false;
             s.left--;
-            if (s.left > 0) s.t = p2 ? 0.45 : 0.55;
-            else { s.mode = 'idle'; s.t = p2 ? 0.8 : 1.1; }
+            if (s.left > 0) s.t = stakePace(game, 'fanGap', p2);
+            else { s.mode = 'idle'; s.t = stakePace(game, 'idle', p2); }
           }
           break;
 
@@ -541,7 +566,7 @@
             }
             s.held.length = 0;
             s.mode = 'idle';
-            s.t = 0.9;
+            s.t = stakePace(game, 'retargetIdle', true);
           }
           break;
 

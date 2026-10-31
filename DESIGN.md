@@ -413,6 +413,10 @@ All milestones done. What shipped, compared with this doc:
   - Balance hasn't been playtested by humans.
   - Once the item pools run dry, items can repeat.
   - Gamepad support and seed entry on the title screen are still stretch goals.
+- **Balance pass (2026-10-31), after player reports:**
+  - The Stakeholder takes longer breaks between attacks (1.5 s / 1.1 s by phase instead of 1.1 / 0.8),
+    waits longer between fan volleys, and its phase-1 spiral is a bit sparser. On floor 1 that's about
+    15 % fewer shots per second in both phases. The breaks shrink with depth, back to roughly the old pace.
 
 ## 14. Stretch goals
 Gamepad support · procedural chiptune loop · seed entry on the title screen · trinkets · curse rooms

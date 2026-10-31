@@ -437,6 +437,8 @@ modules rely on these implicitly through the bus.
   that as a guess. Firefox under `file://` is untested.
 - **Determinism caveat.** See §3.6: item and shop rolls depend on the order rooms are visited.
 - **Debug teleport placement.** `teleport()` places the player near the room centre or bottom, not at a door.
+- **Stakeholder pacing.** It's set in `STAKE_PACE` / `STAKE_SPIRAL_GAP` in `boss.js`. The breaks go through
+  `AI.cooldown` (unchanged on floor 1, up to −25 % deeper); the spiral gap deliberately doesn't scale with depth.
 
 ## 7. History and ownership
 v1 was built in one session (2026-10-30). A lead wrote the design doc and the core engine (core, world, game, main,
