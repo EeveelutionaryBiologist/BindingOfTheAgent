@@ -1,15 +1,7 @@
 # The Binding of the Agent: Enemies and bosses
 
-All enemies, minions and bosses in the game. Edit this file by hand. The game code is the source of truth: all
-names and numbers below were checked against it on 2026-10-31, and the code wins whenever the two disagree.
-Items and pickups are listed in [items.md](items.md).
+All enemies, minions and bosses in the game.
 
-- **Contents:** [Enemies](#enemies) (12) · [Minions](#minions) (3) · [Bosses](#bosses) (4)
-- **Images** are exported from the in-game pixel art (`src/data/sprites-*.js`). After art changes, run
-  `node tools/export-sprites.js`; it rewrites `documents/images/` and never touches this file.
-- **IDs** (`like_this`) are the keys used in code (`B.ENEMIES`, `B.BOSSES`) and in the debug API, e.g.
-  `BOTA.debug.spawn('bug')` or `BOTA.debug.spawnBoss('monolith')`.
-- **PDF:** `node tools/export-pdf.js` renders this file to `documents/pdf/enemies.pdf`.
 
 ## Reading the numbers
 
