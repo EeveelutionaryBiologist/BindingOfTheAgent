@@ -6,6 +6,8 @@
  *   - jedes Item: Sprite existiert, giveItem + recalcStats laufen fehlerfrei
  *   - jeder Gegner/Boss: Sprite existiert, spawnt, agiert und stirbt sauber
  *   - 300 generierte Etagen enthalten Start/Boss/Schatz/Shop; alle Layouts bestehen validateLayout (strict)
+ *   - lose Pickups nur in Kampfraeumen (~18 %) und beim Betreten gelegt; Hallucination nutzt jede Tarnung,
+ *     eine nahe Explosion enttarnt sie
  *   - Spezialraeume, Pause- und Todesbildschirm rendern
  * Screenshots landen in tools/out/ (nicht einchecken).
  *
@@ -78,6 +80,7 @@ const URL = 'file://' + path.join(ROOT, 'index.html').replace(/\\/g, '/') + '?se
     // Layouts (strikte Hausregeln)
     for (const l of BOTA.LAYOUTS) { const r = BOTA.validateLayout(l, { strict: true }); if (!r.ok) out.push('Layout ' + l.id + ': ' + r.error); }
     // Etagen-Fuzzing
+    let combatRooms = 0, combatWithLoot = 0;
     for (let i = 0; i < 300; i++) {
       const f = new BOTA.Floor(1 + (i % 10), 'fuzz' + i);
       const types = [...f.cells.values()].map((c) => c.type);
@@ -86,7 +89,19 @@ const URL = 'file://' + path.join(ROOT, 'index.html').replace(/\\/g, '/') + '?se
       const keyRooms = [...f.cells.values()].filter((c) => c.room.guaranteedKey);
       if (f.depth >= 2 && (keyRooms.length !== 1 || keyRooms[0].type !== 'normal')) out.push('fuzz' + i + ': ' + keyRooms.length + ' Schluesselraeume');
       if (f.depth < 2 && keyRooms.length) out.push('fuzz' + i + ': Schluesselraum auf Tiefe 1');
+      // Lose Pickups nur in Kampfraeumen, nur erlaubte Typen, 1–2 Stueck
+      for (const c of f.cells.values()) {
+        const ll = c.room.looseLoot;
+        if (!ll.length) continue;
+        combatWithLoot++;
+        if (c.type !== 'normal' || !c.room.plannedEnemies.length) out.push('fuzz' + i + ': lose Pickups in ' + c.type);
+        if (ll.length > 2 || ll.some((t) => !BOTA.LOOSE_LOOT.types[t])) out.push('fuzz' + i + ': lose Pickups ' + ll.join(','));
+      }
+      combatRooms += [...f.cells.values()].filter((c) => c.type === 'normal' && c.room.plannedEnemies.length).length;
     }
+    // Anteil der Kampfraeume mit losen Pickups grob wie konfiguriert (chance = 0.18)
+    const share = combatWithLoot / Math.max(1, combatRooms);
+    if (Math.abs(share - BOTA.LOOSE_LOOT.chance) > 0.05) out.push('Anteil lose Pickups ' + share.toFixed(3));
     return out;
   });
   problems.push(...data);
@@ -130,6 +145,49 @@ const URL = 'file://' + path.join(ROOT, 'index.html').replace(/\\/g, '/') + '?se
   const keyDropped = await page.evaluate(() => BOTA.game.room.pickups.some((pk) => pk.type === 'approval'));
   if (!keyDropped) problems.push('Garantiertes Approval nicht gedroppt');
   await shot('08-key-room');
+
+  // --- Lose Pickups liegen beim Betreten; Hallucination tarnt sich als jeder Typ der Tabelle ---------
+  const looseProblems = await page.evaluate(() => {
+    const out = [];
+    const g = BOTA.game;
+    let room = null;
+    for (let d = 2; d <= 8 && !room; d++) {
+      g.enterFloor(d); g.setState('play');
+      const cell = [...g.floor.cells.values()].find((c) => c.room.looseLoot.length && !c.room.populated);
+      if (cell) room = cell.room;
+    }
+    if (!room) return ['Keine Etage 2–8 mit losen Pickups gefunden'];
+    const want = room.looseLoot.slice();
+    g.teleport(room);
+    const have = room.pickups.filter((pk) => pk instanceof BOTA.Pickup).map((pk) => pk.type);
+    for (const t of want) {
+      const i = have.indexOf(t);
+      if (i < 0) out.push('Loses Pickup fehlt: ' + t); else have.splice(i, 1);
+    }
+    if (!room.hasLivingEnemies()) out.push('Raum mit losen Pickups hat keine Gegner');
+    BOTA.debug.killAll();
+
+    // Tarnungen: viele Hallucinations weit weg vom Spieler erzeugen
+    BOTA.debug.gotoRoom('start'); BOTA.debug.god(true);
+    g.player.x = 120; g.player.y = 300;
+    const seen = new Set();
+    for (let i = 0; i < 60; i++) {
+      const e = BOTA.debug.spawn('hallucination', 560 + (i % 6) * 50, 180 + Math.floor(i / 6) % 3 * 90);
+      if (e && e.state) seen.add(e.state.disguise);
+    }
+    for (const t of Object.keys(BOTA.LOOSE_LOOT.types)) if (!seen.has(t)) out.push('Tarnung nie gewuerfelt: ' + t);
+    // Explosion in Wurfweite enttarnt (sonst waere "bleibt liegen" ein Erkennungszeichen)
+    const victim = g.room.enemies.find((e) => e.def.behavior === 'mimic' && e.state.mode === 'disguised');
+    if (victim) {
+      g.explode(victim.x + 60, victim.y, 110, 0, 'the smoke test');
+      if (victim.state.mode === 'disguised') out.push('Explosion enttarnt die Hallucination nicht');
+    }
+    return out;
+  });
+  problems.push(...looseProblems);
+  await page.waitForTimeout(200);
+  await shot('09-disguises');
+  await page.evaluate(() => { for (let i = 0; i < 4; i++) BOTA.debug.killAll(); });
   // Mehrfach toedlicher Schaden, weil Items wie "Retry with Backoff" den ersten Tod abfangen
   await page.evaluate(() => {
     const g = BOTA.game; BOTA.debug.god(false);

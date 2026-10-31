@@ -182,6 +182,13 @@
             const jitter = { x: rng.float(-12, 12), y: rng.float(-12, 12) };
             this.spawnEnemy(id, pos.x + jitter.x, pos.y + jitter.y, room);
           }
+          // Lose Pickups (vorab gewuerfelt in dungeon.js). Gleiche Platzierung wie die Gegner (Spawnpunkte,
+          // sonst freie Kachel weit weg vom Spieler, gleicher Versatz), weil die Hallucination genauso
+          // platziert wird: Die Position darf nicht verraten, was echt ist.
+          for (const type of room.looseLoot) {
+            const pos = points.length ? points.pop() : room.randomFreePos(rng, { awayFrom: away });
+            this.spawnPickup(type, pos.x + rng.float(-12, 12), pos.y + rng.float(-12, 12), {}, room);
+          }
           if (!room.hasLivingEnemies()) {
             // Ohne Gegner gibt es kein Clearing-Ereignis -> garantiertes Approval direkt hinlegen
             room.cleared = true;
@@ -334,6 +341,8 @@
         if (B.M.dist(x, y, e.x, e.y) < radius + e.r) {
           if (e.hurt(damage, this, null) && !e.noKnockback) e.knockback(e.x - x, e.y - y, 500);
         }
+        // Optionaler Verhaltens-Haken (z. B. getarnte Hallucination: reagiert wie ein Pickup)
+        if (e.behavior && e.behavior.onExplosion) e.behavior.onExplosion(e, this, x, y, radius);
       }
       const p = this.player;
       if (B.M.dist(x, y, p.x, p.y) < radius + p.r * 0.5) {

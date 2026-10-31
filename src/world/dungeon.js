@@ -11,6 +11,7 @@
  *  6. Geheimraum: leere Zelle mit >= 2 Nachbarraeumen, nicht neben dem Boss; Tueren versteckt.
  *  7. Ab Tiefe 2 sind Schatzraum- und Shop-Tueren verschlossen (kosten ein Approval).
  *  8. Ab Tiefe 2 bekommt ein Kampfraum ein garantiertes Approval beim Clearing (assignKeyRoom).
+ *  9. Manche Kampfraeume bekommen lose Pickups, die schon beim Betreten herumliegen (assignLooseLoot).
  */
 'use strict';
 
@@ -87,6 +88,31 @@
       const ordered = [...this.cells.values()].sort((a, b) => (a.y - b.y) || (a.x - b.x));
       for (const cell of ordered) cell.room.build(this.rng);
       this.assignKeyRoom(ordered);
+      this.assignLooseLoot(ordered);
+    }
+
+    /**
+     * Lose Pickups (Tabelle B.LOOSE_LOOT in pickup.js). Zweck: Ohne sie lag waehrend eines Kampfes nie ein
+     * echtes Pickup herum, also war jede "Muenze" im noch nicht geclearten Raum sofort als Hallucination
+     * erkennbar. Nur Kampfraeume (mit geplanten Gegnern), denn nur dort taucht die Hallucination auf.
+     * Eigener RNG-Strom wie bei assignKeyRoom: Karten, Layouts und Gegner bestehender Seeds bleiben gleich,
+     * und das Ergebnis haengt nicht von der Besuchsreihenfolge ab. Die Positionen waehlt erst game.populate.
+     */
+    assignLooseLoot(ordered) {
+      const cfg = B.LOOSE_LOOT;
+      if (!cfg || !cfg.types) return;
+      const types = Object.keys(cfg.types).filter((t) => B.PICKUP_TYPES[t]);
+      if (!types.length) return;
+      const rng = new B.RNG(B.hashString(String(this.seed) + ':loot'));
+      for (const cell of ordered) {
+        // Fuer jede Zelle gleich viele Zufallszahlen ziehen -> Ergebnis pro Raum stabil
+        const has = rng.chance(cfg.chance || 0);
+        const two = rng.chance(cfg.secondChance || 0);
+        const a = rng.weighted(types, (t) => cfg.types[t]);
+        const b = rng.weighted(types, (t) => cfg.types[t]);
+        if (!has || cell.type !== 'normal' || !cell.room.plannedEnemies.length) continue;
+        cell.room.looseLoot = two ? [a, b] : [a];
+      }
     }
 
     /**

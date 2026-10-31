@@ -16,6 +16,7 @@
  *   BOTA.Pickup, BOTA.Pedestal, BOTA.Trapdoor, BOTA.PICKUP_TYPES, BOTA.rollRandomPickup(rng, luck),
  *   BOTA.openChest(game, x, y, opts), BOTA.drawSpriteIfExists(ctx, name, x, y, opts),
  *   BOTA.rerollPickup(pickup, game)  (fuer "Regenerate Response")
+ *   BOTA.LOOSE_LOOT  (lose Pickups in Kampfraeumen und Tarnungen der Hallucination, siehe unten)
  *
  * Alle Objekte in room.pickups haben update(dt, game) und draw(ctx, game).
  */
@@ -74,6 +75,18 @@
       if (res && res.item) pk.noShell = true; // Truhe "wird" zum Podest -> keine Huelle liegen lassen
       return true;
     } };
+
+  /**
+   * Lose Pickups in Kampfraeumen. Manche Kampfraeume haben schon beim ersten Betreten 1–2 echte Pickups
+   * auf dem Boden (vorab gewuerfelt in dungeon.js: assignLooseLoot, gelegt in game.populate). Dieselbe
+   * Typ-Tabelle bestimmt auch, als was sich die Hallucination tarnt (enemy.js: mimic). Gleiche Typen und
+   * gleiche Gewichte fuer echt und falsch: Weder "liegt da etwas, obwohl noch gekaempft wird" noch die
+   * Art des Pickups verraet, ob es echt ist.
+   *   chance        Anteil der Kampfraeume mit losen Pickups
+   *   secondChance  davon: Chance auf ein zweites Pickup
+   *   types         Typ -> Gewicht (nur Typen, die es in PICKUP_TYPES gibt)
+   */
+  B.LOOSE_LOOT = { chance: 0.18, secondChance: 0.3, types: { credit: 6, heart_half: 2, approval: 1 } };
 
   /** Gewicht eines Typs fuer Zufalls-Drops (mit Glueck & leichtem Mitleid bei wenig HP) */
   function dropWeight(t, luck, player) {

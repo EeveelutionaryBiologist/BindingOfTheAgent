@@ -155,7 +155,7 @@ function. Difficulty scales enemy HP by `1 + 0.15 · (depth − 1)` and unlocks 
 | **Spaghetti Code** | shooter | wanders, fires 3-way spreads | *"Nobody knows where it starts. Or ends."* |
 | **Zombie Process** | chase + revive | gets back up once at half HP | *"`kill -9` recommended."* |
 | **Scope Creep** | grow | slowly grows in size and HP | *"Just one more small feature."* |
-| **Hallucination** | mimic | looks like a Credit until you get close | *"Looked like money. Was not money."* |
+| **Hallucination** | mimic | looks like a Credit, Half Heart or Approval until you get close (real ones lie around too) | *"Looked real. Was, in fact, not real."* |
 | **Race Condition** | zigzag | always spawns in pairs, erratic | *"Sometimes it hits first. Sometimes you do. Sometimes both."* |
 
 Contact damage: half a heart. Enemy shots: half a heart.

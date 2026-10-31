@@ -7,6 +7,7 @@
  *     update(e, dt, game) {},       // setzt e.vx/e.vy, schiesst, wechselt Zustand (e.state ist frei nutzbar)
  *     onDeath(e, game) {},          // optional (z. B. Abspalten)
  *     onLethal(e, game, source) {}, // optional: true zurueckgeben = Tod verhindern (z. B. Zombie Process)
+ *     onExplosion(e, game, x, y, radius) {}, // optional: jede Explosion im Raum (game.explode), egal wie nah
  *     draw(e, ctx, game) {},        // optional — ersetzt das Standard-Sprite-Zeichnen komplett
  *     drawUnder(e, ctx, game) {},   // optional — wird VOR dem Standard-Sprite gezeichnet (Bodenmarker)
  *     drawOver(e, ctx, game) {},    // optional — wird NACH dem Standard-Sprite gezeichnet (Telegraphen)
@@ -888,46 +889,63 @@
   };
 
   /**
-   * Hallucination — sieht exakt aus wie ein Credit-Pickup (gleiches Sprite, gleicher Radius, gleiches
-   * Wippen), ist dabei unberuehrbar, harmlos und blockiert das Raum-Clearing nicht. Kommt der Spieler
-   * naeher als params.revealDist, enttarnt sie sich (kurze Schrecksekunde) und jagt als schneller Flieger.
+   * Hallucination — getarnt als Pickup. Die Tarnung wird beim Erzeugen aus derselben Tabelle gewuerfelt wie
+   * die echten losen Pickups in Kampfraeumen (B.LOOSE_LOOT in pickup.js: Credit, Half Heart, Approval) und
+   * sieht exakt so aus (gleiches Sprite, gleicher Radius/Schatten, gleiches Wippen). Getarnt ist sie
+   * unberuehrbar, harmlos und blockiert das Raum-Clearing nicht. Kommt der Spieler naeher als
+   * params.revealDist, enttarnt sie sich (kurze Schrecksekunde) und jagt als schneller Flieger.
+   * Eine Explosion, die ein echtes Pickup wegschleudern wuerde (1.5 x Radius, siehe game.explode),
+   * enttarnt sie ebenfalls — sonst waere "bleibt nach der Bombe liegen" ein Erkennungszeichen.
    * Wird sie in einem bereits geclearten Raum enttarnt, blockiert sie die Tueren weiterhin nicht
    * (sonst koennte der Raum nach dem Kill nie wieder "geclearet" werden — Softlock-Schutz).
-   * params: { revealDist, disguiseR }
+   * params: { revealDist, disguises? }  (disguises: eigene Typ->Gewicht-Tabelle statt B.LOOSE_LOOT.types)
    */
+  // Ausruf beim Enttarnen, passend zur Tarnung
+  const MIMIC_REVEAL_TEXT = { credit: 'NOT MONEY', heart_half: 'NOT HEALTHY', approval: 'NOT APPROVED' };
+
+  function mimicReveal(e, game) {
+    const s = e.state;
+    const pt = B.PICKUP_TYPES[s.disguise];
+    s.mode = 'reveal';
+    s.t = 0.4;
+    e.r = s.realR;
+    e.flying = true;
+    e.static = false;
+    e.intangible = false;
+    e.noHpBar = false;
+    e.ignoreForClear = !!(game.room && game.room.cleared);
+    e.flash = 0.12;
+    game.shake(3, 0.12);
+    AI.say(e, MIMIC_REVEAL_TEXT[s.disguise] || 'NOT REAL', 1.1, (pt && pt.color) || '#f2c14e');
+    B.bus.emit('enemyReveal', { game, enemy: e, x: e.x, y: e.y });
+  }
+
   B.BEHAVIORS.mimic = {
-    init(e) {
+    init(e, game) {
       const s = e.state, P = e.params;
+      const table = P.disguises || (B.LOOSE_LOOT && B.LOOSE_LOOT.types) || { credit: 1 };
+      const types = Object.keys(table).filter((t) => B.PICKUP_TYPES[t]);
+      s.disguise = types.length && game && game.rng ? game.rng.weighted(types, (t) => table[t]) : 'credit';
+      const pt = B.PICKUP_TYPES[s.disguise];
       s.mode = 'disguised';
       s.realR = e.r;
-      e.r = P.disguiseR || 11;     // Radius eines Credits -> identischer Schatten
+      e.r = (pt && pt.r) || 11;    // Radius des getarnten Pickups -> identischer Schatten
       e.flying = false;            // Pickups schweben nicht
       e.static = true;
       e.intangible = true;         // Schuesse/Explosionen ignorieren die Tarnung
       e.ignoreForClear = true;
       e.contactDamage = 0;
       e.noHpBar = true;            // "Code Review" soll die Tarnung nicht verraten
-      e.spawnDelay = 0;            // Credits blenden nicht ein
+      e.spawnDelay = 0;            // Pickups blenden nicht ein
+    },
+    onExplosion(e, game, x, y, radius) {
+      if (e.state.mode === 'disguised' && B.M.dist(x, y, e.x, e.y) < radius * 1.5) mimicReveal(e, game);
     },
     update(e, dt, game) {
       const s = e.state, P = e.params, p = game.player;
       if (s.mode === 'disguised') {
         AI.stop(e);
-        if (AI.dist(e, p) < (P.revealDist || 120)) {
-          // Enttarnung!
-          s.mode = 'reveal';
-          s.t = 0.4;
-          e.r = s.realR;
-          e.flying = true;
-          e.static = false;
-          e.intangible = false;
-          e.noHpBar = false;
-          e.ignoreForClear = !!(game.room && game.room.cleared);
-          e.flash = 0.12;
-          game.shake(3, 0.12);
-          AI.say(e, 'NOT MONEY', 1.1, '#f2c14e');
-          B.bus.emit('enemyReveal', { game, enemy: e, x: e.x, y: e.y });
-        }
+        if (AI.dist(e, p) < (P.revealDist || 120)) mimicReveal(e, game); // Enttarnung!
         return;
       }
       if (s.mode === 'reveal') {
@@ -947,12 +965,13 @@
     },
     draw(e, ctx) {
       if (e.state.mode === 'disguised') {
-        // Exakt wie ein Credit-Pickup zeichnen (siehe pickup.js: Wippen mit sin(t*4)*2)
+        // Exakt wie das getarnte Pickup zeichnen (siehe pickup.js: Wippen mit sin(t*4)*2)
         const bob = Math.sin(e.t * 4) * 2;
-        if (B.hasSprite('pickup_credit')) {
-          B.drawSprite(ctx, 'pickup_credit', e.x, e.y + bob);
+        const pt = B.PICKUP_TYPES[e.state.disguise] || B.PICKUP_TYPES.credit;
+        if (pt && B.hasSprite(pt.sprite)) {
+          B.drawSprite(ctx, pt.sprite, e.x, e.y + bob);
         } else {
-          const col = (B.PICKUP_TYPES && B.PICKUP_TYPES.credit && B.PICKUP_TYPES.credit.color) || '#f2c14e';
+          const col = (pt && pt.color) || '#f2c14e';
           ctx.fillStyle = col;
           ctx.beginPath();
           ctx.arc(e.x, e.y + bob, e.r, 0, TAU);

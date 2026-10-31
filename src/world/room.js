@@ -43,6 +43,7 @@
       this.plannedEnemies = [];  // beim Bau gewuerfelte Gegnerliste (deterministisch pro Seed)
       this.bossId = null;
       this.guaranteedKey = false; // dieser Raum laesst beim Clearing sicher ein Approval fallen (siehe dungeon.js)
+      this.looseLoot = [];       // Pickup-Typen, die beim ersten Betreten schon herumliegen (siehe dungeon.js)
 
       // Render-Cache (Hintergrund); renderer.js setzt/liest das
       this.bgDirty = true;

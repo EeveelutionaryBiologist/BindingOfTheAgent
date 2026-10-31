@@ -70,6 +70,8 @@ Live state is under `BOTA.game` (`.player`, `.room`, `.floor`, `.depth`, `.state
 - every layout passes `validateLayout(…, {strict: true})`;
 - 300 fuzzed floors each have start, boss, treasure and shop rooms, plus exactly one guaranteed-key combat room from depth 2;
 - clearing the key room on floor 2 drops an Approval;
+- loose loot appears only in combat rooms (about 18 %) and is placed on entry; the Hallucination rolls every
+  disguise type and a nearby explosion reveals it;
 - the door transition, special rooms, pause screen and death screen work.
 
 Screenshots go to `tools/out/` (scratch; don't commit or ship). Setup without admin rights:
@@ -181,6 +183,10 @@ Global keys handled in every state: `M` (mute) and `F2` (debug). Holding `R` for
 6. From depth 2, `assignKeyRoom` marks one combat room `guaranteedKey` (stored as `floor.keyRoom`). It uses its own RNG
    stream (`hashString(floorSeed + ':key')`), so the floor RNG and existing maps are unchanged. `game.dropGuaranteedKey`
    drops the Approval when that room is cleared (or on entry if it has no enemies), without drawing from `game.rng`.
+7. `assignLooseLoot` gives 18 % of combat rooms 1–2 pickups (`room.looseLoot`) that already lie on the floor on first
+   entry. It uses its own stream too (`':loot'`); `game.populate` places them like enemies (spawn points first).
+   The table `B.LOOSE_LOOT` (in `pickup.js`) is shared with the Hallucination's disguises, so that real and fake
+   loot always have the same types and odds. Change both together, or the fake becomes obvious again.
 
 **Seeds:**
 - Each floor's generator RNG is seeded with `hashString(seed + ':floor:' + depth)`, so a seed always gives the same
@@ -385,7 +391,8 @@ telegraphed attacks; enemy bullets travel at 165–260 px/s.
 **Pickups:** `heart_half heart guardrail credit credit5 push push2 approval chest chest_locked`.
 - **Drop economy:** apart from the shop and chests, pickups only come from the room-clear roll (35 % + 3 % per luck)
   and broken rocks (8 %). Enemies drop nothing. That's roughly 0.2 Approvals and 1–3 credits per floor from random
-  drops, plus the guaranteed Approval from depth 2.
+  drops, plus the guaranteed Approval from depth 2. Loose loot in combat rooms (§3.6 step 7) adds about
+  1–2.5 credits, 0.3–0.8 half hearts and 0.15–0.45 Approvals per floor (floors 1–6).
 
 **Layouts:** 30 in total (27 tagged `normal`, plus special ones; `empty` carries both tags). `validateLayout(l)`
 checks the format and that all 4 door tiles are clear and mutually reachable. `{strict: true}` adds three house rules:
@@ -447,6 +454,10 @@ modules rely on these implicitly through the bus.
   pickups are collected. `git_blame` works around this with an `update` hook.
 - **Hallucination and room clearing.** While disguised it is `ignoreForClear`. Because `onRoomClear` fires only once,
   a Hallucination revealed after the room was cleared must not lock the doors; agent B handled that inside the behaviour.
+- **Hallucination must stay indistinguishable.** Before 2026-10-31 any coin on the floor during a fight was always the
+  Hallucination, because real pickups only appeared after clearing. Now it rolls a disguise from `B.LOOSE_LOOT` and
+  real loose loot uses the same table and placement. A bomb that would fling a real pickup also reveals it
+  (`onExplosion` behaviour hook, called from `game.explode`). Keep these in sync when changing either side.
 - **No separate music toggle.** Storage only persists `muted`; `M` mutes everything.
 - **Untested areas.** Balance hasn't been playtested by humans: bot runs suggest boss fights of 45–120 s, but treat
   that as a guess. Firefox under `file://` is untested.

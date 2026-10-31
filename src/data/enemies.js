@@ -121,11 +121,11 @@
 
   E.hallucination = {
     name: 'Hallucination', hp: 6, r: 14, speed: 175, contactDamage: 1,
-    behavior: 'mimic', params: { revealDist: 120, disguiseR: 11 },
+    behavior: 'mimic', params: { revealDist: 120 }, // Tarnung: siehe B.LOOSE_LOOT (pickup.js)
     sprite: 'enemy_hallucination', color: '#f2c14e',
     // Taucht nie ueber das normale Budget auf, sondern als Bonus-Ueberraschung (bonusChance)
     minFloor: 1, weight: 0, bonusChance: 0.1, cost: 0, maxPerRoom: 1, tags: ['fly'],
-    desc: 'Looked like money. Was not money.',
+    desc: 'Looked real. Was, in fact, not real.',
   };
 
   E.race_condition = {

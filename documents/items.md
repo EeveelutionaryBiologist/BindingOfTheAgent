@@ -102,7 +102,9 @@ You can carry one at a time; picking up another swaps them. If there's nothing t
 ## Pickups
 
 Pickups come from room-clear rewards (35 % chance per cleared room, +3 % per luck), broken rocks (8 %), chests
-and the shop. Enemies don't drop anything. "Drop share" is how often each type is picked when a random drop
+and the shop. Enemies don't drop anything. In addition, 18 % of combat rooms already have 1–2 pickups lying on the
+floor when you walk in (Credit 67 %, Half Heart 22 %, Approval 11 %). These are the same three kinds the
+Hallucination disguises itself as, so a pickup in a room that's still fighting may or may not be real. "Drop share" is how often each type is picked when a random drop
 happens (at luck 0). Luck raises the share of rare drops.
 
 | | Name | ID | Effect | Drop share | Shop price |
