@@ -49,7 +49,8 @@ These are only spawned by other enemies or bosses.
 ## Bosses
 
 One boss per floor, in the room farthest from the start. **Floor 1:** The Monolith (60 %) or The Stakeholder (40 %).
-**Floor 2 and deeper:** Monolith 27 %, Stakeholder 18 %, Friday Deploy 27 %, Infinite Loop 27 %. Every attack has a
+**Floor 2:** Monolith 27 %, Stakeholder 18 %, Friday Deploy 27 %, Infinite Loop 27 %. **Floor 3 and deeper:**
+Monolith, Friday Deploy, Infinite Loop and Antagonistic Reviewer 21 % each, Stakeholder 14 %. Every attack has a
 visible warning before it fires (glow, "!", target ring). Beating a boss drops an item, a heart and the trapdoor
 to the next floor.
 
@@ -59,3 +60,4 @@ to the next floor.
 | ![The Stakeholder](images/boss_stakeholder.png) | **The Stakeholder** `stakeholder` | 1 | 250 | Floats and keeps its distance. **Requirements:** rotating 2-arm spiral for 3 s. **Urgent request:** 3 aimed 5-shot fans | Below 40 % HP ("ACTUALLY…"): clears all shots, then 3-arm spirals that switch direction, 4 wider 7-shot fans, and a **scope change** ring whose shots stop and then re-aim at you. Pacing eased on 2026-10-31 | *Just a quick question.* |
 | ![Friday Deploy](images/boss_friday_deploy.png) | **Friday Deploy** `friday_deploy` | 2 | 240 | A burning server rack bouncing around the room like a DVD logo. Every wall hit vents a 5-shot fire fan; a corner hit fires a 16-shot ring. Regularly **rolls back** to the centre with a hotfix ring | Below 50 % HP: faster and hotter (7-shot fans) | *What could go wrong at 16:55?* |
 | ![The Infinite Loop](images/boss_infinite_loop.png) | **The Infinite Loop** `infinite_loop` | 2 | 300 | A worm made of ∞ segments. The head circles the room on an ellipse and sometimes hunts you; the segments fire pulses outward. All damage goes to one shared HP pool | Below 50 % HP: the head traces a figure eight instead | *while (true) { suffer(); }* |
+| ![The Antagonistic Reviewer](images/boss_reviewer.png) | **The Antagonistic Reviewer** `reviewer` | 3 | 340 | A floating face behind mirrored glasses; slow and methodical. **Laser:** a thin red line follows you for 1 s, freezes and blinks for 0.4 s, then a wide beam fires from its mouth. **Nitpicks:** a slow row of comment bubbles crosses the room with one gap. **REJECTED:** a target ring appears under you and a stamp slams down after 1 s | Below 50 % HP ("Did you even proof-read ANY of this?!"): turns red, clears all shots, the laser sweeps about 20° toward you while firing, two rows of nitpicks, three stamps in a row | *This does, in fact, NOT look good to me.* |

@@ -659,6 +659,55 @@
     frames: [STAKE_ROWS(false), STAKE_ROWS(true)],
   });
 
+  // The Antagonistic Reviewer — grosses schwebendes Gesicht: zerzauste schwarze Haare, buschige Brauen,
+  // Brille mit weiss verspiegelten Glaesern (man sieht die Augen nie), missbilligender Mund.
+  // Frame 2: Mund offen mit rotem Gluehen (Laser laedt). Phase 2: rot angelaufen (eigene Palette).
+  const REVIEWER_TOP = [
+    '...k.kk..kk',
+    '..khkhhkkhh',
+    '.khhhhhhhhh',
+    'khhhHhhhhhH',
+    'khhhhhhhhhh',
+    'khhsshhhssh',
+    'khsssssssss',
+    'khshhhhhsss',
+    'ksgggggggss',
+    'ksgwwwwwwgg',
+    'ksgwWwwwwgs',
+    'ksgwwwwwwgs',
+    'ksgggggggss',
+    'kSsssssssss',
+    'kSsssssssSS',
+    'kSsssssssss',
+  ];
+  const REVIEWER_MOUTH_SHUT = [
+    '.kSssssssss',
+    '.kSssmmmmmm',
+    '..kSmssssss',
+  ];
+  const REVIEWER_MOUTH_OPEN = [
+    '.kSssmmmmmm',
+    '.kSssmrrrrr',
+    '..kSsmmmmmm',
+  ];
+  const REVIEWER_CHIN = [
+    '...kSSsssss',
+    '....kkSSSSS',
+    '......kkkkk',
+  ];
+  const REVIEWER_PAL = { k: '#141418', h: '#1b1b22', H: '#3a3a48', s: '#e8b896', S: '#c99573', g: '#2a2a30',
+    w: '#f4f6f8', W: '#bcd4e6', m: '#5a2a2a', r: '#ff3b3b' };
+  const reviewerFrames = () => [
+    sym(REVIEWER_TOP.concat(REVIEWER_MOUTH_SHUT, REVIEWER_CHIN)),
+    sym(REVIEWER_TOP.concat(REVIEWER_MOUTH_OPEN, REVIEWER_CHIN)),
+  ];
+  B.defineSprite('boss_reviewer', { palette: REVIEWER_PAL, scale: 4, frames: reviewerFrames() });
+  B.defineSprite('boss_reviewer_angry', {
+    palette: Object.assign({}, REVIEWER_PAL, { s: '#e0705a', S: '#b8503e', m: '#3a1414' }),
+    scale: 4,
+    frames: reviewerFrames(),
+  });
+
   // Friday Deploy — brennendes Server-Rack: Einschuebe mit LEDs, Flammen oben (flackern)
   const RACK_BODY = [
     '.kkkkkkkkkkkkkkkkkk.',

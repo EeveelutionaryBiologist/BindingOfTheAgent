@@ -10,6 +10,7 @@
  *     eine nahe Explosion enttarnt sie
  *   - Graphics Glitch: Kontakt verfremdet das HUD (Neustart statt Stapeln), jeder Bereich rendert, Spruenge
  *     landen nie in Hindernissen
+ *   - Antagonistic Reviewer: Laser und Stempel treffen genau dort, wo sie sollen; jede Nitpick-Reihe hat eine Luecke
  *   - Spezialraeume, Pause- und Todesbildschirm rendern
  * Screenshots landen in tools/out/ (nicht einchecken).
  *
@@ -238,6 +239,49 @@ const URL = 'file://' + path.join(ROOT, 'index.html').replace(/\\/g, '/') + '?se
     return out;
   });
   problems.push(...jumpProblems);
+
+  // --- Antagonistic Reviewer: Laser trifft auf der Linie, Stempel nur im Radius, Nitpick-Reihe hat eine Luecke ---
+  const reviewerProblems = await page.evaluate(() => {
+    const out = [];
+    const g = BOTA.game;
+    BOTA.debug.gotoRoom('start'); BOTA.debug.god(false);
+    const p = g.player;
+    const R = BOTA.debug.spawnBoss('reviewer', 480, 200);
+    R.spawnDelay = 0;
+    const step = () => R.behavior.update(R, 1 / 60, g);
+    const fresh = () => { p.invuln = 0; p.guardrails = 0; p.health = p.maxHealth; };
+    // Laser senkrecht nach unten, Spieler direkt darunter -> Treffer; daneben -> kein Treffer
+    fresh(); p.x = 480; p.y = 420;
+    R.x = 480; R.y = 200; R.state.mode = 'laserFire'; R.state.t = 0.5; R.state.aim = Math.PI / 2; step();
+    if (p.health !== p.maxHealth - 2) out.push('Reviewer-Laser trifft nicht');
+    fresh(); p.x = 600; p.y = 420;
+    R.x = 480; R.y = 200; R.state.mode = 'laserFire'; R.state.t = 0.5; R.state.aim = Math.PI / 2; step();
+    if (p.health !== p.maxHealth) out.push('Reviewer-Laser trifft neben dem Strahl');
+    // Stempel: innerhalb trifft, ausserhalb nicht
+    fresh(); p.x = 300; p.y = 400;
+    R.state.mode = 'idle'; R.state.t = 99;
+    R.state.stamps = [{ x: 300, y: 420, t: 0.001, dur: 1, hit: false, after: 0, rot: 0 }]; step();
+    if (p.health !== p.maxHealth - 2) out.push('Reviewer-Stempel trifft nicht');
+    fresh(); p.x = 300; p.y = 300;
+    R.state.stamps = [{ x: 300, y: 450, t: 0.001, dur: 1, hit: false, after: 0, rot: 0 }]; step();
+    if (p.health !== p.maxHealth) out.push('Reviewer-Stempel trifft ausserhalb des Radius');
+    // Nitpick-Reihe: genau eine Luecke von mindestens ~100 px
+    BOTA.debug.god(true);
+    for (const pr of g.room.projectiles) if (pr.team === 'enemy') pr.dead = true;
+    g.room.projectiles = g.room.projectiles.filter((pr) => !pr.dead);
+    R.state.mode = 'wall'; R.state.t = 0; R.state.walls = 1; step();
+    const shots = g.room.projectiles.filter((pr) => pr.team === 'enemy' && pr.source === 'a nitpick');
+    const vertical = shots.every((pr) => Math.abs(pr.vx) > Math.abs(pr.vy)); // Reihe wandert waagerecht
+    const pos = shots.map((pr) => (vertical ? pr.y : pr.x)).sort((a, b) => a - b);
+    const gaps = pos.slice(1).map((v, i) => v - pos[i]).filter((d) => d > 45);
+    if (shots.length < 8) out.push('Nitpick-Reihe zu kurz: ' + shots.length);
+    if (gaps.length !== 1 || gaps[0] < 100) out.push('Nitpick-Reihe: Luecken ' + JSON.stringify(gaps));
+    R.dead = true;
+    for (let i = 0; i < 4; i++) BOTA.debug.killAll();
+    p.health = p.maxHealth;
+    return out;
+  });
+  problems.push(...reviewerProblems);
   // Mehrfach toedlicher Schaden, weil Items wie "Retry with Backoff" den ersten Tod abfangen
   await page.evaluate(() => {
     const g = BOTA.game; BOTA.debug.god(false);

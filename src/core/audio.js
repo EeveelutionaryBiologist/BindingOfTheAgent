@@ -117,6 +117,12 @@
   const SOUNDS = {
     // Schuss: weiches "Pew" mit leichter Tonhoehenvariation
     shoot() { const k = rnd(0.94, 1.06); voice({ f: 880 * k, f2: 420 * k, dur: 0.07, type: 'square', vol: 0.05 }); voice({ f: 1760 * k, f2: 900 * k, dur: 0.03, type: 'triangle', vol: 0.04 }); },
+    // Boss-Laser (Reviewer): tiefes Brummen, das hochzieht, plus Zischen
+    beam() {
+      voice({ f: 90, f2: 180, dur: 0.7, type: 'sawtooth', vol: 0.08, vib: 24, vibDepth: 12 });
+      voice({ f: 720, f2: 1200, dur: 0.5, type: 'square', vol: 0.03 });
+      noise({ dur: 0.6, vol: 0.08, filter: 'bandpass', f: 1800, f2: 900, q: 2 });
+    },
     // HUD-Stoerung (Graphics Glitch): kurzes Bitcrush-Gezirpe aus zufaelligen hohen Tonschnipseln + Rauschen
     glitch() {
       for (let i = 0; i < 6; i++) voice({ f: rnd(300, 2400), dur: 0.035, type: 'square', vol: 0.045, delay: i * 0.04 });
@@ -433,7 +439,8 @@
   on('bossBounce', () => p('rock'));           // Friday Deploy prallt von der Wand ab
   on('enemyReveal', () => p('denied'));        // Hallucination enttarnt sich ("NOT MONEY")
   on('enemyRevive', () => p('charged'));
-  on('hudGlitch', () => p('glitch'));         // Graphics Glitch verfremdet das HUD       // Zombie Process steht wieder auf
+  on('hudGlitch', () => p('glitch'));
+  on('bossBeam', () => p('beam'));            // Reviewer-Laser         // Graphics Glitch verfremdet das HUD       // Zombie Process steht wieder auf
 
   B.audio = audio;
 })(window.BOTA);

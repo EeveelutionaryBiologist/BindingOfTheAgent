@@ -74,6 +74,7 @@ Live state is under `BOTA.game` (`.player`, `.room`, `.floor`, `.depth`, `.state
   disguise type and a nearby explosion reveals it;
 - a Graphics Glitch touching you scrambles the HUD (a new hit restarts the timer), every glitch area renders, and its
   jumps never land inside obstacles;
+- the Antagonistic Reviewer's laser and stamps hit exactly where drawn, and every nitpick row has one gap;
 - the door transition, special rooms, pause screen and death screen work.
 
 Screenshots go to `tools/out/` (scratch; don't commit or ship). Setup without admin rights:
@@ -323,7 +324,7 @@ Payloads usually include `game, x, y` and often `color`.
 | `enemyHit`, `enemyDeath` (`boss`, `segment`) | enemy | audio, effects |
 | `enemyReveal`, `enemyRevive` | enemy behaviours | audio, effects |
 | `hudGlitch` (`kind`) | game (`glitchHud`) | audio |
-| `bossSpawn`, `bossIntro`, `bossPhase`, `bossStomp`, `bossBounce` | game, boss | audio (boss music), effects |
+| `bossSpawn`, `bossIntro`, `bossPhase`, `bossStomp`, `bossBounce`, `bossBeam` | game, boss | audio (boss music), effects |
 | `playerHurt`, `playerDeath` | player, game | audio, effects, HUD |
 | `pickup` (`type`), `itemGet` (`id, def`), `purchase`, `chestOpen` | pickup, player | audio, effects, HUD |
 | `denied` (`reason`: credits/locked/bomb/charge) | various | audio, effects |
@@ -336,7 +337,7 @@ Rule: audio and effects **only listen**. Game logic never calls them directly, e
 are game state.
 
 ### 3.12 Audio (`core/audio.js`) and effects (`entities/effects.js`)
-- **Audio:** 30 synthesized SFX in total. Every sound has a name; `audio.names()` lists them.
+- **Audio:** 31 synthesized SFX in total. Every sound has a name; `audio.names()` lists them.
   - Bus routing: voices → sfx/music bus → master → compressor.
   - Per-name rate limits (`RATE`) and a 40-voice cap keep it from getting noisy.
   - There is a procedural chiptune loop per floor plus a boss variant. Mute is persisted in storage; there's no
@@ -391,7 +392,8 @@ Room spawning (`rollRoomEnemies`) works on a **budget**:
 - A layout's `bias` can favour enemy tags (`fly, ranged, melee, charge, turret`).
 - `bonusChance` adds extras outside the budget (the Hallucination).
 
-**Bosses** (base HP): `monolith` 360, `stakeholder` 250, `friday_deploy` 240, `infinite_loop` 300. Each has 2 phases and
+**Bosses** (base HP): `monolith` 360, `stakeholder` 250, `friday_deploy` 240, `infinite_loop` 300, `reviewer` 340 (floor 3+).
+Each has 2 phases and
 telegraphed attacks; enemy bullets travel at 165–260 px/s.
 
 **Pickups:** `heart_half heart guardrail credit credit5 push push2 approval chest chest_locked`.

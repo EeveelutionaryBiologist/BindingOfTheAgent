@@ -172,6 +172,7 @@ One per floor, random from the pool, HP scaled by `1 + 0.3 · (depth − 1)`. Bo
 | **The Stakeholder** | Floats around firing rotating "requirement" spirals and aimed "urgent request" fans. Below 40 % it *changes the requirements*: patterns swap and speed up. | *"Just a quick question."* |
 | **Friday Deploy** | A burning server rack bouncing around the room DVD-logo style; every wall hit vents a burst of fire shots; periodically "rolls back" to the centre. | *"What could go wrong at 16:55?"* |
 | **The Infinite Loop** | A segmented worm circling the room; the head hunts you, body segments shoot outward. Shared HP pool. | *"while (true) { suffer(); }"* |
+| **The Antagonistic Reviewer** (floor 3+) | A floating face with mirrored glasses. Mouth laser (tracking line, freeze, beam), rows of "nitpick" bullets with one gap, and "REJECTED" stamps on your position. At 50 % it turns red: sweeping laser, double rows, triple stamps. | *"This does, in fact, NOT look good to me."* |
 
 ---
 
@@ -404,11 +405,11 @@ clearly marked hook additions.
 All milestones done. What shipped, compared with this doc:
 - **Items:** 43 (38 passive, 5 active). There are 7 extras beyond §9, e.g. Ctrl+C Ctrl+V, On-Call Pager,
   Garbage Collector, Feature Flag, and Ctrl+Z (active). Locked chests cost an Approval.
-- **Enemies and bosses:** 12 spawnable enemies plus 3 minions. Each of the 4 bosses has two phases and telegraphed attacks.
+- **Enemies and bosses:** 13 spawnable enemies plus 3 minions. Each of the 5 bosses has two phases and telegraphed attacks.
 - **Layouts:** 30 (27 combat, the rest for special rooms), all validated.
 - **Presentation:**
   - 9 floor themes and an animated avatar with 4 directions plus hurt and item poses.
-  - 30 synthesized SFX and a procedural chiptune loop per floor, with a boss variant.
+  - 31 synthesized SFX and a procedural chiptune loop per floor, with a boss variant.
   - Pixel-font HUD and screens, including the "post-mortem" death report.
 - **QA:** headless-browser tests found zero console errors and held 60 fps with all items, 30 enemies and about 150 bullets.
   They also covered 300+ fuzzed floors, every enemy and boss, and multi-floor runs.

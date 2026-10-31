@@ -52,11 +52,20 @@
     desc: 'A worm made of ∞. The head hunts you; the body never ends.',
   };
 
+  B.BOSSES.reviewer = {
+    name: 'The Antagonistic Reviewer',
+    subtitle: 'This does, in fact, NOT look good to me.',
+    hp: 340, r: 40, speed: 45, contactDamage: 2, flying: true,
+    behavior: 'reviewer', sprite: 'boss_reviewer', color: '#e8b896',
+    minFloor: 3, weight: 3,
+    desc: 'A floating face behind mirrored glasses. Slow, methodical, and never satisfied.',
+  };
+
   /**
    * Waehlt einen Boss fuer die Etage (deterministisch ueber den Etagen-RNG).
    * Auf Etage 1 nur die beiden "zugaenglicheren" Bosse (Monolith 60 %, Stakeholder 40 %);
-   * ab Etage 2 alle vier (Gewichte 3/2/3/3 — der Stakeholder ist etwas seltener, weil man ihn
-   * auf Etage 1 schon oft gesehen hat).
+   * ab Etage 2 kommen Friday Deploy und Infinite Loop dazu, ab Etage 3 der Antagonistic Reviewer
+   * (Gewichte 3, Stakeholder 2 — er ist etwas seltener, weil man ihn auf Etage 1 schon oft gesehen hat).
    */
   B.rollBoss = function (rng, depth) {
     const d = Math.max(1, depth | 0);

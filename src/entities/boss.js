@@ -4,7 +4,7 @@
  * Boss-Verhalten haben denselben Vertrag wie Gegner-Verhalten (init/update/onDeath/draw),
  * siehe entities/enemy.js. HP skaliert mit 1 + 0.3 * (Tiefe - 1).
  *
- * Die vier Bosse (DESIGN.md §8), jeweils mit >= 2 Angriffsmustern, Telegraphen und Phasenwechsel:
+ * Die Bosse (DESIGN.md §8), jeweils mit >= 2 Angriffsmustern, Telegraphen und Phasenwechsel:
  *   monolith       The Monolith    — stampft (12er-Ring), "Batch-Job"-Faecher; ab 50 % zerfaellt er in
  *                                    Microservices (Minions), wird schneller, stampft doppelt und springt.
  *   stakeholder    The Stakeholder — schwebt, rotierende "Requirement"-Spiralen + gezielte "Urgent"-Faecher;
@@ -17,6 +17,12 @@
  *                                    jagt zwischendurch den Spieler; Segmente feuern Puls-Salven nach aussen.
  *                                    Segmente sind eigene Enemies (ignoreForClear) und leiten Schaden an den
  *                                    Kopf weiter (gemeinsamer HP-Pool, e.proxy). Stirbt der Kopf, platzen sie.
+ *   reviewer       The Antagonistic Reviewer — schwebendes Gesicht, langsam und methodisch: Laser aus dem Mund
+ *                                    (Ziellinie -> Einfrieren -> Strahl), wandernde "Nitpick"-Kugelreihen mit
+ *                                    Luecke, "REJECTED"-Stempel auf die Spielerposition; ab 50 % rot vor Wut,
+ *                                    schwenkender Laser, doppelte Reihen, dreifache Stempel.
+ *
+ * Zusaetzliches Bus-Event (nur informativ): 'bossBeam' (Reviewer feuert den Laser).
  *
  * Fairness-Regeln: Gegnerschuesse 165–260 px/s (Spieler: 240 px/s), jeder Angriff hat einen sichtbaren
  * Telegraph (Glow, "!", Zielring, Strahlen), max. ~100 Boss-Kugeln gleichzeitig (+ globales Limit in AI.shoot).
@@ -1073,6 +1079,350 @@
       if (s.tellIn < 0 && s.fireIn >= 0) AI.drawGlow(ctx, e.x, e.y, e.r + 8, 1 - s.fireIn / 0.5, '#8fe3ee');
       const alpha = e.intangible ? 0.6 : 1;
       AI.drawBody(e, ctx, { rotation: s.ang, flipX: false, alpha, frame: 0, noFrost: true });
+    },
+  };
+
+  // ===========================================================================
+  // THE ANTAGONISTIC REVIEWER
+  // ===========================================================================
+  //
+  // Schwebendes Gesicht, langsam und methodisch, aber jeder Angriff tut weh. Drei Angriffe im Wechsel
+  // (nie derselbe zweimal hintereinander), dazwischen eine Pause:
+  //   laser  "Changes requested": duenne rote Ziellinie folgt dem Spieler (traege, man kann ihr davonlaufen),
+  //          friert ein und blinkt, dann ein breiter Strahl aus dem Mund (volles Herz). Phase 2: Der Strahl
+  //          schwenkt beim Feuern ~20° in die Richtung, in die der Spieler ausgewichen ist.
+  //   wall   "Nitpicks": eine Reihe Kommentar-Kugeln wandert von der dem Spieler abgewandten Seite quer durch
+  //          den Raum, mit genau einer Luecke. Phase 2: zwei Reihen kurz nacheinander, schneller.
+  //   stamp  "REJECTED": Zielring unter dem Spieler, nach der Vorwarnzeit knallt ein Stempel herunter
+  //          (volles Herz im Radius). Phase 2: drei Stempel nacheinander, jeder auf die aktuelle Position.
+  // Phase 2 ab 50 % HP: Gesicht laeuft rot an, alle Gegnerschuesse verschwinden, kurze Pause, dann schneller.
+
+  const REV = {
+    beamW: [26, 30],       // Strahlbreite in px (Phase 1/2)
+    aim: [1.0, 0.8],       // Zielen in s (die Linie folgt dem Spieler)
+    aimTurn: 2.2,          // max. Drehrate beim Zielen (rad/s)
+    lock: 0.4,             // Linie steht still und blinkt (letzte Chance zum Ausweichen; 0.3 s war
+                           //   aus dem Stand kaum zu schaffen)
+    fire: 0.7,             // Strahl aktiv
+    sweep: 0.35,           // Schwenk in Phase 2 (rad, ~20°) waehrend des Feuerns. Mehr nicht: Das Strahlende
+                           //   ist bei 0.5 rad/s auf ~500 px Abstand so schnell wie der Spieler (240 px/s)
+    wallSpeed: [115, 150], // Kugelreihe in px/s (Spieler: 240)
+    wallStep: 40,          // Abstand der Kugeln in der Reihe
+    wallGap: [3, 2.6],     // Luecke in Kugelabstaenden (Phase 1/2), d. h. >= 120 / 104 px zwischen den Mittelpunkten
+    wallTell: 0.7,         // Vorwarnung ("!") vor der ersten Reihe
+    wallGap2: 0.9,         // Phase 2: Abstand bis zur zweiten Reihe
+    stampR: 70,            // Stempel-Radius
+    stampTell: [1.0, 0.85],// Vorwarnzeit je Stempel
+    stampGap: 0.45,        // Phase 2: Abstand zwischen den drei Stempeln
+    idle: [1.4, 0.95],     // Pause zwischen Angriffen (laeuft ueber AI.cooldown)
+  };
+  const NIT_SHOT = { color: '#f4f0e6', r: 9, range: 1000, source: 'a nitpick' };
+  const REV_MOUTH_Y = 26;  // Mund relativ zum Mittelpunkt (Sprite 88 px hoch, Mund in Zeile 17 von 22)
+  const REV_BEAM_LEN = 1400;
+
+  function revMouth(e) { return { x: e.x, y: e.y + REV_MOUTH_Y }; }
+
+  /** Abstand Punkt -> Strecke (fuer den Laser-Treffertest) */
+  function segDist(px, py, x0, y0, x1, y1) {
+    const dx = x1 - x0, dy = y1 - y0;
+    const L2 = dx * dx + dy * dy || 1;
+    const t = Math.max(0, Math.min(1, ((px - x0) * dx + (py - y0) * dy) / L2));
+    return Math.hypot(px - (x0 + dx * t), py - (y0 + dy * t));
+  }
+
+  function revIdle(e, game) {
+    const s = e.state;
+    s.mode = 'idle';
+    s.t = AI.cooldown(game, REV.idle[s.phase === 2 ? 1 : 0]);
+  }
+
+  /** Naechsten Angriff waehlen (nie zweimal derselbe) */
+  function revNext(e, game) {
+    const s = e.state, p2 = s.phase === 2;
+    const a = game.rng.pick(['laser', 'wall', 'stamp'].filter((x) => x !== s.last));
+    s.last = a;
+    if (a === 'laser') {
+      s.mode = 'laserAim';
+      s.t = REV.aim[p2 ? 1 : 0];
+      s.aim = AI.angleTo(revMouth(e), game.player);
+    } else if (a === 'wall') {
+      s.mode = 'wall';
+      s.t = REV.wallTell;
+      s.walls = p2 ? 2 : 1;
+      s.firstTell = true;
+    } else {
+      s.mode = 'stamp';
+      s.t = 0;
+      s.left = p2 ? 3 : 1;
+    }
+  }
+
+  /** Schwebeziel: obere zwei Drittel des Raums, mit Abstand zum Spieler */
+  function revPickWaypoint(e, game) {
+    const s = e.state, p = game.player, rng = game.rng;
+    let x = CX, y = CY - 80;
+    for (let i = 0; i < 12; i++) {
+      x = rng.float(INNER.x0 + 120, INNER.x1 - 120);
+      y = rng.float(INNER.y0 + 70, INNER.y1 - 170);
+      if (Math.hypot(x - p.x, y - p.y) >= 220) break;
+    }
+    s.wp.x = x;
+    s.wp.y = y;
+    s.wpT = rng.float(2.4, 3.6);
+  }
+
+  /**
+   * "Nitpicks": Kugelreihe ueber die ganze Raumbreite/-hoehe mit genau einer Luecke. Startet an der Wand,
+   * die vom Spieler weiter weg ist (genug Zeit, die Luecke zu finden). Felsen schlucken einzelne Kugeln.
+   */
+  function revWall(e, game) {
+    const s = e.state, p = game.player, p2 = s.phase === 2;
+    const sp = AI.shotSpeed(game, REV.wallSpeed[p2 ? 1 : 0]);
+    const horizontal = game.rng.chance(0.5); // true = Reihe liegt waagerecht und wandert nach oben/unten
+    let a0, a1, fixed, dir;
+    if (horizontal) {
+      const fromTop = p.y > CY;
+      fixed = fromTop ? INNER.y0 + 14 : INNER.y1 - 14;
+      dir = fromTop ? Math.PI / 2 : -Math.PI / 2;
+      a0 = INNER.x0 + 16; a1 = INNER.x1 - 16;
+    } else {
+      const fromLeft = p.x > CX;
+      fixed = fromLeft ? INNER.x0 + 14 : INNER.x1 - 14;
+      dir = fromLeft ? 0 : Math.PI;
+      a0 = INNER.y0 + 16; a1 = INNER.y1 - 16;
+    }
+    const step = REV.wallStep;
+    const half = (REV.wallGap[p2 ? 1 : 0] * step) / 2;
+    const gapC = game.rng.float(a0 + half + 10, a1 - half - 10);
+    for (let v = a0; v <= a1; v += step) {
+      if (Math.abs(v - gapC) < half) continue; // die Luecke
+      const o = Object.assign({}, NIT_SHOT, horizontal ? { x: v, y: fixed } : { x: fixed, y: v });
+      AI.shoot(game, e, dir, sp, o);
+    }
+  }
+
+  /** "REJECTED"-Stempel auf die aktuelle Spielerposition setzen (zuerst nur der Zielring) */
+  function revStamp(e, game) {
+    const s = e.state, p = game.player;
+    const pos = AI.clampToRoom(p.x, p.y, 24, {});
+    const dur = REV.stampTell[s.phase === 2 ? 1 : 0];
+    s.stamps.push({ x: pos.x, y: pos.y, t: dur, dur, hit: false, after: 0, rot: game.rng.float(-0.3, 0.3) });
+  }
+
+  /** Stempel herunterknallen lassen: Schaden im Radius, Wackeln, Stampf-Sound */
+  function revSlam(e, game, st) {
+    const p = game.player;
+    st.hit = true;
+    st.after = 0.7;
+    if (Math.hypot(p.x - st.x, p.y - st.y) < REV.stampR + p.r * 0.5) {
+      if (p.hurt(2, e.def.name, game)) p.knockback(p.x - st.x, p.y - st.y, 420);
+    }
+    game.shake(7, 0.2);
+    BH.addWave(e, st.x, st.y, REV.stampR * 1.6, '#e04848', 0.35);
+    B.bus.emit('bossStomp', { game, boss: e, x: st.x, y: st.y });
+  }
+
+  B.BOSS_BEHAVIORS.reviewer = {
+    init(e, game) {
+      e.x = CX;
+      e.y = INNER.y0 + 130;
+      BH.placeAwayFromPlayer(e, game, 260);
+      const s = e.state;
+      s.phase = 1;
+      s.mode = 'idle';
+      s.t = 1.2;
+      s.fx = [];
+      s.stamps = [];
+      s.aim = Math.PI / 2;
+      s.sweepDir = 1;
+      s.wp = { x: e.x, y: e.y };
+      s.wpT = 0;
+      e.drawLayer = 2;      // Strahl und Stempel ueber allem anderen zeichnen
+      e.sayOffset = 40;
+    },
+
+    update(e, dt, game) {
+      const s = e.state, p = game.player;
+      BH.updateFx(e, dt);
+      s.t -= dt;
+      let moveMult = 1;
+
+      // ---- Phasenwechsel bei 50 %: rot vor Wut ----
+      if (s.phase === 1 && e.hp <= e.maxHp * 0.5) {
+        s.phase = 2;
+        s.mode = 'enrage';
+        s.t = 1.3;
+        s.stamps.length = 0;
+        BH.clearEnemyShots(game);
+        game.shake(7, 0.45);
+        AI.say(e, 'Did you even proof-read ANY of this?!', 2.2, '#ff7a5c');
+        game.banner('Changes requested', 'Did you even proof-read ANY of this?!');
+        B.bus.emit('bossPhase', { game, boss: e, phase: 2 });
+      }
+      const p2 = s.phase === 2;
+
+      // ---- Stempel laufen unabhaengig vom aktuellen Angriff weiter ----
+      for (const st of s.stamps) {
+        if (!st.hit) {
+          st.t -= dt;
+          if (st.t <= 0) revSlam(e, game, st);
+        } else st.after -= dt;
+      }
+      s.stamps = s.stamps.filter((st) => !st.hit || st.after > 0);
+
+      switch (s.mode) {
+        case 'idle':
+          if (s.t <= 0) revNext(e, game);
+          break;
+
+        case 'laserAim': {
+          moveMult = 0.25;
+          s.aim = AI.turn(s.aim, AI.angleTo(revMouth(e), p), REV.aimTurn * dt);
+          if (s.t <= 0) {
+            s.mode = 'laserLock';
+            s.t = REV.lock;
+            // Phase 2: Schwenk Richtung Spieler (dorthin, wohin er ausgewichen ist)
+            s.sweepDir = Math.sign(B.M.angleDiff(s.aim, AI.angleTo(revMouth(e), p))) || 1;
+          }
+          break;
+        }
+
+        case 'laserLock':
+          moveMult = 0;
+          if (s.t <= 0) {
+            s.mode = 'laserFire';
+            s.t = REV.fire;
+            game.shake(5, 0.25);
+            B.bus.emit('bossBeam', { game, boss: e, x: e.x, y: e.y + REV_MOUTH_Y });
+          }
+          break;
+
+        case 'laserFire': {
+          moveMult = 0;
+          if (p2) s.aim += s.sweepDir * (REV.sweep / REV.fire) * dt;
+          const m = revMouth(e);
+          const x1 = m.x + Math.cos(s.aim) * REV_BEAM_LEN, y1 = m.y + Math.sin(s.aim) * REV_BEAM_LEN;
+          if (segDist(p.x, p.y, m.x, m.y, x1, y1) < REV.beamW[p2 ? 1 : 0] / 2 + p.r * 0.6) {
+            // Rueckstoss quer zum Strahl, weg von der Strahlachse
+            const nx = -Math.sin(s.aim), ny = Math.cos(s.aim);
+            const side = (p.x - m.x) * nx + (p.y - m.y) * ny >= 0 ? 1 : -1;
+            if (p.hurt(2, e.def.name, game)) p.knockback(nx * side, ny * side, 420);
+          }
+          if (s.t <= 0) revIdle(e, game);
+          break;
+        }
+
+        case 'wall':
+          moveMult = 0.5;
+          if (s.t <= 0) {
+            revWall(e, game);
+            s.firstTell = false;
+            s.walls--;
+            if (s.walls > 0) s.t = REV.wallGap2;
+            else revIdle(e, game);
+          }
+          break;
+
+        case 'stamp':
+          moveMult = 0.4;
+          if (s.t <= 0) {
+            if (s.left > 0) {
+              revStamp(e, game);
+              s.left--;
+              s.t = s.left > 0 ? REV.stampGap : 0;
+            } else if (!s.stamps.some((st) => !st.hit)) revIdle(e, game);
+          }
+          break;
+
+        case 'enrage':
+          moveMult = 0;
+          if (s.t <= 0) revIdle(e, game);
+          break;
+      }
+
+      // ---- Langsames Schweben zwischen Wegpunkten ----
+      s.wpT -= dt;
+      if (s.wpT <= 0 || Math.hypot(s.wp.x - e.x, s.wp.y - e.y) < 24 || Math.hypot(p.x - e.x, p.y - e.y) < 160) {
+        if (s.wpT <= 2) revPickWaypoint(e, game);
+      }
+      const n = B.M.norm(s.wp.x - e.x, s.wp.y - e.y);
+      const sp = e.speed * moveMult * (p2 ? 1.3 : 1);
+      const k = Math.min(1, dt * 2);
+      e.vx += (n.x * sp - e.vx) * k;
+      e.vy += (n.y * sp - e.vy) * k;
+    },
+
+    draw(e, ctx) {
+      const s = e.state, p2 = s.phase === 2;
+      BH.drawFx(e, ctx);
+
+      // ---- Stempel (Zielring / Abdruck) ----
+      for (const st of s.stamps) {
+        ctx.save();
+        if (!st.hit) {
+          const k = 1 - Math.max(0, st.t) / st.dur; // 0 -> 1 bis zum Aufschlag
+          ctx.fillStyle = 'rgba(224,72,72,' + (0.06 + 0.16 * k) + ')';
+          ctx.beginPath(); ctx.arc(st.x, st.y, REV.stampR, 0, TAU); ctx.fill();
+          ctx.strokeStyle = 'rgba(224,72,72,' + (0.4 + 0.5 * k) + ')';
+          ctx.lineWidth = 3;
+          ctx.beginPath(); ctx.arc(st.x, st.y, REV.stampR, 0, TAU); ctx.stroke();
+          ctx.lineWidth = 2;
+          ctx.beginPath(); ctx.arc(st.x, st.y, REV.stampR * (1.7 - 0.7 * k), 0, TAU); ctx.stroke();
+        } else {
+          const a = Math.max(0, Math.min(1, st.after / 0.7));
+          ctx.globalAlpha = a;
+          ctx.translate(st.x, st.y);
+          ctx.rotate(st.rot);
+          ctx.strokeStyle = '#d83a3a';
+          ctx.lineWidth = 5;
+          ctx.strokeRect(-92, -26, 184, 52);
+          B.text(ctx, 'REJECTED', 0, 1, { size: 30, bold: true, color: '#d83a3a', align: 'center', baseline: 'middle', shadow: false });
+        }
+        ctx.restore();
+      }
+
+      // ---- Gesicht ----
+      const bob = Math.sin(e.t * 1.6) * 3;
+      const shake = s.mode === 'enrage' ? Math.sin(e.t * 50) * 4 : 0;
+      const m = revMouth(e);
+      const charging = s.mode === 'laserAim' || s.mode === 'laserLock';
+      if (s.mode === 'enrage') AI.drawGlow(ctx, e.x, e.y, e.r + 30, 0.5 + 0.5 * Math.sin(e.t * 20), '#ff5a3c');
+      if (charging) {
+        const k = s.mode === 'laserLock' ? 1 : 1 - Math.max(0, s.t) / REV.aim[p2 ? 1 : 0];
+        AI.drawGlow(ctx, m.x, m.y, 14 + 16 * k, 0.3 + 0.6 * k, '#ff3b3b');
+      }
+      const open = charging || s.mode === 'laserFire';
+      const name = p2 && B.hasSprite('boss_reviewer_angry') ? 'boss_reviewer_angry' : e.def.sprite;
+      BH.drawSprite(e, ctx, name, e.x + shake, e.y + bob, { frame: open ? 1 : 0, alpha: e.spawnDelay > 0 ? 0.6 : 1 });
+
+      // ---- Laser: Ziellinie, Einfrieren, Strahl ----
+      if (charging || s.mode === 'laserFire') {
+        const x1 = m.x + Math.cos(s.aim) * REV_BEAM_LEN, y1 = m.y + Math.sin(s.aim) * REV_BEAM_LEN;
+        ctx.save();
+        ctx.lineCap = 'round';
+        if (s.mode === 'laserAim') {
+          ctx.strokeStyle = 'rgba(255,70,70,' + (0.35 + 0.2 * Math.sin(e.t * 18)) + ')';
+          ctx.lineWidth = 2;
+          ctx.beginPath(); ctx.moveTo(m.x, m.y); ctx.lineTo(x1, y1); ctx.stroke();
+        } else if (s.mode === 'laserLock') {
+          ctx.strokeStyle = Math.floor(e.t * 20) % 2 ? '#ffffff' : '#ff4646';
+          ctx.lineWidth = 3;
+          ctx.beginPath(); ctx.moveTo(m.x, m.y); ctx.lineTo(x1, y1); ctx.stroke();
+        } else {
+          const w = REV.beamW[p2 ? 1 : 0] + Math.sin(e.t * 40) * 2;
+          const layers = [['rgba(255,60,60,0.3)', w + 16], ['#ff4a3a', w], ['#fff1e6', w * 0.35]];
+          for (const [col, lw] of layers) {
+            ctx.strokeStyle = col;
+            ctx.lineWidth = lw;
+            ctx.beginPath(); ctx.moveTo(m.x, m.y); ctx.lineTo(x1, y1); ctx.stroke();
+          }
+        }
+        ctx.restore();
+      }
+
+      if (s.mode === 'wall' && s.firstTell) AI.drawMark(ctx, '!', e.x, e.y - 62, e.t, '#ff4d4d', 30);
+      BH.drawFrost(e, ctx);
+      AI.drawSay(e, ctx);
     },
   };
 
