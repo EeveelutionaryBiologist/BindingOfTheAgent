@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <!--
+    SICHERHEIT: Content-Security-Policy.
+    - connect-src 'none'  -> das Spiel kann keinerlei Netzwerkverbindungen aufbauen (kein fetch/XHR/WebSocket).
+    - object-src 'none', base-uri 'none', form-action 'none' -> keine Plugins, keine Base-URL-Manipulation, keine Formulare.
+    - Skripte nur aus lokalen Dateien ('self' bzw. file: — manche Browser werten 'self' unter file:// nicht aus), keine Inline-Skripte, kein eval.
+  -->
+  <meta http-equiv="Content-Security-Policy"
+        content="default-src 'self' file:; script-src 'self' file:; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'">
+  <title>The Binding of the Agent</title>
+  <style>
+    html, body { margin: 0; height: 100%; background: #0d0b0a; overflow: hidden; }
+    /* Canvas wird per JS zentriert und skaliert (siehe src/main.js) */
+    canvas { display: block; position: absolute; outline: none; image-rendering: pixelated; }
+  </style>
+</head>
+<body>
+  <canvas id="game" tabindex="0" aria-label="The Binding of the Agent game canvas"></canvas>
+
+  <!--
+    Ladereihenfolge ist wichtig: klassische Skripte (keine ES-Module), weil ES-Module
+    unter file:// in Chromium wegen CORS blockiert werden. Alles haengt am globalen Namespace BOTA.
+  -->
+  <!-- Kern -->
+  <script src="src/core/namespace.js"></script>
+  <script src="src/core/rng.js"></script>
+  <script src="src/core/math.js"></script>
+  <script src="src/core/input.js"></script>
+  <script src="src/core/sprites.js"></script>
+  <script src="src/core/audio.js"></script>
+
+  <!-- Daten / Inhalte -->
+  <script src="src/data/palette.js"></script>
+  <script src="src/data/text.js"></script>
+  <script src="src/data/sprites-core.js"></script>
+  <script src="src/data/sprites-enemies.js"></script>
+  <script src="src/data/sprites-items.js"></script>
+  <script src="src/data/layouts.js"></script>
+  <script src="src/data/enemies.js"></script>
+  <script src="src/data/bosses.js"></script>
+  <script src="src/data/items.js"></script>
+
+  <!-- Welt -->
+  <script src="src/world/room.js"></script>
+  <script src="src/world/dungeon.js"></script>
+
+  <!-- Entities -->
+  <script src="src/entities/entity.js"></script>
+  <script src="src/entities/projectile.js"></script>
+  <script src="src/entities/player.js"></script>
+  <script src="src/entities/enemy.js"></script>
+  <script src="src/entities/boss.js"></script>
+  <script src="src/entities/pickup.js"></script>
+  <script src="src/entities/familiar.js"></script>
+  <script src="src/entities/effects.js"></script>
+
+  <!-- Darstellung -->
+  <script src="src/render/renderer.js"></script>
+  <script src="src/render/hud.js"></script>
+  <script src="src/render/screens.js"></script>
+
+  <!-- Spiel -->
+  <script src="src/game.js"></script>
+  <script src="src/main.js"></script>
+</body>
+</html>
