@@ -66,7 +66,8 @@ Live state is under `BOTA.game` (`.player`, `.room`, `.floor`, `.depth`, `.state
 - every item has a sprite and can be given without errors (all items at once);
 - every enemy and boss sprite exists, and every enemy and boss spawns, acts and dies;
 - every layout passes `validateLayout(…, {strict: true})`;
-- 300 fuzzed floors each have start, boss, treasure and shop rooms;
+- 300 fuzzed floors each have start, boss, treasure and shop rooms, plus exactly one guaranteed-key combat room from depth 2;
+- clearing the key room on floor 2 drops an Approval;
 - the door transition, special rooms, pause screen and death screen work.
 
 Screenshots go to `tools/out/` (scratch; don't commit or ship). Setup without admin rights:
@@ -169,6 +170,9 @@ Global keys handled in every state: `M` (mute) and `F2` (debug). Holding `R` for
    boss > secret > treasure > shop. Treasure and shop edges are `locked` from depth 2.
 5. Each room's `build(rng)` stamps walls, a layout (`'normal'` tag for combat rooms, `'special'` for everything else),
    door tiles, and **pre-rolls** `plannedEnemies` / `bossId` with the floor RNG.
+6. From depth 2, `assignKeyRoom` marks one combat room `guaranteedKey` (stored as `floor.keyRoom`). It uses its own RNG
+   stream (`hashString(floorSeed + ':key')`), so the floor RNG and existing maps are unchanged. `game.dropGuaranteedKey`
+   drops the Approval when that room is cleared (or on entry if it has no enemies), without drawing from `game.rng`.
 
 **Seeds:**
 - Each floor's generator RNG is seeded with `hashString(seed + ':floor:' + depth)`, so a seed always gives the same
@@ -371,6 +375,9 @@ Room spawning (`rollRoomEnemies`) works on a **budget**:
 telegraphed attacks; enemy bullets travel at 165–260 px/s.
 
 **Pickups:** `heart_half heart guardrail credit credit5 push push2 approval chest chest_locked`.
+- **Drop economy:** apart from the shop and chests, pickups only come from the room-clear roll (35 % + 3 % per luck)
+  and broken rocks (8 %). Enemies drop nothing. That's roughly 0.2 Approvals and 1–3 credits per floor from random
+  drops, plus the guaranteed Approval from depth 2.
 
 **Layouts:** 30 in total (27 tagged `normal`, plus special ones; `empty` carries both tags). `validateLayout(l)`
 checks the format and that all 4 door tiles are clear and mutually reachable. `{strict: true}` adds three house rules:

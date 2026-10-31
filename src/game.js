@@ -182,7 +182,11 @@
             const jitter = { x: rng.float(-12, 12), y: rng.float(-12, 12) };
             this.spawnEnemy(id, pos.x + jitter.x, pos.y + jitter.y, room);
           }
-          if (!room.hasLivingEnemies()) room.cleared = true;
+          if (!room.hasLivingEnemies()) {
+            // Ohne Gegner gibt es kein Clearing-Ereignis -> garantiertes Approval direkt hinlegen
+            room.cleared = true;
+            this.dropGuaranteedKey(room);
+          }
           break;
         }
         case 'boss': {
@@ -247,11 +251,24 @@
         return;
       }
       // Belohnung fuer das Clearing
+      this.dropGuaranteedKey(room);
       const luck = this.player.stats.luck;
       if (this.rng.chance(Math.min(0.9, 0.35 + luck * 0.03))) {
         const pos = this.nearestFreePos(ROOM_W / 2, ROOM_H / 2, room);
         this.spawnPickup(B.rollRandomPickup(this.rng, luck), pos.x, pos.y, {}, room);
       }
+    }
+
+    /**
+     * Garantiertes Approval des Raums ablegen (einmalig; Auswahl in Floor.assignKeyRoom).
+     * Liegt eine Kachel links von der Mitte, damit es nicht auf dem Zufalls-Drop landet. Zieht keine
+     * Zufallszahl aus game.rng, aendert also den restlichen Run-Zufall nicht.
+     */
+    dropGuaranteedKey(room) {
+      if (!room.guaranteedKey) return;
+      room.guaranteedKey = false;
+      const pos = this.nearestFreePos(ROOM_W / 2 - TILE, ROOM_H / 2, room);
+      this.spawnPickup('approval', pos.x, pos.y, {}, room);
     }
 
     /** Naechste freie Bodenposition zu (x, y) — Spiralsuche ueber Kacheln */

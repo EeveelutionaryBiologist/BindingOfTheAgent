@@ -112,6 +112,8 @@ Per floor, deterministic from `hash(runSeed + depth)`:
 6. **Secret room**: an empty cell adjacent to ≥ 2 rooms but not to the boss room. Its doors are hidden walls
    until a Force Push explodes next to them.
 7. From depth 2 onwards, Treasure and Shop doors are **locked** (cost one Approval).
+8. From depth 2 onwards, one combat room per floor is picked to drop a **guaranteed Approval** when cleared
+   (on top of the normal clear reward), so at least one locked door can always be opened.
 
 All rooms are single-size (13 × 7 interior tiles). No L-shapes, no 2×2 rooms — discount, remember.
 
@@ -417,6 +419,8 @@ All milestones done. What shipped, compared with this doc:
   - The Stakeholder takes longer breaks between attacks (1.5 s / 1.1 s by phase instead of 1.1 / 0.8),
     waits longer between fan volleys, and its phase-1 spiral is a bit sparser. On floor 1 that's about
     15 % fewer shots per second in both phases. The breaks shrink with depth, back to roughly the old pace.
+  - Guaranteed Approval per floor from depth 2 (see §6, step 8). Before this, 55–80 % of floors had no
+    Approval drop at all.
 
 ## 14. Stretch goals
 Gamepad support · procedural chiptune loop · seed entry on the title screen · trinkets · curse rooms

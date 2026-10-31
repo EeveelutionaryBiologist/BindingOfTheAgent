@@ -82,6 +82,10 @@ const URL = 'file://' + path.join(ROOT, 'index.html').replace(/\\/g, '/') + '?se
       const f = new BOTA.Floor(1 + (i % 10), 'fuzz' + i);
       const types = [...f.cells.values()].map((c) => c.type);
       for (const t of ['start', 'boss', 'treasure', 'shop']) if (!types.includes(t)) out.push('fuzz' + i + ' ohne ' + t);
+      // Ab Tiefe 2 genau ein Kampfraum mit garantiertem Approval
+      const keyRooms = [...f.cells.values()].filter((c) => c.room.guaranteedKey);
+      if (f.depth >= 2 && (keyRooms.length !== 1 || keyRooms[0].type !== 'normal')) out.push('fuzz' + i + ': ' + keyRooms.length + ' Schluesselraeume');
+      if (f.depth < 2 && keyRooms.length) out.push('fuzz' + i + ': Schluesselraum auf Tiefe 1');
     }
     return out;
   });
@@ -116,6 +120,16 @@ const URL = 'file://' + path.join(ROOT, 'index.html').replace(/\\/g, '/') + '?se
   }
   await page.keyboard.press('Escape'); await page.waitForTimeout(300); await shot('06-pause');
   await page.keyboard.press('Escape');
+
+  // --- Garantiertes Approval: Etage 2, Schluesselraum leeren -> Approval liegt da ---
+  await page.evaluate(() => {
+    const g = BOTA.game; g.enterFloor(2); g.setState('play');
+    g.teleport(g.floor.keyRoom.room); BOTA.debug.killAll();
+  });
+  await page.waitForTimeout(300);
+  const keyDropped = await page.evaluate(() => BOTA.game.room.pickups.some((pk) => pk.type === 'approval'));
+  if (!keyDropped) problems.push('Garantiertes Approval nicht gedroppt');
+  await shot('08-key-room');
   // Mehrfach toedlicher Schaden, weil Items wie "Retry with Backoff" den ersten Tod abfangen
   await page.evaluate(() => {
     const g = BOTA.game; BOTA.debug.god(false);

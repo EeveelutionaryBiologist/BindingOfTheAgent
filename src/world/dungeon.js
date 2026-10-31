@@ -10,6 +10,7 @@
  *  5. Sackgassen -> Boss (am weitesten entfernt), Schatzraum, Shop.
  *  6. Geheimraum: leere Zelle mit >= 2 Nachbarraeumen, nicht neben dem Boss; Tueren versteckt.
  *  7. Ab Tiefe 2 sind Schatzraum- und Shop-Tueren verschlossen (kosten ein Approval).
+ *  8. Ab Tiefe 2 bekommt ein Kampfraum ein garantiertes Approval beim Clearing (assignKeyRoom).
  */
 'use strict';
 
@@ -29,6 +30,7 @@
       this.rng = new B.RNG(seed);
       this.cells = new Map(); // "x,y" -> cell
       this.start = null;
+      this.keyRoom = null; // Zelle mit garantiertem Approval (ab Tiefe 2, siehe assignKeyRoom)
       this.generate();
     }
 
@@ -84,6 +86,29 @@
       // Raeume bauen (Reihenfolge stabil halten -> deterministisch)
       const ordered = [...this.cells.values()].sort((a, b) => (a.y - b.y) || (a.x - b.x));
       for (const cell of ordered) cell.room.build(this.rng);
+      this.assignKeyRoom(ordered);
+    }
+
+    /**
+     * Garantiertes Approval (Schluessel) ab Tiefe 2.
+     * Hintergrund: Ab Tiefe 2 sind Schatzraum und Shop verschlossen, Approvals kamen aber nur aus Zufalls-
+     * Drops (~0.2–0.6 pro Etage); auf 55–80 % der Etagen gab es gar keins. Deshalb wird hier genau ein
+     * Kampfraum ausgewaehlt, der beim Clearing zusaetzlich sicher ein Approval fallen laesst (game.onRoomClear).
+     * Eigener RNG-Strom (aus dem Etagen-Seed abgeleitet): Der Haupt-RNG der Etage wird nicht angefasst,
+     * damit bestehende Seeds dieselben Karten, Layouts und Gegner behalten. Die Wahl haengt nicht von der
+     * Besuchsreihenfolge ab.
+     */
+    assignKeyRoom(ordered) {
+      if (this.depth < 2) return;
+      const rng = new B.RNG(B.hashString(String(this.seed) + ':key'));
+      const normals = ordered.filter((c) => c.type === 'normal');
+      // Bevorzugt Raeume mit Gegnern (nur dort gibt es ein Clearing-Ereignis); sonst irgendein Normalraum
+      const fighting = normals.filter((c) => c.room.plannedEnemies.length > 0);
+      const pool = fighting.length ? fighting : normals;
+      if (!pool.length) return;
+      const cell = rng.pick(pool);
+      cell.room.guaranteedKey = true;
+      this.keyRoom = cell;
     }
 
     /** BFS-Distanz vom Startraum fuer jede Zelle */
