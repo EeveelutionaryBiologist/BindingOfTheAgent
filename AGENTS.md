@@ -4,8 +4,10 @@ This is the doc to read before changing anything. It explains how the game is pu
 break, how to check your work, and where the rough edges are. If you need a fact that isn't here, look in the file
 header comments: every source file starts with a contract/overview block in German.
 
-Related docs: `README.md` (player-facing: controls, debug keys) and `DESIGN.md` (game design, content tables, original
-build plan, and an "Implementation status" section at the end of §13).
+Related docs: `README.md` (player-facing: controls, debug keys), `DESIGN.md` (game design, content tables, original
+build plan, and an "Implementation status" section at the end of §13), plus `documents/items.md` and
+`documents/enemies.md` (hand-edited lists of all items and pickups, and of all enemies and bosses, with sprites; update
+them when you add or change content).
 
 ---
 
@@ -76,6 +78,10 @@ npm i --no-save playwright && npx playwright install chromium
 node tools/smoke-test.js        # exit 0 = green
 ```
 Always look at the screenshots after visual changes. A clean console doesn't mean the art looks right.
+
+`node tools/export-sprites.js` (same Playwright setup) re-exports the sprites used by `documents/*.md` into
+`documents/images/`. Run it after art changes; it never edits the Markdown. `node tools/export-pdf.js` renders every
+`documents/*.md` to `documents/pdf/<name>.pdf` (A4 landscape, images embedded). Rerun it after editing the lists.
 
 Testing tips:
 - Headless Chromium can't play audio. Instead, check `BOTA.audio.play(name)` doesn't throw after a key press unlocks the AudioContext.
