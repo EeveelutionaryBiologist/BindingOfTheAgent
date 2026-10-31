@@ -11,6 +11,7 @@
  *   - Graphics Glitch: Kontakt verfremdet das HUD (Neustart statt Stapeln), jeder Bereich rendert, Spruenge
  *     landen nie in Hindernissen
  *   - Antagonistic Reviewer: Laser und Stempel treffen genau dort, wo sie sollen; jede Nitpick-Reihe hat eine Luecke
+ *   - Rogue Agent Swarm: 4 Mitglieder mit einem Balken, Geist-Phase, 10 % Heilung, Solo-Phase, genau ein Boss-Tod
  *   - Spezialraeume, Pause- und Todesbildschirm rendern
  * Screenshots landen in tools/out/ (nicht einchecken).
  *
@@ -140,13 +141,20 @@ const URL = 'file://' + path.join(ROOT, 'index.html').replace(/\\/g, '/') + '?se
   await page.keyboard.press('Escape');
 
   // --- Garantiertes Approval: Etage 2, Schluesselraum leeren -> Approval liegt da ---
-  await page.evaluate(() => {
+  // (pollt bis zu 2 s statt fest 300 ms zu warten: unter Last kam das Clearing-Update gelegentlich spaeter;
+  //  ein schon eingesammeltes Approval zaehlt ebenfalls)
+  const keyResult = await page.evaluate(async () => {
     const g = BOTA.game; g.enterFloor(2); g.setState('play');
+    const before = g.player.approvals;
     g.teleport(g.floor.keyRoom.room); BOTA.debug.killAll();
+    for (let i = 0; i < 40; i++) {
+      if (g.room.pickups.some((pk) => pk.type === 'approval') || g.player.approvals > before) return null;
+      await new Promise((r) => setTimeout(r, 50));
+    }
+    return JSON.stringify({ state: g.state, cleared: g.room.cleared, key: g.room.guaranteedKey,
+      alive: g.room.enemies.filter((e) => !e.dead).map((e) => e.id), pickups: g.room.pickups.map((pk) => pk.type) });
   });
-  await page.waitForTimeout(300);
-  const keyDropped = await page.evaluate(() => BOTA.game.room.pickups.some((pk) => pk.type === 'approval'));
-  if (!keyDropped) problems.push('Garantiertes Approval nicht gedroppt');
+  if (keyResult) problems.push('Garantiertes Approval nicht gedroppt: ' + keyResult);
   await shot('08-key-room');
 
   // --- Lose Pickups liegen beim Betreten; Hallucination tarnt sich als jeder Typ der Tabelle ---------
@@ -282,6 +290,39 @@ const URL = 'file://' + path.join(ROOT, 'index.html').replace(/\\/g, '/') + '?se
     return out;
   });
   problems.push(...reviewerProblems);
+
+  // --- Rogue Agent Swarm: 4 Mitglieder, ein Balken, Geist-Phase, Heilung, Solo-Phase, genau ein Boss-Tod ---
+  const swarmProblems = await page.evaluate(async () => {
+    const out = [];
+    const g = BOTA.game;
+    BOTA.debug.gotoRoom('start'); BOTA.debug.god(true);
+    g.player.x = 150; g.player.y = 480;
+    let bossDeaths = 0;
+    const onDeath = (e) => { if (e.boss) bossDeaths++; };
+    BOTA.bus.on('enemyDeath', onDeath);
+    BOTA.debug.spawnBoss('rogue_swarm', 600, 250);
+    const S = g.room.enemies.filter((e) => e.def.behavior === 'rogue_swarm');
+    if (S.length !== 4) out.push('Swarm: ' + S.length + ' statt 4 Mitglieder');
+    if (!S.every((m) => m.bossGroup === S[0].bossGroup && m.bossGroup.length === 4)) out.push('Swarm: kein gemeinsamer Balken');
+    const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+    S[1].hp = S[1].maxHp * 0.5;
+    S[0].hurt(99999, g, null);
+    if (S[0].dead || S[0].state.mode !== 'dying') out.push('Swarm: kein Geist-Zustand vor dem Tod');
+    await wait(1400);
+    if (!S[0].dead) out.push('Swarm: Geist stirbt nicht');
+    if (Math.abs(S[1].hp - S[1].maxHp * 0.6) > 1) out.push('Swarm: Heilung ' + S[1].hp + ' statt ' + S[1].maxHp * 0.6);
+    S[1].hurt(99999, g, null); S[2].hurt(99999, g, null);
+    await wait(1400);
+    if (!(S[3].state.group.solo && /^(soloIdle|dashTell|dash|spiral)$/.test(S[3].state.mode))) out.push('Swarm: letztes Mitglied nicht im Solo-Modus (' + S[3].state.mode + ')');
+    S[3].hurt(99999, g, null);
+    await wait(100);
+    if (!S.every((m) => m.dead)) out.push('Swarm: nicht alle tot');
+    if (bossDeaths !== 1) out.push('Swarm: ' + bossDeaths + ' Boss-Tode statt 1');
+    BOTA.bus.off('enemyDeath', onDeath);
+    for (let i = 0; i < 4; i++) BOTA.debug.killAll();
+    return out;
+  });
+  problems.push(...swarmProblems);
   // Mehrfach toedlicher Schaden, weil Items wie "Retry with Backoff" den ersten Tod abfangen
   await page.evaluate(() => {
     const g = BOTA.game; BOTA.debug.god(false);

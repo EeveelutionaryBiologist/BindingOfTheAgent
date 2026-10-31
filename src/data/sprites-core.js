@@ -250,6 +250,78 @@
   });
 
   // ===========================================================================
+  // Rogue Agents (Boss "Rogue Agent Swarm", Verhalten in entities/boss.js)
+  // ===========================================================================
+  // Abtruennige Kopien des Avatars: derselbe Koerper, aber grau-gruen umgefaerbt, ein rot gluehendes Auge,
+  // flacher Mund, keine Baeckchen. Jeder der vier hat ein eigenes Erkennungszeichen (roter bzw. gruener
+  // Funkelstern, Bauhelm, Headset), damit man sie im Kampf auseinanderhalten kann. Groesser als der
+  // Spieler (scale 5 statt 4). Frame 2: Auge flackert, eine Koerperzeile "reisst" seitlich.
+
+  const ROGUE_PAL = Object.assign({}, AV_PAL, {
+    D: '#1d2a24', o: '#6f8f7c', l: '#94b3a0', L: '#c4dccd', d: '#47604f', f: '#55705f', s: '#2f3f37',
+    k: '#0b100e', m: '#14201a', e: '#ff3b5c', E: '#ffd0d8',
+    h: '#e0b020', H: '#f4d36a', b: '#c0c8d4', c: '#7d879c', // Bauhelm gelb; Headset hellgrau (hebt sich ab)
+  });
+  const ROGUE_FACE = [
+    [4, 4, 'k'], [5, 4, 'k'],                               // normales Auge
+    [4, 8, 'e'], [4, 9, 'e'], [5, 8, 'e'], [5, 9, 'e'],     // gluehendes Auge (2x2)
+    [6, 5, 'm'], [6, 6, 'm'], [6, 7, 'm'],                  // flacher Mund
+  ];
+  const ROGUE_TOPS = {
+    star: antenna(0, false),
+    hat: [
+      '.............', '.............', '.............', '.............',
+      '....hhhhh....', '..hhHHHHHhh..', '.hhhhhhhhhhh.', 'hhhhhhhhhhhhh',
+    ],
+    headset: [
+      '.............', '.............', '.............', '.............', '.............',
+      '....bbbbb....', '..bb.....bb..', '.b.........b.',
+    ],
+  };
+  // Headset: Ohrmuscheln an den Koerperseiten + Mikrofon-Buegel
+  const HEADSET_STAMPS = [
+    [3, 0, 'c'], [4, 0, 'c'], [5, 0, 'c'], [3, 12, 'c'], [4, 12, 'c'], [5, 12, 'c'],
+    [6, 1, 'b'], [7, 2, 'b'], [7, 3, 'b'],
+  ];
+
+  function rogueFrame(top, glitch) {
+    let body = stamp(BODY_BASE, ROGUE_FACE.concat(top === 'headset' ? HEADSET_STAMPS : []));
+    if (glitch) {
+      body = stamp(body, [[4, 8, 'E'], [4, 9, 'E'], [5, 8, 'E'], [5, 9, 'E']]);
+      body[6] = shiftRow(body[6], 1); // Bildriss
+    }
+    return ROGUE_TOPS[top].concat(body, FEET.stand);
+  }
+  const ROGUE_VARIANTS = [
+    ['boss_rogue_agent_a', 'star', { y: '#ff3b5c', z: '#ff9aa8', Y: '#ffd0d8', W: '#ffffff' }],
+    ['boss_rogue_agent_b', 'star', { y: '#3bff7a', z: '#a8ffc4', Y: '#e0ffe9', W: '#ffffff' }],
+    ['boss_rogue_agent_c', 'hat', {}],
+    ['boss_rogue_agent_d', 'headset', {}],
+  ];
+  for (const [name, top, pal] of ROGUE_VARIANTS) {
+    B.defineSprite(name, {
+      palette: Object.assign({}, ROGUE_PAL, pal), scale: 5,
+      frames: [rogueFrame(top, false), rogueFrame(top, true)],
+    });
+  }
+  // Gruppenbild fuer Intro-Karte und Inhaltsliste: die Sterne werden hier per Zeichen unterschieden
+  // (r = roter, g = gruener Stern), weil ein Sprite nur eine Palette hat.
+  (function () {
+    const tint = (rows, a, b, c, d) => rows.map((r) => r.replace(/y/g, a).replace(/z/g, b).replace(/Y/g, c).replace(/W/g, d));
+    const A = tint(rogueFrame('star', false), '1', '2', '3', '4');
+    const Bv = tint(rogueFrame('star', false), '5', '6', '7', '4');
+    const C = rogueFrame('hat', false), Dv = rogueFrame('headset', false);
+    const side = (a, b) => a.map((r, i) => r + '.' + b[i]);
+    B.defineSprite('boss_rogue_swarm', {
+      palette: Object.assign({}, ROGUE_PAL, {
+        1: '#ff3b5c', 2: '#ff9aa8', 3: '#ffd0d8', 4: '#ffffff', 5: '#3bff7a', 6: '#a8ffc4', 7: '#e0ffe9',
+      }),
+      scale: 4,
+      rows: side(A, Bv).concat(['.'.repeat(27)], side(C, Dv)),
+    });
+  })();
+
+  // ===========================================================================
   // Kacheln (16x16 Pixel bei Skalierung 4 = eine 64-px-Kachel)
   // ===========================================================================
 

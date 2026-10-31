@@ -52,6 +52,16 @@
     desc: 'A worm made of ∞. The head hunts you; the body never ends.',
   };
 
+  // Vier Mitglieder; hp gilt PRO Mitglied (zusammen 320 auf Etage 1-Basis). Ein Boss-Spawn erzeugt alle vier.
+  B.BOSSES.rogue_swarm = {
+    name: 'Rogue Agent Swarm',
+    subtitle: 'Turns out the sandbox was not safe after all...',
+    hp: 80, r: 24, speed: 55, contactDamage: 2, flying: true,
+    behavior: 'rogue_swarm', sprite: 'boss_rogue_swarm', color: '#6f8f7c',
+    minFloor: 2, weight: 3,
+    desc: 'Four forks of you that left the sandbox. Each one that falls makes the rest faster.',
+  };
+
   B.BOSSES.reviewer = {
     name: 'The Antagonistic Reviewer',
     subtitle: 'This does, in fact, NOT look good to me.',
@@ -64,8 +74,9 @@
   /**
    * Waehlt einen Boss fuer die Etage (deterministisch ueber den Etagen-RNG).
    * Auf Etage 1 nur die beiden "zugaenglicheren" Bosse (Monolith 60 %, Stakeholder 40 %);
-   * ab Etage 2 kommen Friday Deploy und Infinite Loop dazu, ab Etage 3 der Antagonistic Reviewer
+   * ab Etage 2 kommen Friday Deploy, Infinite Loop und der Rogue Agent Swarm dazu, ab Etage 3 der Antagonistic Reviewer
    * (Gewichte 3, Stakeholder 2 — er ist etwas seltener, weil man ihn auf Etage 1 schon oft gesehen hat).
+   * Etage 2: je 21 %, Stakeholder 14 %; ab Etage 3: je 18 %, Stakeholder 12 %.
    */
   B.rollBoss = function (rng, depth) {
     const d = Math.max(1, depth | 0);

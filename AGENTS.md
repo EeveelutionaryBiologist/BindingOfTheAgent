@@ -75,6 +75,8 @@ Live state is under `BOTA.game` (`.player`, `.room`, `.floor`, `.depth`, `.state
 - a Graphics Glitch touching you scrambles the HUD (a new hit restarts the timer), every glitch area renders, and its
   jumps never land inside obstacles;
 - the Antagonistic Reviewer's laser and stamps hit exactly where drawn, and every nitpick row has one gap;
+- the Rogue Agent Swarm spawns 4 members with one health bar, ghosts before dying, heals survivors by 10 %, goes solo
+  for the last member and emits exactly one boss death;
 - the door transition, special rooms, pause screen and death screen work.
 
 Screenshots go to `tools/out/` (scratch; don't commit or ship). Setup without admin rights:
@@ -269,6 +271,9 @@ Global keys handled in every state: `M` (mute) and `F2` (debug). Holding `R` for
     helpers in `B.BossHelpers`.
   - Bosses emit `bossPhase / bossStomp / bossBounce`.
   - The Infinite Loop's body is made of separate `loop_segment` enemies (`ignoreForClear`, `proxy` → head).
+  - **Boss groups:** the Rogue Agent Swarm is four real `Boss` entities. The first one's `init` spawns the other three
+    and all share `e.bossGroup` (one array), which the HUD sums into a single health bar. Non-final members set
+    `isBoss = false` in `onDeath`, so only the last death plays the boss explosion and fanfare.
 - **`Pickup / Pedestal / Trapdoor`** (`entities/pickup.js`):
   - A pickup type is `{name, sprite, color, r, weight, price?, heavy?, keepShell?, collect(player, game, pickup) → bool}`.
     Returning false means it isn't picked up (e.g. full HP), and the pickup is nudged away.
@@ -392,7 +397,8 @@ Room spawning (`rollRoomEnemies`) works on a **budget**:
 - A layout's `bias` can favour enemy tags (`fly, ranged, melee, charge, turret`).
 - `bonusChance` adds extras outside the budget (the Hallucination).
 
-**Bosses** (base HP): `monolith` 360, `stakeholder` 250, `friday_deploy` 240, `infinite_loop` 300, `reviewer` 340 (floor 3+).
+**Bosses** (base HP): `monolith` 360, `stakeholder` 250, `friday_deploy` 240, `infinite_loop` 300, `rogue_swarm` 4 × 80,
+`reviewer` 340 (floor 3+).
 Each has 2 phases and
 telegraphed attacks; enemy bullets travel at 165–260 px/s.
 

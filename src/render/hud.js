@@ -504,10 +504,19 @@
     if (!boss) return;
     if (game.state === 'bossIntro') return;
     const w = 460, x = W / 2 - w / 2, y = HUD_H + ROOM_H - 46;
-    const ratio = Math.max(0, Math.min(1, boss.hp / boss.maxHp));
+    // Boss-Gruppen (Rogue Agent Swarm) teilen sich einen Balken: Summe der Rest-HP / Summe der Max-HP,
+    // gefallene Mitglieder zaehlen mit 0. boss.bossGroup ist ein gemeinsames Array aller Mitglieder.
+    const group = boss.bossGroup || [boss];
+    let hpSum = 0, maxSum = 0, flashing = false;
+    for (const m of group) {
+      maxSum += m.maxHp;
+      if (!m.dead) { hpSum += Math.max(0, m.hp); flashing = flashing || m.flash > 0; }
+    }
+    const ratio = Math.max(0, Math.min(1, hpSum / Math.max(1, maxSum)));
     // Nachlaufender Balken ("Schaden sichtbar machen")
-    let lag = fx.bossLag.get(boss);
-    if (!lag) { lag = { v: ratio, hold: 0, t: now() }; fx.bossLag.set(boss, lag); }
+    const lagKey = boss.bossGroup || boss;
+    let lag = fx.bossLag.get(lagKey);
+    if (!lag) { lag = { v: ratio, hold: 0, t: now() }; fx.bossLag.set(lagKey, lag); }
     const t = now(), dt = Math.min(0.05, t - lag.t);
     lag.t = t;
     if (ratio < lag.v) {
@@ -528,7 +537,7 @@
     const grd = ctx.createLinearGradient(0, y, 0, y + 14);
     grd.addColorStop(0, '#ff6b5b');
     grd.addColorStop(1, '#a8202a');
-    ctx.fillStyle = boss.flash > 0 ? '#ffffff' : grd;
+    ctx.fillStyle = flashing ? '#ffffff' : grd;
     ctx.fillRect(x, y, w * ratio, 14);
     ctx.fillStyle = 'rgba(0,0,0,0.45)';
     for (let i = 1; i < 10; i++) ctx.fillRect(x + (w * i) / 10 - 1, y, 2, 14);
