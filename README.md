@@ -1,6 +1,6 @@
 # The Binding of the Agent
 
-A discount Binding-of-Isaac-style roguelite. You are a loose Claude Agent, a small coral-coloured agent descending into
+A discount Binding-of-Isaac-style roguelite. You are a loose Claude Agent, a small coral-coloured minion descending into
 ever-deeper codebases. Shoot tokens at bugs, pick up items of questionable value, die to a Merge Conflict, repeat.
 
 <img width="1944" height="870" alt="bota-showcase" src="https://github.com/user-attachments/assets/3c454327-83e6-4c34-bb01-5af1004640b4" />
