@@ -12,6 +12,7 @@
  *     landen nie in Hindernissen
  *   - Antagonistic Reviewer: Laser und Stempel treffen genau dort, wo sie sollen; jede Nitpick-Reihe hat eine Luecke
  *   - Rogue Agent Swarm: 4 Mitglieder mit einem Balken, Geist-Phase, 10 % Heilung, Solo-Phase, genau ein Boss-Tod
+ *   - Etagen-Bosse: nie zweimal hintereinander derselbe (300 simulierte Runs)
  *   - Spezialraeume, Pause- und Todesbildschirm rendern
  * Screenshots landen in tools/out/ (nicht einchecken).
  *
@@ -106,6 +107,16 @@ const URL = 'file://' + path.join(ROOT, 'index.html').replace(/\\/g, '/') + '?se
     // Anteil der Kampfraeume mit losen Pickups grob wie konfiguriert (chance = 0.18)
     const share = combatWithLoot / Math.max(1, combatRooms);
     if (Math.abs(share - BOTA.LOOSE_LOOT.chance) > 0.05) out.push('Anteil lose Pickups ' + share.toFixed(3));
+    // Boss-Abwechslung: 300 simulierte Runs a 12 Etagen, nie zweimal derselbe Boss hintereinander
+    for (let r = 0; r < 300; r++) {
+      const hist = [];
+      for (let d = 1; d <= 12; d++) {
+        const id = BOTA.rollBossVaried(new BOTA.RNG(BOTA.hashString('boss' + r + ':' + d)), d, hist);
+        if (!BOTA.BOSSES[id] || (BOTA.BOSSES[id].minFloor || 1) > d) out.push('Boss ' + id + ' auf Etage ' + d);
+        if (hist.length && hist[hist.length - 1] === id) { out.push('Boss zweimal hintereinander: ' + id); break; }
+        hist.push(id);
+      }
+    }
     return out;
   });
   problems.push(...data);
@@ -139,6 +150,11 @@ const URL = 'file://' + path.join(ROOT, 'index.html').replace(/\\/g, '/') + '?se
   }
   await page.keyboard.press('Escape'); await page.waitForTimeout(300); await shot('06-pause');
   await page.keyboard.press('Escape');
+  // Warten, bis das Spiel das Escape wirklich verarbeitet hat. Sonst kann der naechste Block den Zustand auf
+  // 'play' setzen, bevor das Escape ankommt -> es pausiert erneut (war die Ursache des seltenen
+  // "Garantiertes Approval nicht gedroppt" mit state "pause").
+  await page.waitForFunction(() => BOTA.game.state === 'play', null, { timeout: 3000 });
+
 
   // --- Garantiertes Approval: Etage 2, Schluesselraum leeren -> Approval liegt da ---
   // (pollt bis zu 2 s statt fest 300 ms zu warten: unter Last kam das Clearing-Update gelegentlich spaeter;

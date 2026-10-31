@@ -50,7 +50,9 @@ These are only spawned by other enemies or bosses.
 
 One boss per floor, in the room farthest from the start. **Floor 1:** The Monolith (60 %) or The Stakeholder (40 %).
 **Floor 2:** Monolith, Friday Deploy, Infinite Loop and Rogue Agent Swarm 21 % each, Stakeholder 14 %.
-**Floor 3 and deeper:** the same plus the Antagonistic Reviewer: 18 % each, Stakeholder 12 %. Every attack has a
+**Floor 3 and deeper:** the same plus the Antagonistic Reviewer: 18 % each, Stakeholder 12 %. These are the base odds.
+Within a run, the boss of the previous floor never comes again right away, and every boss you've already met counts
+only 1/(1 + times met) as much, so a run sees more different bosses. Every attack has a
 visible warning before it fires (glow, "!", target ring). Beating a boss drops an item, a heart and the trapdoor
 to the next floor.
 

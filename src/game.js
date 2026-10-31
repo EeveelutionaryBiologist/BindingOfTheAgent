@@ -39,6 +39,7 @@
       this.flowTimer = 0;
       this.restartHold = 0;
       this.hudGlitch = null; // { kind, t, dur } — verfremdeter HUD-Bereich (Graphics Glitch), siehe glitchHud
+      this.bossHistory = []; // Boss-IDs der bisherigen Etagen dieses Runs (siehe assignFloorBoss)
       this.pendingBossIntro = false;
       this.death = null;
       this.runStats = { kills: 0, rooms: 0, time: 0 };
@@ -61,6 +62,7 @@
       this.death = null;
       this.bannerState = null;
       this.hudGlitch = null;
+      this.bossHistory = [];
       B.storage.data.runs++;
       B.storage.save();
       if (B.syncFollowers) B.syncFollowers(this);
@@ -71,6 +73,7 @@
     enterFloor(depth) {
       this.depth = depth;
       this.floor = new B.Floor(depth, B.hashString(this.seed + ':floor:' + depth));
+      this.assignFloorBoss();
       const p = this.player;
       p.x = ROOM_W / 2;
       p.y = ROOM_H / 2 + TILE;
@@ -113,6 +116,22 @@
     // =========================================================================
     // Raeume
     // =========================================================================
+
+    /**
+     * Boss dieser Etage mit Run-Gedaechtnis waehlen (B.rollBossVaried: nie derselbe wie auf der vorigen
+     * Etage, schon getroffene seltener). Die Etage hat beim Bau schon einen Boss vorgewuerfelt; der wird
+     * hier ersetzt. So bleibt der Etagen-RNG unangetastet (gleiche Karten pro Seed), und die Wahl ist
+     * trotzdem deterministisch: eigener Strom aus Seed + Tiefe, und die Vorgeschichte haengt nur von
+     * den vorigen Etagen ab (die man immer der Reihe nach betritt).
+     */
+    assignFloorBoss() {
+      const cell = this.floor.findType('boss');
+      if (!cell || !cell.room.bossId || !B.rollBossVaried) return;
+      const rng = new B.RNG(B.hashString(this.seed + ':boss:' + this.depth));
+      const id = B.rollBossVaried(rng, this.depth, this.bossHistory);
+      if (id) cell.room.bossId = id;
+      this.bossHistory.push(cell.room.bossId);
+    }
 
     /** Betritt einen Raum (ohne Animation). Befuellt ihn beim ersten Besuch. */
     enterRoom(room) {

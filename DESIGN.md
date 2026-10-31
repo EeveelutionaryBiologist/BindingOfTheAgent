@@ -163,7 +163,8 @@ Contact damage: half a heart. Enemy shots: half a heart.
 
 ## 8. Bosses
 
-One per floor, random from the pool, HP scaled by `1 + 0.3 · (depth − 1)`. BoI-style intro card:
+One per floor, random from the pool (never the previous floor's boss again, and bosses already met this run are
+less likely), HP scaled by `1 + 0.3 · (depth − 1)`. BoI-style intro card:
 **CLAUDE vs THE MONOLITH**, with a subtitle.
 
 | Boss | Pattern | Subtitle |

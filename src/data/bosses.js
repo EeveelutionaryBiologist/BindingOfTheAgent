@@ -78,6 +78,24 @@
    * (Gewichte 3, Stakeholder 2 — er ist etwas seltener, weil man ihn auf Etage 1 schon oft gesehen hat).
    * Etage 2: je 21 %, Stakeholder 14 %; ab Etage 3: je 18 %, Stakeholder 12 %.
    */
+  /**
+   * Boss-Abwechslung ueber einen Run (game.assignFloorBoss ruft das beim Betreten jeder Etage auf):
+   *   - der Boss der vorigen Etage ist ausgeschlossen (sofern es eine Alternative gibt),
+   *   - jeder schon getroffene Boss zaehlt nur noch Gewicht / (1 + Anzahl Begegnungen).
+   * history = Boss-IDs der bisherigen Etagen dieses Runs (aelteste zuerst).
+   * Ausloeser: Playtest mit viermal hintereinander The Infinite Loop (2026-10-31).
+   */
+  B.rollBossVaried = function (rng, depth, history) {
+    const d = Math.max(1, depth | 0);
+    const hist = Array.isArray(history) ? history : [];
+    const pool = Object.keys(B.BOSSES).filter((id) => (B.BOSSES[id].minFloor || 1) <= d);
+    if (!pool.length) return Object.keys(B.BOSSES)[0] || null;
+    const last = hist[hist.length - 1];
+    const cands = pool.length > 1 ? pool.filter((id) => id !== last) : pool;
+    const met = (id) => hist.reduce((n, h) => n + (h === id ? 1 : 0), 0);
+    return rng.weighted(cands, (id) => (B.BOSSES[id].weight || 1) / (1 + met(id)));
+  };
+
   B.rollBoss = function (rng, depth) {
     const d = Math.max(1, depth | 0);
     const pool = Object.keys(B.BOSSES).filter((id) => (B.BOSSES[id].minFloor || 1) <= d);

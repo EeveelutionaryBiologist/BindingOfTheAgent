@@ -77,6 +77,7 @@ Live state is under `BOTA.game` (`.player`, `.room`, `.floor`, `.depth`, `.state
 - the Antagonistic Reviewer's laser and stamps hit exactly where drawn, and every nitpick row has one gap;
 - the Rogue Agent Swarm spawns 4 members with one health bar, ghosts before dying, heals survivors by 10 %, goes solo
   for the last member and emits exactly one boss death;
+- bosses never repeat on consecutive floors (300 simulated runs);
 - the door transition, special rooms, pause screen and death screen work.
 
 Screenshots go to `tools/out/` (scratch; don't commit or ship). Setup without admin rights:
@@ -193,6 +194,11 @@ Global keys handled in every state: `M` (mute) and `F2` (debug). Holding `R` for
    entry. It uses its own stream too (`':loot'`); `game.populate` places them like enemies (spawn points first).
    The table `B.LOOSE_LOOT` (in `pickup.js`) is shared with the Hallucination's disguises, so that real and fake
    loot always have the same types and odds. Change both together, or the fake becomes obvious again.
+
+**Boss choice:** each room build still pre-rolls `bossId` with `B.rollBoss` (so the floor RNG is unchanged), but
+`game.enterFloor` then calls `assignFloorBoss`, which replaces it with `B.rollBossVaried(rng, depth, game.bossHistory)`.
+The previous floor's boss is excluded, and bosses already met count `weight / (1 + times met)`. Its RNG is seeded with
+`hashString(seed + ':boss:' + depth)`, and the history only depends on earlier floors, so runs stay reproducible.
 
 **Seeds:**
 - Each floor's generator RNG is seeded with `hashString(seed + ':floor:' + depth)`, so a seed always gives the same
