@@ -680,7 +680,10 @@
     ao(TILE, 0, TILE + 24, 0, 24, ROOM_H, 0.3);
     ao(ROOM_W - TILE, 0, ROOM_W - TILE - 24, 0, 24, ROOM_H, 0.3);
 
-    // Versteckte Geheimtueren: feine Risse als Hinweis (statisch -> im Bake)
+    // Versteckte Geheimtueren: Risse als Hinweis (statisch -> im Bake).
+    // Balance-Pass 2026-10-31: Vorher 2-px-Punkte mit 45 % Deckkraft, auf der dunklen Wand praktisch
+    // unsichtbar. Jetzt etwas groesser, dunkler und mit kurzem Seitenast — soll aufmerksamen Spielern
+    // auffallen, aber weiterhin wie ein Riss aussehen und nicht wie eine Markierung.
     for (const dir of Object.keys(room.doors)) {
       const door = room.doors[dir];
       if (!door.edge.hidden) continue;
@@ -688,11 +691,13 @@
       g.save();
       g.translate(d.col * TILE + TILE / 2, d.row * TILE + TILE / 2);
       g.rotate(DOOR_ANGLE[dir]);
-      g.fillStyle = 'rgba(0,0,0,0.45)';
-      const crack = [[-12, 14], [-10, 10], [-8, 6], [-6, 8], [-2, 4], [0, 0], [2, 2], [6, -2], [8, 2], [12, 0]];
-      for (const [px, py] of crack) g.fillRect(px, py + 12, 2, 2);
-      g.fillStyle = 'rgba(255,255,255,0.06)';
-      for (const [px, py] of crack) g.fillRect(px + 2, py + 14, 2, 2);
+      const crack = [[-14, 16], [-12, 12], [-10, 8], [-7, 7], [-4, 4], [-1, 1], [2, 2], [5, -1], [8, 1], [11, -1], [14, 0]];
+      const branch = [[-4, 7], [-2, 10], [0, 12]]; // Seitenast nach unten
+      const pts = crack.concat(branch);
+      g.fillStyle = 'rgba(0,0,0,0.65)';
+      for (const [px, py] of pts) g.fillRect(px, py + 12, 3, 3);
+      g.fillStyle = 'rgba(255,255,255,0.1)'; // Lichtkante unter dem Riss
+      for (const [px, py] of pts) g.fillRect(px + 2, py + 15, 2, 2);
       g.restore();
     }
   }

@@ -168,6 +168,8 @@ Global keys handled in every state: `M` (mute) and `F2` (debug). Holding `R` for
    room is an empty cell with ≥ 2 room neighbours that isn't next to the boss; its door edges are `hidden`.
 4. Edges are shared objects `{kind, locked, hidden}` between the two rooms' `doors[dir]`. Kind priority is
    boss > secret > treasure > shop. Treasure and shop edges are `locked` from depth 2.
+   Every floor gets a secret room whenever a candidate cell exists, which in practice is always (100 % of 10,000
+   sampled floors). It can only be opened by an explosion within about 140 px of the hidden door tile.
 5. Each room's `build(rng)` stamps walls, a layout (`'normal'` tag for combat rooms, `'special'` for everything else),
    door tiles, and **pre-rolls** `plannedEnemies` / `bossId` with the floor RNG.
 6. From depth 2, `assignKeyRoom` marks one combat room `guaranteedKey` (stored as `floor.keyRoom`). It uses its own RNG
@@ -446,6 +448,9 @@ modules rely on these implicitly through the bus.
 - **Debug teleport placement.** `teleport()` places the player near the room centre or bottom, not at a door.
 - **Stakeholder pacing.** It's set in `STAKE_PACE` / `STAKE_SPIRAL_GAP` in `boss.js`. The breaks go through
   `AI.cooldown` (unchanged on floor 1, up to −25 % deeper); the spiral gap deliberately doesn't scale with depth.
+- **Secret rooms are deliberately subtle.** The only hint is a small dark crack on the wall next to the hidden door
+  (in the background bake, `renderer.js`), and the minimap hides the room until it's opened. On 2026-10-31 the crack
+  was made a little more visible after players reported never finding one; before that it was practically invisible.
 
 ## 7. History and ownership
 v1 was built in one session (2026-10-30). A lead wrote the design doc and the core engine (core, world, game, main,
