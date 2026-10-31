@@ -941,6 +941,22 @@
     '.kkkk...k.kk.',
   ], { n: '#5fbf6a', W: '#ffffff' });
 
+  // README.md — Blatt Papier mit Eselsohr, blauer Ueberschrift und grauen Textzeilen
+  spr('pickup_readme', [
+    'kkkkkkkk...',
+    'kwwwwwwkk..',
+    'kwwwwwwkwk.',
+    'kwbbbwwkkkk',
+    'kwwwwwwwwwk',
+    'kwgggggwwwk',
+    'kwwwwwwwwwk',
+    'kwggggggwwk',
+    'kwwwwwwwwwk',
+    'kwgggggggwk',
+    'kwwwwwwwwwk',
+    'kkkkkkkkkkk',
+  ], { w: '#f4f0e6', b: '#4a86d8', g: '#9a948c' });
+
   // Truhe (Holz, goldene Beschlaege)
   spr('pickup_chest', [
     '.kkkkkkkkkk.',

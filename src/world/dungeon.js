@@ -12,11 +12,13 @@
  *  7. Ab Tiefe 2 sind Schatzraum- und Shop-Tueren verschlossen (kosten ein Approval).
  *  8. Ab Tiefe 2 bekommt ein Kampfraum ein garantiertes Approval beim Clearing (assignKeyRoom).
  *  9. Manche Kampfraeume bekommen lose Pickups, die schon beim Betreten herumliegen (assignLooseLoot).
+ * 10. Auf ~30 % der Etagen liegt in einem normalen Raum ein README.md, das die Karte aufdeckt (assignReadme).
  */
 'use strict';
 
 (function (B) {
   const { MAP_W, MAP_H } = B.C;
+  const README_CHANCE = 0.3; // Anteil der Etagen mit einem README.md (Playtest-Wunsch 2026-10-31)
   const DIRS = B.DIRS;
   const DIR_KEYS = ['up', 'down', 'left', 'right'];
 
@@ -32,6 +34,8 @@
       this.cells = new Map(); // "x,y" -> cell
       this.start = null;
       this.keyRoom = null; // Zelle mit garantiertem Approval (ab Tiefe 2, siehe assignKeyRoom)
+      this.readmeRoom = null; // Zelle mit dem README.md (oder null, siehe assignReadme)
+      this.documented = false; // README.md eingesammelt -> Karte (ohne Geheimraum) sichtbar
       this.generate();
     }
 
@@ -89,6 +93,27 @@
       for (const cell of ordered) cell.room.build(this.rng);
       this.assignKeyRoom(ordered);
       this.assignLooseLoot(ordered);
+      this.assignReadme(ordered);
+    }
+
+    /**
+     * README.md: Mit Chance README_CHANCE liegt in einem zufaelligen normalen Raum (nicht Start, nicht
+     * Spezialraum) ein README.md-Pickup. Eigener RNG-Strom wie bei assignKeyRoom (Karten bleiben gleich).
+     */
+    assignReadme(ordered) {
+      const rng = new B.RNG(B.hashString(String(this.seed) + ':readme'));
+      const has = rng.chance(README_CHANCE);
+      const normals = ordered.filter((c) => c.type === 'normal');
+      const cell = rng.pick(normals);
+      if (!has || !cell) return;
+      cell.room.hasReadme = true;
+      this.readmeRoom = cell;
+    }
+
+    /** README.md eingesammelt: alle Raeume ausser dem Geheimraum als "gesehen" markieren */
+    documentMap() {
+      this.documented = true;
+      for (const c of this.cells.values()) if (c.type !== 'secret') c.room.seen = true;
     }
 
     /**

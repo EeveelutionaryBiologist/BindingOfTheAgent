@@ -399,7 +399,7 @@
   const p = (name) => audio.play(name);
   const PICKUP_SOUND = {
     credit: 'coin', credit5: 'coin', heart: 'heart', heart_half: 'heart', guardrail: 'heart',
-    push: 'pickupPush', push2: 'pickupPush', approval: 'pickupKey', chest: 'chest',
+    push: 'pickupPush', push2: 'pickupPush', approval: 'pickupKey', chest: 'chest', readme: 'secret',
   };
   const isCurrentRoom = (room) => !B.game || !room || B.game.room === room;
 

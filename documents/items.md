@@ -119,5 +119,6 @@ happens (at luck 0). Luck raises the share of rare drops.
 | ![Approval](images/pickup_approval.png) | **Approval** | `approval` | +1 key. Opens locked doors (treasure and shop from floor 2) and locked chests. From floor 2, one combat room per floor always drops one | 10.2 % | 5¢ |
 | ![Chest](images/pickup_chest.png) | **Chest** | `chest` | Opens on touch and scatters a few random pickups | 4.5 % | — |
 | ![Locked Chest](images/pickup_chest_locked.png) | **Locked Chest** | `chest_locked` | Costs 1 Approval. Better loot, and a 15 % chance of an item instead (+2 % per luck, max 40 %) | 2.3 % | — |
+| ![README.md](images/pickup_readme.png) | **README.md** | `readme` | Reveals the map of the current floor, except the secret room. On about 30 % of floors one lies in a random normal room from the start | never dropped | — |
 
 All resources (credits, bombs, keys) are capped at 99. The shop sells 3 of the priced pickups above plus one item.

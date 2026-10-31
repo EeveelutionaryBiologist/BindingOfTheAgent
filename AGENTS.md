@@ -77,7 +77,8 @@ Live state is under `BOTA.game` (`.player`, `.room`, `.floor`, `.depth`, `.state
 - the Antagonistic Reviewer's laser and stamps hit exactly where drawn, and every nitpick row has one gap;
 - the Rogue Agent Swarm spawns 4 members with one health bar, ghosts before dying, heals survivors by 10 %, goes solo
   for the last member and emits exactly one boss death;
-- bosses never repeat on consecutive floors (300 simulated runs);
+- bosses never repeat on consecutive floors (300 simulated runs plus a real floor sequence), and README.md appears on
+  about 30 % of floors, only in normal rooms, and reveals every room except the secret room;
 - the door transition, special rooms, pause screen and death screen work.
 
 Screenshots go to `tools/out/` (scratch; don't commit or ship). Setup without admin rights:
@@ -194,6 +195,9 @@ Global keys handled in every state: `M` (mute) and `F2` (debug). Holding `R` for
    entry. It uses its own stream too (`':loot'`); `game.populate` places them like enemies (spawn points first).
    The table `B.LOOSE_LOOT` (in `pickup.js`) is shared with the Hallucination's disguises, so that real and fake
    loot always have the same types and odds. Change both together, or the fake becomes obvious again.
+8. `assignReadme` puts a `readme` pickup (README.md) into one random normal room on 30 % of floors (`room.hasReadme`,
+   `floor.readmeRoom`, own stream `':readme'`). Collecting it calls `floor.documentMap()`: every room except the secret
+   room becomes `seen`, and `floor.documented` makes the minimap draw connections between unvisited rooms too.
 
 **Boss choice:** each room build still pre-rolls `bossId` with `B.rollBoss` (so the floor RNG is unchanged), but
 `game.enterFloor` then calls `assignFloorBoss`, which replaces it with `B.rollBossVaried(rng, depth, game.bossHistory)`.
@@ -408,7 +412,8 @@ Room spawning (`rollRoomEnemies`) works on a **budget**:
 Each has 2 phases and
 telegraphed attacks; enemy bullets travel at 165–260 px/s.
 
-**Pickups:** `heart_half heart guardrail credit credit5 push push2 approval chest chest_locked`.
+**Pickups:** `heart_half heart guardrail credit credit5 push push2 approval chest chest_locked readme` (`readme` is never
+a random drop; see §3.6 step 8).
 - **Drop economy:** apart from the shop and chests, pickups only come from the room-clear roll (35 % + 3 % per luck)
   and broken rocks (8 %). Enemies drop nothing. That's roughly 0.2 Approvals and 1–3 credits per floor from random
   drops, plus the guaranteed Approval from depth 2. Loose loot in combat rooms (§3.6 step 7) adds about

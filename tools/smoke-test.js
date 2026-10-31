@@ -12,7 +12,8 @@
  *     landen nie in Hindernissen
  *   - Antagonistic Reviewer: Laser und Stempel treffen genau dort, wo sie sollen; jede Nitpick-Reihe hat eine Luecke
  *   - Rogue Agent Swarm: 4 Mitglieder mit einem Balken, Geist-Phase, 10 % Heilung, Solo-Phase, genau ein Boss-Tod
- *   - Etagen-Bosse: nie zweimal hintereinander derselbe (300 simulierte Runs)
+ *   - Etagen-Bosse: nie zweimal hintereinander derselbe (300 simulierte Runs + echte Etagenfolge)
+ *   - README.md: ~30 % der Etagen, nur in normalen Raeumen, deckt die Karte auf, aber nicht den Geheimraum
  *   - Spezialraeume, Pause- und Todesbildschirm rendern
  * Screenshots landen in tools/out/ (nicht einchecken).
  *
@@ -85,7 +86,7 @@ const URL = 'file://' + path.join(ROOT, 'index.html').replace(/\\/g, '/') + '?se
     // Layouts (strikte Hausregeln)
     for (const l of BOTA.LAYOUTS) { const r = BOTA.validateLayout(l, { strict: true }); if (!r.ok) out.push('Layout ' + l.id + ': ' + r.error); }
     // Etagen-Fuzzing
-    let combatRooms = 0, combatWithLoot = 0;
+    let combatRooms = 0, combatWithLoot = 0, readmeFloors = 0;
     for (let i = 0; i < 300; i++) {
       const f = new BOTA.Floor(1 + (i % 10), 'fuzz' + i);
       const types = [...f.cells.values()].map((c) => c.type);
@@ -103,10 +104,12 @@ const URL = 'file://' + path.join(ROOT, 'index.html').replace(/\\/g, '/') + '?se
         if (ll.length > 2 || ll.some((t) => !BOTA.LOOSE_LOOT.types[t])) out.push('fuzz' + i + ': lose Pickups ' + ll.join(','));
       }
       combatRooms += [...f.cells.values()].filter((c) => c.type === 'normal' && c.room.plannedEnemies.length).length;
+      // README.md: hoechstens eines, nur in normalen Raeumen
+      const readmes = [...f.cells.values()].filter((c) => c.room.hasReadme);
+      if (readmes.length > 1 || readmes.some((c) => c.type !== 'normal')) out.push('fuzz' + i + ': README in ' + readmes.map((c) => c.type));
+      if (readmes.length) readmeFloors++;
     }
-    // Anteil der Kampfraeume mit losen Pickups grob wie konfiguriert (chance = 0.18)
-    const share = combatWithLoot / Math.max(1, combatRooms);
-    if (Math.abs(share - BOTA.LOOSE_LOOT.chance) > 0.05) out.push('Anteil lose Pickups ' + share.toFixed(3));
+    if (Math.abs(readmeFloors / 300 - 0.3) > 0.08) out.push('Anteil Etagen mit README ' + (readmeFloors / 300).toFixed(2));
     // Boss-Abwechslung: 300 simulierte Runs a 12 Etagen, nie zweimal derselbe Boss hintereinander
     for (let r = 0; r < 300; r++) {
       const hist = [];
@@ -117,6 +120,9 @@ const URL = 'file://' + path.join(ROOT, 'index.html').replace(/\\/g, '/') + '?se
         hist.push(id);
       }
     }
+    // Anteil der Kampfraeume mit losen Pickups grob wie konfiguriert (chance = 0.18)
+    const share = combatWithLoot / Math.max(1, combatRooms);
+    if (Math.abs(share - BOTA.LOOSE_LOOT.chance) > 0.05) out.push('Anteil lose Pickups ' + share.toFixed(3));
     return out;
   });
   problems.push(...data);
@@ -154,7 +160,6 @@ const URL = 'file://' + path.join(ROOT, 'index.html').replace(/\\/g, '/') + '?se
   // 'play' setzen, bevor das Escape ankommt -> es pausiert erneut (war die Ursache des seltenen
   // "Garantiertes Approval nicht gedroppt" mit state "pause").
   await page.waitForFunction(() => BOTA.game.state === 'play', null, { timeout: 3000 });
-
 
   // --- Garantiertes Approval: Etage 2, Schluesselraum leeren -> Approval liegt da ---
   // (pollt bis zu 2 s statt fest 300 ms zu warten: unter Last kam das Clearing-Update gelegentlich spaeter;
@@ -215,6 +220,38 @@ const URL = 'file://' + path.join(ROOT, 'index.html').replace(/\\/g, '/') + '?se
   await page.waitForTimeout(200);
   await shot('09-disguises');
   await page.evaluate(() => { for (let i = 0; i < 4; i++) BOTA.debug.killAll(); });
+
+  // --- README.md: liegt im Raum, deckt die Karte auf (ohne Geheimraum); Etagen-Bosse wechseln sich ab ---
+  const readmeProblems = await page.evaluate(() => {
+    const out = [];
+    const g = BOTA.game;
+    g.bossHistory = [];
+    const bosses = [];
+    let cell = null;
+    for (let d = 1; d <= 10; d++) {
+      g.enterFloor(d); g.setState('play');
+      bosses.push(g.floor.findType('boss').room.bossId);
+      if (!cell && g.floor.readmeRoom && !g.floor.readmeRoom.room.populated) cell = g.floor.readmeRoom;
+      if (cell) break;
+    }
+    for (let i = 1; i < bosses.length; i++) if (bosses[i] === bosses[i - 1]) out.push('Etagen-Boss wiederholt: ' + bosses.join(','));
+    if (!cell) return out.concat(['Keine Etage 1–10 mit README.md']);
+    g.teleport(cell.room);
+    BOTA.debug.killAll();
+    const pk = g.room.pickups.find((x) => x.type === 'readme');
+    if (!pk) return out.concat(['README.md liegt nicht im Raum']);
+    pk.spawnT = 0;
+    pk.tryCollect(g.player, g);
+    if (!pk.dead || !g.floor.documented) out.push('README.md laesst sich nicht einsammeln');
+    for (const c of g.floor.cells.values()) {
+      if (c.type === 'secret' && c.room.seen) out.push('README.md verraet den Geheimraum'); // frische Etage: noch nicht gesprengt
+      if (c.type !== 'secret' && !c.room.seen) out.push('README.md: Raum ' + c.type + ' nicht aufgedeckt');
+    }
+    return out;
+  });
+  problems.push(...readmeProblems);
+  await page.waitForTimeout(200);
+  await shot('11-readme-map');
 
   // --- Graphics Glitch: Kontakt -> HUD-Stoerung; jeder Stoerungsbereich rendert; Spruenge landen auf Boden ---
   const glitchProblems = await page.evaluate(() => {

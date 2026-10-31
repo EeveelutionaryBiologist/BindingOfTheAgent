@@ -56,6 +56,18 @@
     collect: (p, game, pk) => { B.openChest(game, pk.x, pk.y); return true; } };
 
   /**
+   * README.md: liegt auf ~30 % der Etagen in einem normalen Raum (dungeon.js: assignReadme). Deckt die
+   * Karte der Etage auf — ausser dem Geheimraum (der ist ja gerade *nicht* dokumentiert). Kein Zufallsdrop
+   * (weight 0), wird von "Regenerate Response" nicht umgewuerfelt.
+   */
+  PT.readme = { name: 'README.md', sprite: 'pickup_readme', color: '#f4f0e6', r: 13, weight: 0,
+    collect: (p, game) => {
+      if (game.floor && game.floor.documentMap) game.floor.documentMap();
+      game.banner('README.md', 'Finally, documentation. This floor\'s map is revealed. (Secret rooms not included.)');
+      return true;
+    } };
+
+  /**
    * Verschlossene Truhe: kostet 1 Approval, bessere Beute, kleine Item-Chance.
    * Ohne Approval: "denied" (mit Abklingzeit, sonst wuerde es jeden Frame piepen) + Hinweistext.
    */
@@ -150,6 +162,7 @@
    */
   B.rerollPickup = function (pk, game) {
     if (!pk || pk.dead || pk.opened) return;
+    if (pk.type === 'readme') return; // Die Karte bleibt eine Karte
     let type;
     if (pk.price) {
       const sellable = Object.keys(PT).filter((t) => PT[t].price > 0 && t !== pk.type);

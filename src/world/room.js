@@ -44,6 +44,7 @@
       this.bossId = null;
       this.guaranteedKey = false; // dieser Raum laesst beim Clearing sicher ein Approval fallen (siehe dungeon.js)
       this.looseLoot = [];       // Pickup-Typen, die beim ersten Betreten schon herumliegen (siehe dungeon.js)
+      this.hasReadme = false;    // hier liegt das README.md der Etage (siehe dungeon.js: assignReadme)
 
       // Render-Cache (Hintergrund); renderer.js setzt/liest das
       this.bgDirty = true;

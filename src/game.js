@@ -210,6 +210,10 @@
             const pos = points.length ? points.pop() : room.randomFreePos(rng, { awayFrom: away });
             this.spawnPickup(type, pos.x + rng.float(-12, 12), pos.y + rng.float(-12, 12), {}, room);
           }
+          if (room.hasReadme) {
+            const pos = points.length ? points.pop() : room.randomFreePos(rng, { awayFrom: away });
+            this.spawnPickup('readme', pos.x, pos.y, {}, room);
+          }
           if (!room.hasLivingEnemies()) {
             // Ohne Gegner gibt es kein Clearing-Ereignis -> garantiertes Approval direkt hinlegen
             room.cleared = true;

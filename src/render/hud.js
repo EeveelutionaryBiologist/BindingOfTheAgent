@@ -412,7 +412,7 @@
     ctx.fillStyle = 'rgba(160,150,140,0.45)';
     for (const cell of floor.cells.values()) {
       const room = cell.room;
-      if (!visible(room) || !(room.visited || reveal)) continue;
+      if (!visible(room) || !(room.visited || reveal || floor.documented)) continue; // README.md: ganze Karte
       const a = pos(cell);
       for (const dir of ['right', 'down', 'left', 'up']) {
         const door = room.doors[dir];
