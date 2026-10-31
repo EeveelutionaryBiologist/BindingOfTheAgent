@@ -156,6 +156,7 @@ function. Difficulty scales enemy HP by `1 + 0.15 · (depth − 1)` and unlocks 
 | **Zombie Process** | chase + revive | gets back up once at half HP | *"`kill -9` recommended."* |
 | **Scope Creep** | grow | slowly grows in size and HP | *"Just one more small feature."* |
 | **Hallucination** | mimic | looks like a Credit, Half Heart or Approval until you get close (real ones lie around too) | *"Looked real. Was, in fact, not real."* |
+| **Graphics Glitch** | glitch | jumps 1–3 tiles at a time; touching you scrambles part of the HUD for 7 s | *"Is it supposed to look like this...?"* |
 | **Race Condition** | zigzag | always spawns in pairs, erratic | *"Sometimes it hits first. Sometimes you do. Sometimes both."* |
 
 Contact damage: half a heart. Enemy shots: half a heart.
@@ -407,7 +408,7 @@ All milestones done. What shipped, compared with this doc:
 - **Layouts:** 30 (27 combat, the rest for special rooms), all validated.
 - **Presentation:**
   - 9 floor themes and an animated avatar with 4 directions plus hurt and item poses.
-  - 29 synthesized SFX and a procedural chiptune loop per floor, with a boss variant.
+  - 30 synthesized SFX and a procedural chiptune loop per floor, with a boss variant.
   - Pixel-font HUD and screens, including the "post-mortem" death report.
 - **QA:** headless-browser tests found zero console errors and held 60 fps with all items, 30 enemies and about 150 bullets.
   They also covered 300+ fuzzed floors, every enemy and boss, and multi-floor runs.

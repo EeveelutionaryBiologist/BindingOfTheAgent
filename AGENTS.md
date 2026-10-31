@@ -72,6 +72,8 @@ Live state is under `BOTA.game` (`.player`, `.room`, `.floor`, `.depth`, `.state
 - clearing the key room on floor 2 drops an Approval;
 - loose loot appears only in combat rooms (about 18 %) and is placed on entry; the Hallucination rolls every
   disguise type and a nearby explosion reveals it;
+- a Graphics Glitch touching you scrambles the HUD (a new hit restarts the timer), every glitch area renders, and its
+  jumps never land inside obstacles;
 - the door transition, special rooms, pause screen and death screen work.
 
 Screenshots go to `tools/out/` (scratch; don't commit or ship). Setup without admin rights:
@@ -166,7 +168,8 @@ Global keys handled in every state: `M` (mute) and `F2` (debug). Holding `R` for
 - `explode(x, y, radius, damage, source)`: damages enemies and the player (2 halves), breaks rocks (8 % loot), reveals
   hidden doors, flings pickups, shakes the screen, emits `explosion`
 - `shake(intensity, seconds)` · `banner(title, subtitle)` · `freezeEnemies(seconds)` · `rollItem(pool)` ·
-  `nearestFreePos(x, y, room?)` · `nextFloor()` · `teleport(room)`
+  `nearestFreePos(x, y, room?)` · `nextFloor()` · `teleport(room)` · `glitchHud(seconds)` (scrambles one HUD area,
+  stored in `game.hudGlitch`; a new call restarts the timer instead of stacking)
 
 ### 3.6 Dungeon generation (`world/dungeon.js`)
 1. A 9 × 9 cell grid with the start room in the centre. Target room count is `min(20, floor(3.3·depth) + 6 + rand(0..2))`.
@@ -248,7 +251,7 @@ Global keys handled in every state: `M` (mute) and `F2` (debug). Holding `R` for
   - An enemy marked `intangible` lets shots pass through; one marked `invulnerable` absorbs them.
 - **`Bomb`:** sits in `room.projectiles` with a 1.5 s fuse, then calls `game.explode(…, 110, 30)`. It hurts the player too.
 - **`Enemy`** (`entities/enemy.js`):
-  - **Behaviour contract:** `init`, `update`, `onDeath`, `onLethal`, `draw` / `drawUnder` / `drawOver`.
+  - **Behaviour contract:** `init`, `update`, `onDeath`, `onLethal`, `onExplosion`, `onHitPlayer`, `draw` / `drawUnder` / `drawOver`.
   - **Common fields:** `e.state` (free scratch space), `e.params`, `spawnDelay` (0.5 s with no action and no contact
     damage), `frozen`.
   - **Optional flags:** `intangible, invulnerable, static, noKnockback, ignoreForClear, noHpBar, noSeparate`.
@@ -293,7 +296,8 @@ Global keys handled in every state: `M` (mute) and `F2` (debug). Holding `R` for
   5×7 pixel font. The pixel font is uppercase only; unknown characters render as `?`.
 - **HUD (`hud.js`):** hearts, resource counters, the active item with a segmented charge bar, stat readout with ▲/▼
   after changes, floor name and timer, a minimap (7 × 5 window around the current room), the item banner, the boss
-  bar, and the hold-R ring.
+  bar, and the hold-R ring. While `game.hudGlitch` is set, one area (hearts, active item, stats or minimap) is drawn
+  as static or scrambled text; the noise is purely visual.
 - **Screens (`screens.js`):** title, floor card, boss intro VS card, pause (item grid browsed with the arrow keys),
   and the death "POST-MORTEM".
   - Note: the pause screen registers its **own `window` keydown listener** for arrow-key browsing. It's display only,
@@ -318,6 +322,7 @@ Payloads usually include `game, x, y` and often `color`.
 | `shoot`, `familiarShoot` | player, familiar | audio |
 | `enemyHit`, `enemyDeath` (`boss`, `segment`) | enemy | audio, effects |
 | `enemyReveal`, `enemyRevive` | enemy behaviours | audio, effects |
+| `hudGlitch` (`kind`) | game (`glitchHud`) | audio |
 | `bossSpawn`, `bossIntro`, `bossPhase`, `bossStomp`, `bossBounce` | game, boss | audio (boss music), effects |
 | `playerHurt`, `playerDeath` | player, game | audio, effects, HUD |
 | `pickup` (`type`), `itemGet` (`id, def`), `purchase`, `chestOpen` | pickup, player | audio, effects, HUD |
@@ -331,7 +336,7 @@ Rule: audio and effects **only listen**. Game logic never calls them directly, e
 are game state.
 
 ### 3.12 Audio (`core/audio.js`) and effects (`entities/effects.js`)
-- **Audio:** 29 synthesized SFX in total. Every sound has a name; `audio.names()` lists them.
+- **Audio:** 30 synthesized SFX in total. Every sound has a name; `audio.names()` lists them.
   - Bus routing: voices → sfx/music bus → master → compressor.
   - Per-name rate limits (`RATE`) and a 40-voice cap keep it from getting noisy.
   - There is a procedural chiptune loop per floor plus a boss variant. Mute is persisted in storage; there's no
@@ -372,6 +377,7 @@ Item conventions:
 | jira_ticket | turret | 2 | 18 |
 | spaghetti_code | shooter | 2 | 14 |
 | race_condition | zigzag | 2 | 6 (pack of 2) |
+| graphics_glitch | glitch | 2 | 10 |
 | deprecation_warning | orbit | 3 | 12 |
 | zombie_process | revive | 3 | 14 |
 | scope_creep | grow | 4 | 10 |

@@ -342,7 +342,7 @@
   }
 
   /** Kompakte Stat-Anzeige mit gruenem/rotem Pfeil nach Aenderungen */
-  function drawStats(ctx, p, x, y) {
+  function drawStats(ctx, p, x, y, glitched) {
     const s = p.stats;
     const rows = [
       ['DMG', 'damage', s.damage.toFixed(2)],
@@ -358,6 +358,11 @@
       const hi = ch < 2.5;
       const dir = fx.statDir[key] || 0;
       B.text(ctx, label, cx, cy, { size: 12, color: B.COLORS.textFaint, shadow: false });
+      if (glitched) {
+        // Stoerung: Werte (und manchmal die Bezeichnung) werden zu Zeichensalat
+        B.text(ctx, scramble(val, i + 1), cx + 44, cy, { size: 12, color: i % 2 ? '#e080d8' : '#7fe0e8', shadow: false });
+        return;
+      }
       B.text(ctx, val, cx + 44, cy, { size: 12, color: hi ? (dir > 0 ? '#9be37f' : '#ff7b6b') : B.COLORS.textDim, shadow: false });
       if (hi) B.text(ctx, dir > 0 ? '▲' : '▼', cx + 86, cy, { size: 10, color: dir > 0 ? '#9be37f' : '#ff7b6b', shadow: false, alpha: Math.min(1, (2.5 - ch) * 2) });
     });
@@ -377,7 +382,7 @@
   }
 
   /** Minimap: Fenster von 7x5 Zellen um den aktuellen Raum, oben rechts ueber dem Raum */
-  function drawMinimap(ctx, game) {
+  function drawMinimap(ctx, game, glitched) {
     const floor = game.floor;
     if (!floor || !game.room) return;
     const cw = 22, ch = 15, gap = 5, winW = 7, winH = 5;
@@ -453,6 +458,7 @@
         else { ctx.fillStyle = '#fff'; ctx.fillRect(q.x + cw / 2 - 3, q.y + ch / 2 - 3, 6, 6); }
       }
     }
+    if (glitched) drawStatic(ctx, bx, by, pw, ph, 3); // Stoerung: Karte unter Rauschen (Transparenz bleibt)
     ctx.restore();
   }
 
@@ -550,6 +556,63 @@
     ctx.restore();
   }
 
+  // ---------------------------------------------------------------------------
+  // HUD-Stoerung (Graphics Glitch, siehe game.glitchHud). Reine Optik: Das Rauschen nutzt einen eigenen
+  // kleinen Pseudo-Zufall, der sich ~12x pro Sekunde aendert (wirkt wie kaputtes Bildsignal und
+  // flimmert nicht im Frame-Takt). Gegen Ende flackert die Stoerung, damit man das Ende kommen sieht.
+  // ---------------------------------------------------------------------------
+  const GLITCH_COLORS = ['#e040c0', '#40d8e0', '#5fe05f', '#f2c14e', '#ffffff', '#2a2838'];
+  const GLITCH_CHARS = '#%&?@$!<>/\\|*=+~^0123456789';
+
+  /** Kleiner deterministischer Zufall fuer das Rauschen (aendert sich pro Zeitscheibe) */
+  function glitchRand(seed) {
+    let s = (seed * 2654435761) >>> 0;
+    return () => {
+      s = (s + 0x6d2b79f5) >>> 0;
+      let t = Math.imul(s ^ (s >>> 15), 1 | s);
+      t ^= t + Math.imul(t ^ (t >>> 7), 61 | t);
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+
+  /** Aktive Stoerung fuer einen Bereich — oder null. Kurz vor dem Ende im Wechsel an/aus. */
+  function glitchFor(game, kind) {
+    const g = game.hudGlitch;
+    if (!g || g.kind !== kind || !(g.t > 0)) return null;
+    if (g.t < 1 && Math.floor(now() * 10) % 2) return null; // Ausklingen: flackern
+    return g;
+  }
+
+  /** Rauschkasten ueber einem HUD-Bereich: dunkler Grund, bunte Pixelbloecke, horizontale Risse */
+  function drawStatic(ctx, x, y, w, h, salt) {
+    const rand = glitchRand(Math.floor(now() * 12) * 31 + (salt || 0));
+    const base = ctx.globalAlpha; // z. B. halbtransparente Minimap, wenn der Spieler darunter steht
+    ctx.save();
+    ctx.fillStyle = 'rgba(16,12,22,0.92)';
+    ctx.fillRect(x, y, w, h);
+    const px = 4;
+    for (let i = 0, n = Math.floor((w * h) / 90); i < n; i++) {
+      ctx.globalAlpha = base * (0.35 + rand() * 0.6);
+      ctx.fillStyle = GLITCH_COLORS[Math.floor(rand() * GLITCH_COLORS.length)];
+      ctx.fillRect(x + Math.floor(rand() * (w / px)) * px, y + Math.floor(rand() * (h / px)) * px, px * (1 + Math.floor(rand() * 3)), px);
+    }
+    for (let i = 0; i < 3; i++) {
+      ctx.globalAlpha = base * 0.5;
+      ctx.fillStyle = rand() < 0.5 ? '#e040c0' : '#40d8e0';
+      const ty = y + Math.floor(rand() * h);
+      ctx.fillRect(x - 2 + Math.floor(rand() * 6), ty, w, 2);
+    }
+    ctx.restore();
+  }
+
+  /** Text durch Zufallszeichen gleicher Laenge ersetzen */
+  function scramble(str, salt) {
+    const rand = glitchRand(Math.floor(now() * 12) * 17 + salt);
+    let out = '';
+    for (let i = 0; i < str.length; i++) out += GLITCH_CHARS[Math.floor(rand() * GLITCH_CHARS.length)];
+    return out;
+  }
+
   B.HUD = {
     drawHeart,
     drawIcon,
@@ -573,14 +636,16 @@
       ctx.globalAlpha = 1;
 
       drawActive(ctx, p, 8, 6);
+      if (glitchFor(game, 'items')) drawStatic(ctx, 5, 3, 74, 58, 1);         // Aktiv-Item + Ladebalken
       drawHearts(ctx, p, 86, 6);
+      if (glitchFor(game, 'hearts')) drawStatic(ctx, 83, 3, 134, 58, 2);       // beide Herzreihen
       drawCounter(ctx, 222, 4, 'credits', ['pickup_credit', 'hud_credit'], B.COLORS.credit, p.credits);
       drawCounter(ctx, 222, 23, 'pushes', ['pickup_push', 'hud_push'], '#c9c9c9', p.pushes);
       drawCounter(ctx, 222, 42, 'approvals', ['pickup_approval', 'hud_approval'], B.COLORS.approval, p.approvals);
-      drawStats(ctx, p, 300, 7);
+      drawStats(ctx, p, 300, 7, !!glitchFor(game, 'stats'));
       drawFloorLabel(ctx, game);
 
-      drawMinimap(ctx, game);
+      drawMinimap(ctx, game, !!glitchFor(game, 'minimap'));
       drawBossBar(ctx, game);
       if (game.state === 'play' || game.state === 'roomTransition') drawBanner(ctx, game);
       if (game.state === 'play' || game.state === 'roomTransition') drawRestartRing(ctx, game, W / 2, HUD_H + 40);

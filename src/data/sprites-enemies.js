@@ -203,6 +203,40 @@
     ],
   });
 
+  // Graphics Glitch — Pixelbrei mit verschobenen Farbkanaelen und zwei Augen; Frame 2 "reisst" (Zeilenversatz)
+  B.defineSprite('enemy_graphics_glitch', {
+    palette: { k: K, m: '#e040c0', c: '#40d8e0', g: '#5fe05f', y: '#f2c14e', d: '#2a2838', w: W },
+    scale: 4,
+    frames: [
+      [
+        '..kkkkkkkk..',
+        '.kmmmccccyk.',
+        'kmmmccccyyyk',
+        'kdwwdddwwddk',
+        'kdwkdddwkddk',
+        'kddddddddddk',
+        'kgggmmmcccyk',
+        'kdkwkwkwkddk',
+        'kyyygggmmmck',
+        '.kccmmyyggk.',
+        '..kkkkkkkk..',
+      ],
+      [
+        '...kkkkkkkk.',
+        '..kcccmmmmyk',
+        '.kcccmmmmyyk',
+        'kdwwdddwwddk',
+        'kdwkdddwkddk',
+        'kddddddddddk',
+        'mmmcccgggk..',
+        'kdkwkwkwkddk',
+        '.kgggmmmyyyc',
+        '.kmmccggyyk.',
+        '..kkkkkkkk..',
+      ],
+    ],
+  });
+
   // Merge Conflict — zwei Haelften (HEAD gruen / incoming blau), die sich an einer Zickzack-Naht reiben
   B.defineSprite('enemy_merge_conflict', {
     palette: { k: K, g: '#5fae4f', G: '#3f7f34', b: '#4a86d8', D: '#2f5ea3', w: W, r: '#e04848' },

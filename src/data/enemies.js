@@ -30,7 +30,7 @@
  *   };
  *
  * Etagen-Freischaltung (DESIGN.md §7): Etage 1 ist sanft (Bug, Null Pointer, Memory Leak, selten eine
- * Hallucination), ab 2 kommen Fernkaempfer und Charger dazu, ab 3 Orbiter und Zombies, ab 4 Scope Creep.
+ * Hallucination), ab 2 kommen Fernkaempfer, Charger und der Graphics Glitch dazu, ab 3 Orbiter und Zombies, ab 4 Scope Creep.
  */
 'use strict';
 
@@ -126,6 +126,15 @@
     // Taucht nie ueber das normale Budget auf, sondern als Bonus-Ueberraschung (bonusChance)
     minFloor: 1, weight: 0, bonusChance: 0.1, cost: 0, maxPerRoom: 1, tags: ['fly'],
     desc: 'Looked real. Was, in fact, not real.',
+  };
+
+  E.graphics_glitch = {
+    name: 'Graphics Glitch', hp: 10, r: 18, speed: 0, contactDamage: 1,
+    behavior: 'glitch', params: { stepMin: 1, stepMax: 3, idleMin: 0.9, idleMax: 1.6, warn: 0.4, jump: 0.12,
+      chaseBias: 0.6, hudGlitch: 7 },
+    sprite: 'enemy_graphics_glitch', color: '#e040c0',
+    minFloor: 2, weight: 4, weightPerFloor: 0.2, maxWeight: 6, cost: 1, maxPerRoom: 2, tags: ['melee'],
+    desc: 'Is it supposed to look like this...?',
   };
 
   E.race_condition = {

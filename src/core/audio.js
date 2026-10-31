@@ -117,6 +117,11 @@
   const SOUNDS = {
     // Schuss: weiches "Pew" mit leichter Tonhoehenvariation
     shoot() { const k = rnd(0.94, 1.06); voice({ f: 880 * k, f2: 420 * k, dur: 0.07, type: 'square', vol: 0.05 }); voice({ f: 1760 * k, f2: 900 * k, dur: 0.03, type: 'triangle', vol: 0.04 }); },
+    // HUD-Stoerung (Graphics Glitch): kurzes Bitcrush-Gezirpe aus zufaelligen hohen Tonschnipseln + Rauschen
+    glitch() {
+      for (let i = 0; i < 6; i++) voice({ f: rnd(300, 2400), dur: 0.035, type: 'square', vol: 0.045, delay: i * 0.04 });
+      noise({ dur: 0.22, vol: 0.07, filter: 'bandpass', f: 3200, q: 4 });
+    },
     // Gegner getroffen: dumpfes "Tock"
     hit() { const k = rnd(0.9, 1.1); voice({ f: 240 * k, f2: 110 * k, dur: 0.07, type: 'triangle', vol: 0.16 }); noise({ dur: 0.04, vol: 0.06, filter: 'bandpass', f: 2200, q: 1.5 }); },
     // Gegner stirbt: "Plopp" + Zisch
@@ -427,7 +432,8 @@
   on('bossStomp', () => p('doorClose'));       // Stampfer: dumpfer Schlag
   on('bossBounce', () => p('rock'));           // Friday Deploy prallt von der Wand ab
   on('enemyReveal', () => p('denied'));        // Hallucination enttarnt sich ("NOT MONEY")
-  on('enemyRevive', () => p('charged'));       // Zombie Process steht wieder auf
+  on('enemyRevive', () => p('charged'));
+  on('hudGlitch', () => p('glitch'));         // Graphics Glitch verfremdet das HUD       // Zombie Process steht wieder auf
 
   B.audio = audio;
 })(window.BOTA);

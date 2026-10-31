@@ -38,6 +38,7 @@
       this.shakeI = 0;
       this.flowTimer = 0;
       this.restartHold = 0;
+      this.hudGlitch = null; // { kind, t, dur } — verfremdeter HUD-Bereich (Graphics Glitch), siehe glitchHud
       this.pendingBossIntro = false;
       this.death = null;
       this.runStats = { kills: 0, rooms: 0, time: 0 };
@@ -59,6 +60,7 @@
       this.runStats = { kills: 0, rooms: 0, time: 0 };
       this.death = null;
       this.bannerState = null;
+      this.hudGlitch = null;
       B.storage.data.runs++;
       B.storage.save();
       if (B.syncFollowers) B.syncFollowers(this);
@@ -321,6 +323,22 @@
       return e;
     }
 
+    /**
+     * HUD-Stoerung (Graphics Glitch): verfremdet fuer `seconds` Sekunden genau einen HUD-Bereich
+     * ('hearts' | 'items' | 'stats' | 'minimap'; gezeichnet in hud.js). Laeuft schon eine Stoerung,
+     * wird nur ihr Timer neu gestartet (kein Stapeln, kein neuer Bereich). Die Wahl laeuft ueber game.rng.
+     */
+    glitchHud(seconds) {
+      const dur = Math.max(0.5, Math.min(30, +seconds || 7));
+      if (this.hudGlitch) {
+        this.hudGlitch.t = dur;
+        this.hudGlitch.dur = dur;
+      } else {
+        this.hudGlitch = { kind: this.rng.pick(['hearts', 'items', 'stats', 'minimap']), t: dur, dur };
+      }
+      B.bus.emit('hudGlitch', { game: this, kind: this.hudGlitch.kind });
+    }
+
     spawnPickup(type, x, y, opts, room) {
       const pk = new B.Pickup(type, x, y, opts);
       (room || this.room).pickups.push(pk);
@@ -496,6 +514,7 @@
       if (this.state !== 'play') return;
 
       this.runStats.time += dt;
+      if (this.hudGlitch && (this.hudGlitch.t -= dt) <= 0) this.hudGlitch = null;
       p.update(dt, this);
 
       // Flow-Field zum Spieler regelmaessig aktualisieren (Pfadfindung der Laeufer)

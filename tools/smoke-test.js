@@ -8,6 +8,8 @@
  *   - 300 generierte Etagen enthalten Start/Boss/Schatz/Shop; alle Layouts bestehen validateLayout (strict)
  *   - lose Pickups nur in Kampfraeumen (~18 %) und beim Betreten gelegt; Hallucination nutzt jede Tarnung,
  *     eine nahe Explosion enttarnt sie
+ *   - Graphics Glitch: Kontakt verfremdet das HUD (Neustart statt Stapeln), jeder Bereich rendert, Spruenge
+ *     landen nie in Hindernissen
  *   - Spezialraeume, Pause- und Todesbildschirm rendern
  * Screenshots landen in tools/out/ (nicht einchecken).
  *
@@ -188,6 +190,54 @@ const URL = 'file://' + path.join(ROOT, 'index.html').replace(/\\/g, '/') + '?se
   await page.waitForTimeout(200);
   await shot('09-disguises');
   await page.evaluate(() => { for (let i = 0; i < 4; i++) BOTA.debug.killAll(); });
+
+  // --- Graphics Glitch: Kontakt -> HUD-Stoerung; jeder Stoerungsbereich rendert; Spruenge landen auf Boden ---
+  const glitchProblems = await page.evaluate(() => {
+    const out = [];
+    const g = BOTA.game;
+    BOTA.debug.gotoRoom('start'); BOTA.debug.god(false);
+    g.hudGlitch = null;
+    const p = g.player; p.invuln = 0; p.health = p.maxHealth;
+    const e = BOTA.debug.spawn('graphics_glitch', p.x, p.y);
+    e.spawnDelay = 0;
+    e.touchPlayer(g);
+    if (!g.hudGlitch) out.push('Graphics Glitch: Kontakt loest keine HUD-Stoerung aus');
+    else {
+      const kind = g.hudGlitch.kind;
+      g.hudGlitch.t = 1;
+      g.glitchHud(7);
+      if (g.hudGlitch.kind !== kind || g.hudGlitch.t !== 7) out.push('HUD-Stoerung: Neustart aendert Bereich oder Timer');
+    }
+    if (e.sayText !== 'Is it supposed to look like this...?') out.push('Graphics Glitch: Spruch fehlt');
+    e.dead = true;
+    BOTA.debug.god(true); p.health = p.maxHealth;
+    return out;
+  });
+  problems.push(...glitchProblems);
+  for (const kind of ['hearts', 'items', 'stats', 'minimap']) {
+    await page.evaluate((kind) => { BOTA.game.hudGlitch = { kind, t: 7, dur: 7 }; }, kind);
+    await page.waitForTimeout(150);
+    if (kind === 'hearts' || kind === 'stats') await shot('10-hud-glitch-' + kind);
+  }
+  const jumpProblems = await page.evaluate(async () => {
+    const out = [];
+    const g = BOTA.game;
+    g.hudGlitch = null;
+    g.player.x = 120; g.player.y = 300;
+    const starts = [[500, 200], [700, 400]];
+    const list = starts.map(([x, y]) => BOTA.debug.spawn('graphics_glitch', x, y));
+    await new Promise((r) => setTimeout(r, 4000));
+    let moved = 0;
+    list.forEach((e, i) => {
+      if (Math.hypot(e.x - starts[i][0], e.y - starts[i][1]) > 32) moved++;
+      const t = g.room.worldToTile(e.x, e.y);
+      if (g.room.isSolid(t.c, t.r, 'walk', false)) out.push('Graphics Glitch steckt in einem Hindernis');
+    });
+    if (!moved) out.push('Graphics Glitch springt nicht');
+    for (let i = 0; i < 4; i++) BOTA.debug.killAll();
+    return out;
+  });
+  problems.push(...jumpProblems);
   // Mehrfach toedlicher Schaden, weil Items wie "Retry with Backoff" den ersten Tod abfangen
   await page.evaluate(() => {
     const g = BOTA.game; BOTA.debug.god(false);

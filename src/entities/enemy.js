@@ -8,6 +8,7 @@
  *     onDeath(e, game) {},          // optional (z. B. Abspalten)
  *     onLethal(e, game, source) {}, // optional: true zurueckgeben = Tod verhindern (z. B. Zombie Process)
  *     onExplosion(e, game, x, y, radius) {}, // optional: jede Explosion im Raum (game.explode), egal wie nah
+ *     onHitPlayer(e, game) {},      // optional: Kontaktschaden hat den Spieler wirklich getroffen
  *     draw(e, ctx, game) {},        // optional — ersetzt das Standard-Sprite-Zeichnen komplett
  *     drawUnder(e, ctx, game) {},   // optional — wird VOR dem Standard-Sprite gezeichnet (Bodenmarker)
  *     drawOver(e, ctx, game) {},    // optional — wird NACH dem Standard-Sprite gezeichnet (Telegraphen)
@@ -26,7 +27,7 @@
  *   e.sayText/sayT kurzer schwebender Text ueber dem Gegner (siehe AI.say)
  *
  * Verhalten in dieser Datei: wander, chase, fly_chase, split, blink, charge, turret, orbit, shooter,
- * revive, grow, mimic, zigzag. Boss-Verhalten (und das Wurm-Segment) stehen in entities/boss.js.
+ * revive, grow, mimic, zigzag, glitch. Boss-Verhalten (und das Wurm-Segment) stehen in entities/boss.js.
  *
  * Zusaetzliche Bus-Events (nur informativ, z. B. fuer Sound/Effekte): 'enemyRevive' (Zombie steht auf),
  * 'enemyReveal' (Hallucination enttarnt sich); aus boss.js: 'bossPhase', 'bossStomp', 'bossBounce'.
@@ -375,6 +376,7 @@
       if (B.M.dist(this.x, this.y, p.x, p.y) < this.r + p.r * 0.8) {
         if (p.hurt(this.contactDamage, this.def.name, game)) {
           p.knockback(p.x - this.x, p.y - this.y, 380);
+          if (this.behavior.onHitPlayer) this.behavior.onHitPlayer(this, game);
         }
       }
     }
@@ -985,6 +987,91 @@
       }
       AI.drawBody(e, ctx, { frame: e.state.mode === 'reveal' ? 1 : undefined });
       AI.drawSay(e, ctx);
+    },
+  };
+
+  /**
+   * Graphics Glitch — steht flackernd herum und springt dann ruckartig 1–3 Kacheln in eine der vier
+   * Himmelsrichtungen (immer auf eine Kachelmitte, nie durch Hindernisse). Telegraph: params.warn Sekunden
+   * vor dem Sprung erscheint ein halbtransparentes "Geisterbild" am Zielort und das Sprite flackert.
+   * Mit Chance params.chaseBias waehlt er die Richtung, die ihn dem Spieler am naechsten bringt, sonst eine
+   * zufaellige (er soll bedrohlich, aber unberechenbar sein).
+   * Trifft er den Spieler (normaler Kontaktschaden), verfremdet er fuer params.hudGlitch Sekunden einen
+   * Bereich des HUD (game.glitchHud; gezeichnet in hud.js).
+   * params: { stepMin, stepMax, idleMin, idleMax, warn, jump, chaseBias, hudGlitch }
+   */
+  function glitchTarget(e, game, P) {
+    const room = game.room, p = game.player;
+    const here = room.worldToTile(e.x, e.y);
+    const options = [];
+    for (const dir of ['up', 'down', 'left', 'right']) {
+      const D = B.DIRS[dir];
+      const max = game.rng.int(P.stepMin || 1, P.stepMax || 3);
+      let n = 0;
+      for (let k = 1; k <= max; k++) {
+        if (room.isSolid(here.c + D.dx * k, here.r + D.dy * k, 'walk', false)) break;
+        n = k;
+      }
+      if (n > 0) {
+        const tc = room.tileCenter(here.c + D.dx * n, here.r + D.dy * n);
+        options.push({ x: tc.x, y: tc.y, d: B.M.dist(tc.x, tc.y, p.x, p.y) });
+      }
+    }
+    if (!options.length) return null;
+    if (game.rng.chance(P.chaseBias || 0)) return options.reduce((a, b) => (b.d < a.d ? b : a));
+    return game.rng.pick(options);
+  }
+
+  B.BEHAVIORS.glitch = {
+    init(e, game) {
+      e.state.mode = 'idle';
+      e.state.t = game.rng.float(0.6, 1.2);
+    },
+    update(e, dt, game) {
+      const s = e.state, P = e.params;
+      s.t -= dt;
+      switch (s.mode) {
+        case 'idle':
+          AI.stop(e);
+          e.frame = 0; // normale 6-fps-Animation
+          if (s.t <= 0) {
+            const tgt = glitchTarget(e, game, P);
+            if (tgt) { s.mode = 'warn'; s.t = P.warn || 0.4; s.tx = tgt.x; s.ty = tgt.y; } else s.t = 0.3;
+          }
+          break;
+        case 'warn':
+          AI.stop(e);
+          e.frame = Math.floor(e.t * 20) % 2 ? 1 : 2; // hektisches Flackern = Telegraph
+          if (s.t <= 0) {
+            const T = P.jump || 0.12;
+            s.mode = 'jump';
+            s.t = T;
+            s.bumped = false;
+            e.vx = (s.tx - e.x) / T;
+            e.vy = (s.ty - e.y) / T;
+          }
+          break;
+        case 'jump':
+          if (s.t <= 0 || s.bumped) {
+            AI.stop(e);
+            s.mode = 'idle';
+            s.bumped = false;
+            s.t = AI.cooldown(game, game.rng.float(P.idleMin || 0.9, P.idleMax || 1.6));
+          }
+          break;
+      }
+    },
+    onHitPlayer(e, game) {
+      AI.say(e, 'Is it supposed to look like this...?', 2.2, '#e080d8');
+      if (typeof game.glitchHud === 'function') game.glitchHud(e.params.hudGlitch || 7);
+    },
+    drawUnder(e, ctx) {
+      const s = e.state;
+      if (s.mode !== 'warn') return;
+      // Geisterbild am Zielort (mit leichtem Farbversatz, wie ein kaputter Frame)
+      const k = 1 - Math.max(0, s.t) / (e.params.warn || 0.4);
+      AI.drawBody(e, ctx, { dx: s.tx - e.x - 3, dy: s.ty - e.y, alpha: 0.18 + 0.25 * k, frame: 2, noFrost: true });
+      AI.drawBody(e, ctx, { dx: s.tx - e.x + 3, dy: s.ty - e.y, alpha: 0.12 + 0.2 * k, frame: 1, noFrost: true });
     },
   };
 
