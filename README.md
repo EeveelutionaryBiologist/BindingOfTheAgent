@@ -1,11 +1,15 @@
 # The Binding of the Agent
 
-A discount Binding-of-Isaac-style roguelite. You are Claude, a small coral-coloured agent descending into
+A discount Binding-of-Isaac-style roguelite. You are a loose Claude Agent, a small coral-coloured minion descending into
 ever-deeper codebases. Shoot tokens at bugs, pick up items of questionable value, die to a Merge Conflict, repeat.
+
+<img width="1944" height="870" alt="bota-showcase" src="https://github.com/user-attachments/assets/3c454327-83e6-4c34-bb01-5af1004640b4" />
 
 ## Play
 
-**Double-click `index.html`.** That's it: no install, no server, no network. Any current Chromium, Edge or Firefox works.
+**Double-click `index.html`.** That's it. Any current Chromium, Edge or Firefox works.
+
+Controls are basically ripped straight from Binding Of Isaac.
 
 | Action | Key |
 |---|---|
@@ -34,36 +38,3 @@ Secret rooms hide behind cracked walls: Force Push them. There is no ending. The
 - `index.html?debug` turns on the debug overlay (or press `F2` in-game). Keys: `G` god mode, `I` random item,
   `K` kill all, `N` next floor, `V` reveal map, `B` boss room, `T` treasure room, `H` resources.
   It's also scriptable via `BOTA.debug.*` in the browser console.
-
-## Project layout
-
-If you're picking this up as a developer or an AI agent, start with **`AGENTS.md`**. It covers the architecture,
-contracts, recipes, gotchas and tests.
-
-```
-index.html            canvas + script tags (classic scripts so file:// works) + CSP
-AGENTS.md             technical handoff for developers/agents (CLAUDE.md imports it)
-DESIGN.md             design doc: mechanics, content, architecture, contracts
-tools/smoke-test.js   optional headless test (Playwright); see AGENTS.md §2
-src/core/             namespace & event bus, seeded RNG, math, input, sprite registry, audio
-src/data/             content: items, enemies, bosses, layouts, sprites, palettes, text
-src/world/            dungeon generation, rooms (tiles, doors, pathfinding)
-src/entities/         player, projectiles & bombs, enemies, bosses, pickups, familiars, effects
-src/render/           renderer, HUD, screens
-src/game.js           state machine, room/floor transitions, world API
-src/main.js           bootstrap & fixed-timestep loop
-```
-
-To add an item, add an entry to `src/data/items.js` and an `item_<id>` sprite to `src/data/sprites-items.js`.
-The contracts for items, enemies, behaviours and sprites are documented in the file headers and in `DESIGN.md` §11.
-Code comments are in German (team convention).
-
-## Security notes
-- **Offline by design.** A Content-Security-Policy in `index.html` sets `connect-src 'none'`, so the page cannot make
-  fetch, XHR or WebSocket requests. It also disallows inline scripts, plugins and form posts. No CDNs, web fonts or telemetry.
-- **No dynamic code.** No `eval`, `new Function`, `innerHTML` or string timers. Everything is drawn to a canvas.
-- **Validated input.** URL parameters are read with `URLSearchParams`; the seed must match `[A-Za-z0-9-]{1,32}`.
-- **Minimal storage.** `localStorage` holds only mute, best floor and run/death counters, under one key. Reads are
-  size-limited, type-checked and fall back to defaults.
-- **No privileges.** No personal data, no secrets, no installer, no admin rights needed.
-- **Randomness.** The RNG (mulberry32) is for gameplay only and is not cryptographic.
