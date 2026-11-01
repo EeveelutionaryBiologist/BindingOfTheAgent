@@ -260,6 +260,8 @@
       ev.kick = pos === 0 || pos === 8 || (boss && pos === 10);
       ev.snare = (pos === 4 || pos === 12) && (boss || depth >= 3);
       ev.hat = pos % 2 === 1 || (boss && pos % 4 === 2);
+      // Themen mit chirps (Forgotten Branches): ab und zu ein Vogelruf, nie im Bosskampf
+      ev.chirp = !boss && !!m.chirps && pos % 4 === 2 && r() < 0.06;
       steps.push(ev);
     }
     return { steps, bpm: (m.bpm || 110) * (boss ? 1.12 : 1), lead: boss ? 'sawtooth' : (m.lead || 'square') };
@@ -308,6 +310,11 @@
         if (ev.kick) voice({ f: 150, f2: 40, dur: 0.12, type: 'sine', vol: 0.55, at: t, dest: musicBus });
         if (ev.snare) noise({ dur: 0.09, vol: 0.18, filter: 'bandpass', f: 1800, q: 0.7, at: t, dest: musicBus });
         if (ev.hat) noise({ dur: 0.03, vol: 0.07, filter: 'highpass', f: 7000, at: t, dest: musicBus });
+        if (ev.chirp) {
+          // Zwei kurze, hohe Gleittoene ("tschilp-tschilp")
+          voice({ f: 2900, f2: 3700, dur: 0.06, type: 'sine', vol: 0.05, at: t, dest: musicBus });
+          voice({ f: 3100, f2: 4100, dur: 0.07, type: 'sine', vol: 0.045, at: t + 0.09, dest: musicBus });
+        }
         this.step++;
         this.nextT += stepDur;
       }

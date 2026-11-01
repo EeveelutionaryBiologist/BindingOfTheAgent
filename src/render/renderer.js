@@ -143,6 +143,26 @@
         }
         break;
       }
+      case 'moss': {
+        // Waldboden (Forgotten Branches): Moospolster, Erdflecken und Grashalme statt Fugen
+        for (let i = 0; i < 6; i++) {
+          const n = tileNoise(c * 3 + i, r, 21);
+          const px = x + Math.floor(tileNoise(c, r * 5 + i, 22) * 12) * 4;
+          const py = y + Math.floor(tileNoise(c * 7 + i, r, 23) * 12) * 4;
+          const s = 8 + Math.floor(n * 4) * 4;
+          g.fillStyle = n > 0.6 ? 'rgba(150,210,95,0.07)' : n < 0.25 ? 'rgba(60,40,20,0.2)' : 'rgba(0,0,0,0.06)';
+          g.fillRect(px, py, Math.min(s, x + TILE - px), Math.min(Math.max(4, s - 4), y + TILE - py));
+        }
+        g.fillStyle = 'rgba(160,215,105,0.22)';
+        for (let i = 0; i < 4; i++) {
+          if (tileNoise(c, r + i * 3, 24) < 0.45) continue;
+          const gx = x + 6 + Math.floor(tileNoise(c + i, r, 25) * 13) * 4, gy = y + 6 + Math.floor(tileNoise(r, c + i, 26) * 12) * 4;
+          g.fillRect(gx, gy, 2, 6);
+          g.fillRect(gx + 3, gy + 2, 2, 4);
+          g.fillRect(gx - 3, gy + 3, 2, 3);
+        }
+        break;
+      }
       case 'tiles': {
         // Quadratische Fliesen (32 px) mit Fase
         for (let i = 0; i < 4; i++) {
@@ -251,6 +271,77 @@
           g.fillStyle = '#e9e1d6';
           g.fillRect(p.x, p.y, 8, 4);
           g.fillRect(p.x + 4, p.y + 4, 6, 4);
+        }
+        break;
+      }
+      case 'leaves': {
+        // Forgotten Branches. Wurzeln als kleiner "git log --graph": ein Stamm mit Commit-Punkten, von dem
+        // ein oder zwei Aeste abzweigen und nie wieder zusammenlaufen (nie gemergt eben).
+        const TAU = Math.PI * 2;
+        if (rnd() < 0.65) {
+          const p0 = decoPos(room, rnd, 20);
+          if (p0) {
+            g.strokeStyle = 'rgba(70,45,25,0.45)';
+            g.fillStyle = 'rgba(85,55,30,0.65)';
+            g.lineWidth = 3;
+            g.lineCap = 'round';
+            g.lineJoin = 'round';
+            const dir = p0.x < ROOM_W / 2 ? 1 : -1;
+            const trunk = [];
+            for (let k = 0; k < 5; k++) trunk.push([p0.x + k * 22 * dir, p0.y]);
+            const line = (pts) => { g.beginPath(); pts.forEach(([px, py], k) => (k ? g.lineTo(px, py) : g.moveTo(px, py))); g.stroke(); };
+            line(trunk);
+            const forks = 1 + Math.floor(rnd() * 2);
+            for (let f = 0; f < forks; f++) {
+              const [bx, by] = trunk[1 + f * 2];
+              const up = (f % 2 === 0) === (rnd() < 0.5) ? -1 : 1;
+              const pts = [[bx, by], [bx + 12 * dir, by + 16 * up], [bx + 34 * dir, by + 16 * up], [bx + 56 * dir, by + 16 * up]];
+              line(pts);
+              for (const [px, py] of pts.slice(2)) { g.beginPath(); g.arc(px, py, 4, 0, TAU); g.fill(); }
+            }
+            for (const [px, py] of trunk) { g.beginPath(); g.arc(px, py, 4, 0, TAU); g.fill(); }
+          }
+        }
+        // Laub in Herbst- und Gruentoenen
+        const LEAF = ['#6f9a3c', '#8bb34a', '#b59a3a', '#a3602c', '#4f7a30'];
+        const n = 10 + Math.floor(rnd() * 8);
+        for (let i = 0; i < n; i++) {
+          const p = decoPos(room, rnd, 6);
+          if (!p) continue;
+          g.save();
+          g.translate(p.x, p.y);
+          g.rotate(rnd() * TAU);
+          g.globalAlpha = 0.5 + rnd() * 0.3;
+          g.fillStyle = LEAF[Math.floor(rnd() * LEAF.length)];
+          g.beginPath(); g.ellipse(0, 0, 6, 3.5, 0, 0, TAU); g.fill();
+          g.fillStyle = 'rgba(0,0,0,0.25)';
+          g.fillRect(-5, -0.5, 10, 1);
+          g.restore();
+        }
+        // Zweige mit kleiner Gabel
+        g.strokeStyle = 'rgba(90,61,34,0.6)';
+        g.lineWidth = 2;
+        g.lineCap = 'round';
+        for (let i = 0; i < 3; i++) {
+          const p = decoPos(room, rnd, 14);
+          if (!p) continue;
+          const a = rnd() * TAU;
+          const ex = p.x + Math.cos(a) * 18, ey = p.y + Math.sin(a) * 18;
+          g.beginPath(); g.moveTo(p.x, p.y); g.lineTo(ex, ey); g.stroke();
+          const mx = (p.x + ex) / 2, my = (p.y + ey) / 2;
+          g.beginPath(); g.moveTo(mx, my); g.lineTo(mx + Math.cos(a + 0.7) * 8, my + Math.sin(a + 0.7) * 8); g.stroke();
+        }
+        // Gelegentlich ein Pilzgrueppchen
+        if (rnd() < 0.5) {
+          const p = decoPos(room, rnd, 12);
+          if (p) {
+            for (let k = 0; k < 2 + Math.floor(rnd() * 2); k++) {
+              const mx = p.x + k * 9 - 6, my = p.y + (k % 2) * 4;
+              g.fillStyle = '#e8dcc8'; g.fillRect(mx - 1, my, 3, 5);
+              g.fillStyle = '#c0392b'; g.fillRect(mx - 4, my - 3, 9, 4);
+              g.fillStyle = '#f4efe6'; g.fillRect(mx - 2, my - 2, 2, 1); g.fillRect(mx + 2, my - 3, 1, 1);
+            }
+          }
         }
         break;
       }
@@ -607,6 +698,59 @@
   // Waende
   // ===========================================================================
 
+  /**
+   * Efeu (Forgotten Branches): Ranken haengen von der oberen Mauerkrone, kleinere Buesche an den
+   * Seitenwaenden. Deterministisch pro Raum; Tueroeffnungen bleiben frei.
+   */
+  function drawIvy(g, room) {
+    const salt = room.cell ? room.cell.x * 31 + room.cell.y * 17 : 0;
+    const cols = ['#4f7a30', '#6f9a3c', '#3e6426', '#86ad4a'];
+    const leaf = (x, y, k) => {
+      const col = cols[Math.floor(tileNoise(Math.round(x), Math.round(y), salt + 3) * cols.length)];
+      g.fillStyle = col;
+      if (k % 2) { g.fillRect(x - 4, y - 2, 7, 4); g.fillRect(x - 2, y - 3, 3, 6); }
+      else { g.fillRect(x - 3, y - 2, 6, 5); g.fillRect(x - 1, y - 4, 3, 2); }
+      g.fillStyle = 'rgba(0,0,0,0.25)';
+      g.fillRect(x - 1, y, 2, 1);
+    };
+    const doorX = 7 * TILE, doorY = 4 * TILE;
+    // Moosflecken auf den Ziegeln des Wandrings
+    for (let y = 0; y < ROOM_H; y += 16) {
+      for (let x = 0; x < ROOM_W; x += 16) {
+        const inWall = y < TILE - 10 || y >= ROOM_H - TILE + 10 || x < TILE - 10 || x >= ROOM_W - TILE + 10;
+        if (!inWall || tileNoise(x, y, salt + 9) < 0.78) continue;
+        g.fillStyle = 'rgba(95,140,55,0.22)';
+        g.fillRect(x + 2, y + 6, 12, 8);
+        g.fillRect(x + 6, y + 3, 6, 3);
+      }
+    }
+    // Oben: haengende Ranken, leicht geschwungen, unregelmaessig verteilt und unterschiedlich lang
+    for (let x = TILE + 6; x < ROOM_W - TILE - 6; x += 18) {
+      if (x > doorX - 24 && x < doorX + TILE + 24) continue;
+      const n = tileNoise(x, 1, salt);
+      if (n < 0.5) continue;
+      const len = 8 + Math.floor(n * n * 46);
+      let k = 0;
+      for (let y = TILE - 18; y < TILE - 18 + len; y += 3, k++) {
+        const sway = Math.round(Math.sin(y * 0.25 + x) * 2);
+        g.fillStyle = 'rgba(45,75,28,0.9)';
+        g.fillRect(x + sway, y, 2, 3);
+        if (k % 3 === 1) leaf(x + sway + (k % 6 === 1 ? 4 : -3), y, k);
+      }
+    }
+    // Unten und an den Seiten: Bueschel an der Mauerkrone
+    const tuft = (x, y) => { for (let k = 0; k < 5; k++) leaf(x + (k - 2) * 4, y + (k % 2) * 3 - (k === 2 ? 3 : 0), k); };
+    for (let x = TILE + 12; x < ROOM_W - TILE; x += 36) {
+      if (x > doorX - 20 && x < doorX + TILE + 20) continue;
+      if (tileNoise(x, 9, salt) > 0.55) tuft(x, ROOM_H - TILE + 4);
+    }
+    for (let y = TILE + 16; y < ROOM_H - TILE; y += 36) {
+      if (y > doorY - 20 && y < doorY + TILE + 20) continue;
+      if (tileNoise(1, y, salt) > 0.55) tuft(TILE - 4, y);
+      if (tileNoise(14, y, salt) > 0.55) tuft(ROOM_W - TILE + 4, y);
+    }
+  }
+
   function drawWalls(g, theme, room) {
     // Grundflaeche des Wandrings
     g.fillStyle = theme.wall;
@@ -897,6 +1041,7 @@
     g.fillRect(TILE, TILE, ROOM_W - 2 * TILE, ROOM_H - 2 * TILE);
 
     drawWalls(g, theme, room);
+    if (theme.wallDecor === 'ivy') drawIvy(g, room);
 
     // Hindernisse (nach den Waenden, damit Wand-Schatten darunter liegen)
     for (let r = 1; r < ROWS - 1; r++) {
@@ -951,6 +1096,31 @@
     if (game.player && game.player.flags.showHp) for (const e of room.enemies) e.drawHpBar(ctx);
     for (const p of room.projectiles) p.draw(ctx, game);
     for (const fx of room.effects) fx.draw(ctx, game);
+    if (theme.ambient === 'fireflies') drawFireflies(ctx, room);
+  }
+
+  /**
+   * Gluehwuermchen (Forgotten Branches): 7 Lichtpunkte auf langsamen Lissajous-Bahnen, die sanft
+   * auf- und abblenden. Nur Optik; Zeit aus performance.now(), Bahnen deterministisch pro Raum.
+   */
+  function drawFireflies(ctx, room) {
+    const t = performance.now() / 1000;
+    const salt = room.cell ? room.cell.x * 13 + room.cell.y * 7 : 0;
+    ctx.save();
+    for (let i = 0; i < 7; i++) {
+      const a = tileNoise(i, salt, 51), b = tileNoise(salt, i, 52);
+      const x = TILE + 30 + (0.5 + 0.45 * Math.sin(t * (0.13 + a * 0.12) + i * 2.1)) * (ROOM_W - 2 * TILE - 60);
+      const y = TILE + 30 + (0.5 + 0.45 * Math.sin(t * (0.17 + b * 0.1) + i * 1.3)) * (ROOM_H - 2 * TILE - 60);
+      const glow = Math.max(0, Math.sin(t * (0.9 + a) + i * 1.7));
+      if (glow < 0.05) continue;
+      ctx.globalAlpha = 0.25 * glow;
+      ctx.fillStyle = '#d8ff8a';
+      ctx.beginPath(); ctx.arc(x, y, 7, 0, Math.PI * 2); ctx.fill();
+      ctx.globalAlpha = 0.85 * glow;
+      ctx.fillStyle = '#f4ffd0';
+      ctx.fillRect(x - 1.5, y - 1.5, 3, 3);
+    }
+    ctx.restore();
   }
 
   // ---------------------------------------------------------------------------

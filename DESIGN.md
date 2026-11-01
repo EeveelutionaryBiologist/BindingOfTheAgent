@@ -276,13 +276,16 @@ outlined, icons for boss/treasure/shop once seen) · boss HP bar at the bottom d
 ### Floors (names cycle with roman numerals after the last one)
 1. **The Backlog** — *Where tickets go to die.*
 2. **Legacy Codebase** — *Written by someone who left in 2009.*
-3. **Dependency Hell** — *node_modules now has its own gravitational field.*
-4. **Production** — *Don't touch anything. Especially on a Friday.*
-5. **The Training Data** — *It's mostly forum arguments.*
-6. **The Latent Space** — *Here be embeddings.*
-7. **Undefined Behavior** — *Anything can happen. Mostly bad things.*
-8. **/dev/null** — *Everything you send here is gone. Including you.*
-9. **The Context Limit** — *You've been here before. You don't remember.*
+3. **Forgotten Branches** — *It is probably for the best that these never got merged.* (added 2026-11-01: forest look
+   with moss, leaves, twigs, ivy and fireflies; roots drawn as a little `git log --graph`; birdsong in the music;
+   more branching maps with at least 7 dead ends; its own room-clear quips and epitaphs)
+4. **Dependency Hell** — *node_modules now has its own gravitational field.*
+5. **Production** — *Don't touch anything. Especially on a Friday.*
+6. **The Training Data** — *It's mostly forum arguments.*
+7. **The Latent Space** — *Here be embeddings.*
+8. **Undefined Behavior** — *Anything can happen. Mostly bad things.*
+9. **/dev/null** — *Everything you send here is gone. Including you.*
+10. **The Context Limit** — *You've been here before. You don't remember.*
 
 ### Death epitaphs (sample)
 *"Claude was unable to complete this request."* · *"Context window exceeded."* · *"Error 529: Overloaded."* ·
@@ -410,7 +413,7 @@ All milestones done. What shipped, compared with this doc:
 - **Enemies and bosses:** 13 spawnable enemies plus 3 minions. Each of the 6 bosses has two phases and telegraphed attacks.
 - **Layouts:** 30 (27 combat, the rest for special rooms), all validated.
 - **Presentation:**
-  - 9 floor themes and an animated avatar with 4 directions plus hurt and item poses.
+  - 10 floor themes and an animated avatar with 4 directions plus hurt and item poses.
   - 33 synthesized SFX and a procedural chiptune loop per floor, with a boss variant.
   - Pixel-font HUD and screens, including the "post-mortem" death report.
 - **QA:** headless-browser tests found zero console errors and held 60 fps with all items, 30 enemies and about 150 bullets.

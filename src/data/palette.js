@@ -8,14 +8,21 @@
  *   wall / wallLight / wallDark / wallTop   Wandflaeche, Licht-Kante, Fugen, Mauerkrone
  *   door               Rahmenfarbe normaler Tueren
  *   accent             Akzentfarbe (Etagenkarte, Minimap-Rahmen, Deko)
- *   pattern            Bodenmuster: 'planks' | 'stone' | 'tiles' | 'plate' | 'grid' | 'void'
- *   decor              Deko-Stil:   'notes' | 'cobweb' | 'embers' | 'hazard' | 'glyphs' | 'stars' | 'glitch' | 'null' | 'fog'
+ *   pattern            Bodenmuster: 'planks' | 'stone' | 'moss' | 'tiles' | 'plate' | 'grid' | 'void'
+ *   decor              Deko-Stil:   'notes' | 'cobweb' | 'leaves' | 'embers' | 'hazard' | 'glyphs' | 'stars' | 'glitch'
+ *                                   | 'null' | 'fog'
+ *   wallDecor          optional: 'ivy' (Efeu an den Waenden)
+ *   ambient            optional: 'fireflies' (animierte Lichtpunkte, pro Frame gezeichnet)
+ *   gen                optional, Kartengenerierung: { minDeadEnds } = Mindestzahl Sackgassen (Standard 3)
  *   light              Farbe des weichen Lichtkegels in der Raummitte
  *   vignette           Abdunklungsfarbe am Bildrand (rgb-Tripel als String, Alpha wird im Renderer gesetzt)
  *   music              Parameter fuer die prozedurale Chiptune-Schleife (audio.js):
- *                      root = MIDI-Grundton, mode = Tonleiter-Name, bpm = Tempo, lead = Oszillator-Typ
+ *                      root = MIDI-Grundton, mode = Tonleiter-Name, bpm = Tempo, lead = Oszillator-Typ,
+ *                      chirps = gelegentliche Vogelrufe (optional)
  *
- * Alle Werte sind reine Darstellung; die Spiellogik liest hier nichts.
+ * Alle Werte sind reine Darstellung — mit einer Ausnahme: gen wird von world/dungeon.js gelesen
+ * (Forgotten Branches erzeugt verzweigtere Karten). Die Themen-Liste muss gleich lang sein wie
+ * B.TEXT.FLOORS (der Rauchtest prueft das).
  */
 'use strict';
 
@@ -65,7 +72,19 @@
       light: 'rgba(170,210,230,0.05)', vignette: '4,7,9',
       music: { root: 45, mode: 'minor', bpm: 92, lead: 'triangle' },
     },
-    { // 3 Dependency Hell — rostiges Dunkelbraun mit gluehenden Rissen
+    { // 3 Forgotten Branches — Waldboden mit Moos, Laub und Zweigen, Efeu an den Waenden, Gluehwuermchen.
+      // Eigener Gruenton (Wald), deutlich von The Training Data (Karopapier, Etage 6) unterscheidbar.
+      // gen.minDeadEnds: verzweigtere Karten ("Branches"), siehe Floor.generate.
+      key: 'branches',
+      floor: '#25331f', floorAlt: '#283822', grout: 'rgba(0,0,0,0.22)',
+      wall: '#1a2614', wallLight: '#34502a', wallDark: '#0b120a', wallTop: '#22321a',
+      door: '#4f3c24', accent: '#a6d36b',
+      pattern: 'moss', decor: 'leaves', wallDecor: 'ivy', ambient: 'fireflies',
+      gen: { minDeadEnds: 7 },
+      light: 'rgba(200,255,150,0.07)', vignette: '2,10,2',
+      music: { root: 55, mode: 'dorian', bpm: 98, lead: 'triangle', chirps: true },
+    },
+    { // 4 Dependency Hell — rostiges Dunkelbraun mit gluehenden Rissen
       key: 'dephell',
       floor: '#38261f', floorAlt: '#3e2b23', grout: 'rgba(0,0,0,0.28)',
       wall: '#2a1912', wallLight: '#4f2f1e', wallDark: '#150b06', wallTop: '#361f15',
@@ -74,7 +93,7 @@
       light: 'rgba(255,130,50,0.10)', vignette: '40,8,0',
       music: { root: 47, mode: 'phrygian', bpm: 128, lead: 'sawtooth' },
     },
-    { // 4 Production — Industrie-Rot, Riffelblech, Warnstreifen
+    { // 5 Production — Industrie-Rot, Riffelblech, Warnstreifen
       key: 'production',
       floor: '#2e2a2c', floorAlt: '#332f31', grout: 'rgba(0,0,0,0.3)',
       wall: '#2a1618', wallLight: '#4c2428', wallDark: '#14090a', wallTop: '#361b1e',
@@ -83,7 +102,7 @@
       light: 'rgba(255,90,80,0.05)', vignette: '16,0,0',
       music: { root: 45, mode: 'harmonic', bpm: 138, lead: 'square' },
     },
-    { // 5 The Training Data — Gruenstich, Karopapier, verstreute Zeichen
+    { // 6 The Training Data — Gruenstich, Karopapier, verstreute Zeichen
       key: 'training',
       floor: '#29322b', floorAlt: '#2d3730', grout: 'rgba(0,0,0,0.2)',
       wall: '#18201a', wallLight: '#30402f', wallDark: '#0c110d', wallTop: '#1f2a21',
@@ -92,7 +111,7 @@
       light: 'rgba(170,255,140,0.05)', vignette: '2,8,3',
       music: { root: 52, mode: 'major', bpm: 116, lead: 'triangle' },
     },
-    { // 6 The Latent Space — Indigo mit Sternen (Einbettungen)
+    { // 7 The Latent Space — Indigo mit Sternen (Einbettungen)
       key: 'latent',
       floor: '#25223a', floorAlt: '#29263f', grout: 'rgba(0,0,0,0.2)',
       wall: '#17142a', wallLight: '#332c58', wallDark: '#0b0915', wallTop: '#1e1a36',
@@ -101,7 +120,7 @@
       light: 'rgba(180,150,255,0.07)', vignette: '6,3,16',
       music: { root: 48, mode: 'lydian', bpm: 96, lead: 'sine' },
     },
-    { // 7 Undefined Behavior — Glitch-Magenta/Tuerkis
+    { // 8 Undefined Behavior — Glitch-Magenta/Tuerkis
       key: 'undefined',
       floor: '#2a2430', floorAlt: '#2f2836', grout: 'rgba(0,0,0,0.25)',
       wall: '#1a1420', wallLight: '#3d2a4a', wallDark: '#0c0910', wallTop: '#231b2b',
@@ -110,7 +129,7 @@
       light: 'rgba(255,80,180,0.05)', vignette: '10,0,12',
       music: { root: 46, mode: 'locrian', bpm: 144, lead: 'square' },
     },
-    { // 8 /dev/null — fast Schwarz, monochrom, Rauschen
+    { // 9 /dev/null — fast Schwarz, monochrom, Rauschen
       key: 'devnull',
       floor: '#1b1b1e', floorAlt: '#1f1f22', grout: 'rgba(255,255,255,0.025)',
       wall: '#0f0f11', wallLight: '#2b2b30', wallDark: '#050506', wallTop: '#151517',
@@ -119,7 +138,7 @@
       light: 'rgba(255,255,255,0.03)', vignette: '0,0,0',
       music: { root: 43, mode: 'minor', bpm: 80, lead: 'triangle' },
     },
-    { // 9 The Context Limit — bleiches Nebelblau, verblassender Text, Deja-vu
+    { // 10 The Context Limit — bleiches Nebelblau, verblassender Text, Deja-vu
       key: 'context',
       floor: '#2d3542', floorAlt: '#323b49', grout: 'rgba(0,0,0,0.2)',
       wall: '#1c2230', wallLight: '#3d4a62', wallDark: '#0e121a', wallTop: '#242c3c',

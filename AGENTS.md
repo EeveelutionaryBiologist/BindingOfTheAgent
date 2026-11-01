@@ -81,6 +81,7 @@ Live state is under `BOTA.game` (`.player`, `.room`, `.floor`, `.depth`, `.state
   about 30 % of floors, only in normal rooms, and reveals every room except the secret room;
 - pipes appear in about 10 % of combat rooms after clearing (never by a door), never lead to the boss room, the
   secret room or the current room, and can't ping-pong during their cooldown;
+- floor names and themes have the same length, floor 3 is Forgotten Branches, and its maps have ≥ 7 dead ends;
 - the door transition, special rooms, pause screen and death screen work.
 
 Screenshots go to `tools/out/` (scratch; don't commit or ship). Setup without admin rights:
@@ -141,7 +142,7 @@ depend on load order.
 | `input` | input | `down(code)`, `pressed(code)` (edge since the last sim step), `moveVector()`, `shootDir()`, `_simulate()` |
 | `defineSprite, drawSprite, hasSprite, spriteSize, spriteFrameCount` | sprites | ASCII sprite registry; unknown names draw a magenta placeholder |
 | `audio` | audio | `unlock, play(name), toggleMute, tone, names(), music.start/stop` |
-| `FONT, COLORS, FLOOR_THEMES, themeFor(depth)` | palette | colours and 9 floor themes |
+| `FONT, COLORS, FLOOR_THEMES, themeFor(depth)` | palette | colours and 10 floor themes (`gen` is read by the map generator) |
 | `floorInfo(depth)`, `TEXT.*` | text | floor names/subtitles (cycling with roman numerals) and all snark lists; `TEXT.pick(list)` |
 | `Room`, `Floor` | world | room model and floor generator |
 | `Entity, Projectile, Bomb, Player, Enemy, Boss, AI, BossHelpers` | entities | gameplay classes and AI helpers |
@@ -181,7 +182,8 @@ Global keys handled in every state: `M` (mute) and `F2` (debug). Holding `R` for
 ### 3.6 Dungeon generation (`world/dungeon.js`)
 1. A 9 × 9 cell grid with the start room in the centre. Target room count is `min(20, floor(3.3·depth) + 6 + rand(0..2))`.
 2. Rooms are added by randomised BFS. A cell is accepted only if it is empty, has ≤ 1 filled neighbour, and a coin flip
-   agrees. Generation retries (up to 500 times) until the target count is reached with ≥ 3 dead ends.
+   agrees. Generation retries (up to 500 times) until the target count is reached with ≥ 3 dead ends. A floor theme can
+   raise that with `gen.minDeadEnds` (Forgotten Branches: 7, so its maps branch more); other floors are unaffected.
 3. Dead ends become the **boss** room (farthest BFS distance), the **treasure** room and the **shop**. The **secret**
    room is an empty cell with ≥ 2 room neighbours that isn't next to the boss; its door edges are `hidden`.
 4. Edges are shared objects `{kind, locked, hidden}` between the two rooms' `doors[dir]`. Kind priority is
@@ -430,7 +432,8 @@ a random drop; see §3.6 step 8).
 checks the format and that all 4 door tiles are clear and mutually reachable. `{strict: true}` adds three house rules:
 every floor tile must be reachable, there must be no spikes next to doors, and special rooms need a clear centre.
 
-**Text** (`B.TEXT`): `FLOORS` (9), `EPITAPHS` (25), `TAGLINES`, `SHOP_LINES`, `CLEAR_QUIPS`, `DENIED`, `PICKUP`, `EVENTS`, `RANKS`.
+**Text** (`B.TEXT`): `FLOORS` (10), `EPITAPHS` (25), `TAGLINES`, `SHOP_LINES`, `CLEAR_QUIPS`, `DENIED`, `PICKUP`, `EVENTS`, `RANKS`,
+plus per-floor extras `THEME_QUIPS` / `THEME_EPITAPHS` keyed by theme `key` (currently only `branches`).
 
 ---
 
@@ -462,8 +465,11 @@ and `color`, plus a `B.BOSS_BEHAVIORS.id` entry in `boss.js`. Give it ≥ 2 atta
 **Add a sound:** add an entry to `SOUNDS` in `audio.js` built from `voice({...})` / `noise({...})` / `arp(...)`, then
 hook it with `on('event', () => p('name'))`. Rate-limit it in `RATE` if it can fire every frame.
 
-**Add a floor:** append to `B.TEXT.FLOORS` (name + subtitle) and `B.FLOOR_THEMES` (colours and decor), keeping the two
-lists the same length. Depths cycle through the list modulo its length, with roman-numeral suffixes on later passes.
+**Add a floor:** add an entry at the same position in `B.TEXT.FLOORS` (name + subtitle) and `B.FLOOR_THEMES` (colours,
+`pattern`, `decor`, optional `wallDecor`/`ambient`/`gen`, music), keeping the two lists the same length (the smoke test
+checks). Depths cycle through the list modulo its length, with roman-numeral suffixes on later passes. New `pattern` /
+`decor` / `wallDecor` / `ambient` values need a case in `renderer.js`. Inserting in the middle shifts the names of all
+later floors (Forgotten Branches went in at position 3 on 2026-11-01); enemy and boss unlocks follow depth, not names.
 
 **Add a new source file:** add the `<script>` tag in `index.html` at the right place in the load order (§3.1) and
 wrap the file in the IIFE pattern.
@@ -531,3 +537,10 @@ work again, the same file-ownership split works well.
 - Scale item damage with depth.
 - Better item-pool exhaustion handling (e.g. hand out `blockchain` forever).
 - A human balance pass on boss HP and spawn budgets.
+- Ideas from the 2026-11-01 brainstorm, in planned order:
+  - Destructible objects per floor (dusty crates on 1–2, bushes on Forgotten Branches, packages and overflowing
+    cartons on Dependency Hell and Production, wilder mixes deeper down).
+  - Floor-specific enemies for Forgotten Branches: Detached HEAD (head shoots, body walks), Stale Branch (speeds up
+    the longer it lives), Cherry-Pick (pair; hit one, the other gets angry), Orphan Commit (flees, drops credits).
+  - Stash rooms: small bonus rooms behind a bush wall that has to be shot open.
+  - Bosses: Octopus Merge (tentacle branches that merge one by one), "Human in the Loop" (meta joke).

@@ -12,6 +12,7 @@
   B.TEXT.FLOORS = [
     { name: 'The Backlog', sub: 'Where tickets go to die.' },
     { name: 'Legacy Codebase', sub: 'Written by someone who left in 2009.' },
+    { name: 'Forgotten Branches', sub: 'It is probably for the best that these never got merged.' },
     { name: 'Dependency Hell', sub: 'node_modules now has its own gravitational field.' },
     { name: 'Production', sub: "Don't touch anything. Especially on a Friday." },
     { name: 'The Training Data', sub: "It's mostly forum arguments." },
@@ -20,6 +21,19 @@
     { name: '/dev/null', sub: 'Everything you send here is gone. Including you.' },
     { name: 'The Context Limit', sub: "You've been here before. You don't remember." },
   ];
+
+  // Etagen-spezifische Zusatztexte, Schluessel = FLOOR_THEMES[].key. Werden mit den allgemeinen Listen
+  // gemischt (Raum-Spruch: effects.js; Grabinschrift: game.onPlayerDeath).
+  B.TEXT.THEME_QUIPS = {
+    branches: ['Branch deleted', 'Stale for 847 days', 'Rebased onto nothing', 'Abandoned PR', '312 commits behind'],
+  };
+  B.TEXT.THEME_EPITAPHS = {
+    branches: [
+      'Died on a branch nobody remembers.',
+      'Last commit: "wip". 3 years ago.',
+      'Your changes were never merged. Neither were you.',
+    ],
+  };
 
   // Grabinschriften auf dem Todesbildschirm (zufaellig, per Run-RNG gewaehlt)
   B.TEXT.EPITAPHS = [

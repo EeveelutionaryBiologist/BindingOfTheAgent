@@ -55,6 +55,10 @@
 
     generate() {
       const rng = this.rng;
+      // Themen koennen verzweigtere Karten verlangen (Forgotten Branches: gen.minDeadEnds). Standard 3.
+      // Andere Etagen bleiben dadurch unveraendert (gleiche Bedingung, gleiche Zufallszahlen).
+      const theme = B.themeFor ? B.themeFor(this.depth) : null;
+      const minDeadEnds = Math.max(3, (theme && theme.gen && theme.gen.minDeadEnds) || 3);
       const target = Math.min(20, Math.floor(3.3 * this.depth) + 6 + rng.int(0, 2));
       const sx = Math.floor(MAP_W / 2), sy = Math.floor(MAP_H / 2);
       let cells = null;
@@ -81,7 +85,7 @@
         }
         if (cells.size < target) continue;
         const deadEnds = [...cells.values()].filter((c) => c.type !== 'start' && this.neighborCount(c.x, c.y, cells) === 1);
-        if (deadEnds.length >= 3) break;
+        if (deadEnds.length >= minDeadEnds) break;
       }
 
       this.cells = cells;

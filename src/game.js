@@ -102,7 +102,7 @@
     onPlayerDeath(killer) {
       this.death = {
         killer,
-        epitaph: this.rng.pick(B.TEXT.EPITAPHS || ['You died.']),
+        epitaph: this.rng.pick(this.epitaphPool()),
         depth: this.depth,
         kills: this.runStats.kills,
         items: this.player.items.length,
@@ -132,6 +132,14 @@
       const id = B.rollBossVaried(rng, this.depth, this.bossHistory);
       if (id) cell.room.bossId = id;
       this.bossHistory.push(cell.room.bossId);
+    }
+
+    /** Grabinschriften: allgemeine Liste plus die der aktuellen Etage (B.TEXT.THEME_EPITAPHS) */
+    epitaphPool() {
+      const base = B.TEXT.EPITAPHS || ['You died.'];
+      const theme = B.themeFor ? B.themeFor(this.depth) : null;
+      const own = theme && B.TEXT.THEME_EPITAPHS && B.TEXT.THEME_EPITAPHS[theme.key];
+      return own ? base.concat(own) : base;
     }
 
     /** Betritt einen Raum (ohne Animation). Befuellt ihn beim ersten Besuch. */

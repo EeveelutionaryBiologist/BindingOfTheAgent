@@ -476,7 +476,11 @@
     const p = playerPos(game);
     FX.sparkles(game, p.x, p.y - 20, 6, 50, '#ffe9a3', { delay: 0.3 });
     if (Math.random() < 0.55 && B.TEXT.CLEAR_QUIPS) {
-      FX.text(game, B.C.ROOM_W / 2, B.C.ROOM_H / 2 - 40, pick(B.TEXT.CLEAR_QUIPS), '#c8f0b8', { scale: 3, life: 1.4, vy: -30 });
+      // Etagen-eigene Sprueche (B.TEXT.THEME_QUIPS) haben auf ihrer Etage halbe Chance
+      const theme = B.themeFor ? B.themeFor(game.depth) : null;
+      const own = theme && B.TEXT.THEME_QUIPS && B.TEXT.THEME_QUIPS[theme.key];
+      const list = own && Math.random() < 0.5 ? own : B.TEXT.CLEAR_QUIPS;
+      FX.text(game, B.C.ROOM_W / 2, B.C.ROOM_H / 2 - 40, pick(list), '#c8f0b8', { scale: 3, life: 1.4, vy: -30 });
     }
   });
 

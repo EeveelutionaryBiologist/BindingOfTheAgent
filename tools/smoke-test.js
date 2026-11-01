@@ -14,6 +14,7 @@
  *   - Rogue Agent Swarm: 4 Mitglieder mit einem Balken, Geist-Phase, 10 % Heilung, Solo-Phase, genau ein Boss-Tod
  *   - Etagen-Bosse: nie zweimal hintereinander derselbe (300 simulierte Runs + echte Etagenfolge)
  *   - README.md: ~30 % der Etagen, nur in normalen Raeumen, deckt die Karte auf, aber nicht den Geheimraum
+ *   - Etagen: FLOORS und FLOOR_THEMES gleich lang; Etage 3 = Forgotten Branches mit verzweigteren Karten
  *   - Rohre: ~10 % der Kampfraeume, erscheinen nach dem Clearing (nicht vor Tueren), Ziel nie Boss/Geheim/selbst,
  *     Sperrzeit verhindert Ping-Pong
  *   - Spezialraeume, Pause- und Todesbildschirm rendern
@@ -87,6 +88,17 @@ const URL = 'file://' + path.join(ROOT, 'index.html').replace(/\\/g, '/') + '?se
     for (const [id, def] of Object.entries(BOTA.BOSSES)) if (!BOTA.hasSprite(def.sprite)) out.push('Boss ohne Sprite: ' + id);
     // Layouts (strikte Hausregeln)
     for (const l of BOTA.LAYOUTS) { const r = BOTA.validateLayout(l, { strict: true }); if (!r.ok) out.push('Layout ' + l.id + ': ' + r.error); }
+    // Etagen-Themen und -Namen gleich lang; Forgotten Branches ist Etage 3 (und 13, 23, ...)
+    if (BOTA.TEXT.FLOORS.length !== BOTA.FLOOR_THEMES.length) out.push('FLOORS (' + BOTA.TEXT.FLOORS.length + ') und FLOOR_THEMES (' + BOTA.FLOOR_THEMES.length + ') ungleich lang');
+    if (BOTA.themeFor(3).key !== 'branches' || BOTA.floorInfo(3).name !== 'Forgotten Branches') out.push('Etage 3 ist nicht Forgotten Branches');
+    // Verzweigtere Karten auf Forgotten Branches: mindestens gen.minDeadEnds Sackgassen
+    for (let i = 0; i < 100; i++) {
+      const f = new BOTA.Floor(3, 'branch' + i);
+      // wie im Generator gezaehlt: vor dem Einsetzen des Geheimraums (der kann Sackgassen "verbinden")
+      const noSecret = new Map([...f.cells].filter(([, c]) => c.type !== 'secret'));
+      const de = [...noSecret.values()].filter((c) => c.type !== 'start' && f.neighborCount(c.x, c.y, noSecret) === 1).length;
+      if (de < BOTA.themeFor(3).gen.minDeadEnds) { out.push('Forgotten Branches: nur ' + de + ' Sackgassen (branch' + i + ')'); break; }
+    }
     // Etagen-Fuzzing
     let combatRooms = 0, combatWithLoot = 0, readmeFloors = 0, pipeRooms = 0;
     for (let i = 0; i < 300; i++) {
@@ -261,6 +273,16 @@ const URL = 'file://' + path.join(ROOT, 'index.html').replace(/\\/g, '/') + '?se
   problems.push(...readmeProblems);
   await page.waitForTimeout(200);
   await shot('11-readme-map');
+
+  // --- Forgotten Branches: ein normaler Raum auf Etage 3 (Optik pruefen!) ---
+  await page.evaluate(() => {
+    const g = BOTA.game; g.enterFloor(3); g.setState('play');
+    const c = [...g.floor.cells.values()].find((x) => x.type === 'normal');
+    c.room.populated = true; c.room.cleared = true;
+    g.teleport(c.room);
+  });
+  await page.waitForTimeout(400);
+  await shot('12-forgotten-branches');
 
   // --- Rohr: erscheint nach dem Clearing, teleportiert in einen erlaubten Raum, kein Ping-Pong ---
   const pipeProblems = await page.evaluate(async () => {
