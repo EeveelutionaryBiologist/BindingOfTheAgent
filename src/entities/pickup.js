@@ -17,6 +17,7 @@
  *   BOTA.openChest(game, x, y, opts), BOTA.drawSpriteIfExists(ctx, name, x, y, opts),
  *   BOTA.rerollPickup(pickup, game)  (fuer "Regenerate Response")
  *   BOTA.LOOSE_LOOT  (lose Pickups in Kampfraeumen und Tarnungen der Hallucination, siehe unten)
+ *   BOTA.Pipe        (Rohr-Teleporter, siehe unten)
  *
  * Alle Objekte in room.pickups haben update(dt, game) und draw(ctx, game).
  */
@@ -382,6 +383,48 @@
     }
   }
 
+  /**
+   * Rohr ("|"): bleibt in manchen Kampfraeumen nach dem Clearing zurueck (dungeon.js: assignPipes,
+   * gelegt in game.onRoomClear). Wer hineinlaeuft, wird einseitig in einen zufaelligen anderen Raum der
+   * Etage gespuelt (game.pipeWarp: nicht Boss-, nicht Geheimraum, egal ob schon besucht). Mehrfach nutzbar,
+   * jedes Mal ein neues Ziel.
+   * Ausgeloest wird nur beim *Betreten* (steigende Flanke): Wer auf einem Rohr landet oder darauf steht,
+   * wenn es scharf wird, muss erst herunter- und wieder herauflaufen. Dazu sperrt game.pipeCooldown kurz
+   * nach jedem Sprung alle Rohre (kein Ping-Pong).
+   */
+  class Pipe extends B.Entity {
+    constructor(x, y) {
+      super(x, y, 22);
+      this.armT = 0.8;       // kurz nach dem Erscheinen noch nicht aktiv
+      this.touching = false; // Spieler stand im letzten Frame auf dem Rohr
+      this.static = true;
+      this.noShadow = true;
+      this.drawLayer = -1;   // im Boden eingelassen -> unter allen anderen Entities
+    }
+
+    update(dt, game) {
+      this.t += dt;
+      if (this.armT > 0) this.armT -= dt;
+      const p = game.player;
+      const now = !!(p && !p.dead && B.M.dist(this.x, this.y, p.x, p.y) < this.r * 0.9);
+      const entered = now && !this.touching;
+      this.touching = now;
+      if (entered && this.armT <= 0 && !(game.pipeCooldown > 0) && typeof game.pipeWarp === 'function') {
+        game.pipeWarp(this);
+      }
+    }
+
+    draw(ctx) {
+      const frame = Math.floor(this.t * 6);
+      if (!B.drawSpriteIfExists(ctx, 'pipe', this.x, this.y, { frame, alpha: this.armT > 0 ? 0.5 : 1 })) {
+        ctx.fillStyle = '#8a929c';
+        ctx.beginPath(); ctx.arc(this.x, this.y, this.r, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#0a0d10';
+        ctx.beginPath(); ctx.arc(this.x, this.y, this.r * 0.55, 0, Math.PI * 2); ctx.fill();
+      }
+    }
+  }
+
   /** Zeichnet ein Sprite nur, wenn es definiert ist (sonst false -> Aufrufer zeichnet Fallback) */
   B.drawSpriteIfExists = function (ctx, name, x, y, opts) {
     if (!name || !B.hasSprite(name)) return false;
@@ -392,4 +435,5 @@
   B.Pickup = Pickup;
   B.Pedestal = Pedestal;
   B.Trapdoor = Trapdoor;
+  B.Pipe = Pipe;
 })(window.BOTA);

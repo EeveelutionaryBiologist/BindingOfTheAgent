@@ -14,6 +14,8 @@
  *   - Rogue Agent Swarm: 4 Mitglieder mit einem Balken, Geist-Phase, 10 % Heilung, Solo-Phase, genau ein Boss-Tod
  *   - Etagen-Bosse: nie zweimal hintereinander derselbe (300 simulierte Runs + echte Etagenfolge)
  *   - README.md: ~30 % der Etagen, nur in normalen Raeumen, deckt die Karte auf, aber nicht den Geheimraum
+ *   - Rohre: ~10 % der Kampfraeume, erscheinen nach dem Clearing (nicht vor Tueren), Ziel nie Boss/Geheim/selbst,
+ *     Sperrzeit verhindert Ping-Pong
  *   - Spezialraeume, Pause- und Todesbildschirm rendern
  * Screenshots landen in tools/out/ (nicht einchecken).
  *
@@ -86,7 +88,7 @@ const URL = 'file://' + path.join(ROOT, 'index.html').replace(/\\/g, '/') + '?se
     // Layouts (strikte Hausregeln)
     for (const l of BOTA.LAYOUTS) { const r = BOTA.validateLayout(l, { strict: true }); if (!r.ok) out.push('Layout ' + l.id + ': ' + r.error); }
     // Etagen-Fuzzing
-    let combatRooms = 0, combatWithLoot = 0, readmeFloors = 0;
+    let combatRooms = 0, combatWithLoot = 0, readmeFloors = 0, pipeRooms = 0;
     for (let i = 0; i < 300; i++) {
       const f = new BOTA.Floor(1 + (i % 10), 'fuzz' + i);
       const types = [...f.cells.values()].map((c) => c.type);
@@ -108,7 +110,14 @@ const URL = 'file://' + path.join(ROOT, 'index.html').replace(/\\/g, '/') + '?se
       const readmes = [...f.cells.values()].filter((c) => c.room.hasReadme);
       if (readmes.length > 1 || readmes.some((c) => c.type !== 'normal')) out.push('fuzz' + i + ': README in ' + readmes.map((c) => c.type));
       if (readmes.length) readmeFloors++;
+      // Rohre nur in Kampfraeumen
+      for (const c of f.cells.values()) {
+        if (!c.room.hasPipe) continue;
+        pipeRooms++;
+        if (c.type !== 'normal' || !c.room.plannedEnemies.length) out.push('fuzz' + i + ': Rohr in ' + c.type);
+      }
     }
+    if (Math.abs(pipeRooms / Math.max(1, combatRooms) - 0.1) > 0.04) out.push('Anteil Raeume mit Rohr ' + (pipeRooms / combatRooms).toFixed(3));
     if (Math.abs(readmeFloors / 300 - 0.3) > 0.08) out.push('Anteil Etagen mit README ' + (readmeFloors / 300).toFixed(2));
     // Boss-Abwechslung: 300 simulierte Runs a 12 Etagen, nie zweimal derselbe Boss hintereinander
     for (let r = 0; r < 300; r++) {
@@ -252,6 +261,58 @@ const URL = 'file://' + path.join(ROOT, 'index.html').replace(/\\/g, '/') + '?se
   problems.push(...readmeProblems);
   await page.waitForTimeout(200);
   await shot('11-readme-map');
+
+  // --- Rohr: erscheint nach dem Clearing, teleportiert in einen erlaubten Raum, kein Ping-Pong ---
+  const pipeProblems = await page.evaluate(async () => {
+    const out = [];
+    const g = BOTA.game;
+    BOTA.debug.god(true);
+    let cell = null;
+    for (let d = 2; d <= 9 && !cell; d++) {
+      g.enterFloor(d); g.setState('play');
+      cell = [...g.floor.cells.values()].find((c) => c.room.hasPipe && !c.room.populated) || null;
+    }
+    if (!cell) return ['Keine Etage 2–9 mit Rohr gefunden'];
+    g.teleport(cell.room);
+    BOTA.debug.killAll();
+    let pipe = null;
+    for (let i = 0; i < 40 && !pipe; i++) {
+      await new Promise((r) => setTimeout(r, 50));
+      pipe = g.room.pickups.find((x) => x instanceof BOTA.Pipe) || null;
+    }
+    if (!pipe) return ['Rohr erscheint nach dem Clearing nicht'];
+    const c = g.room.tileCenter(7, 4);
+    if (Math.hypot(pipe.x - c.x, pipe.y - c.y) < 64 * 1.4) out.push('Rohr liegt in der Raummitte');
+    for (const dir of Object.keys(g.room.doors)) {
+      const dt = BOTA.C.DOOR_TILES[dir], dc = g.room.tileCenter(dt.col, dt.row);
+      if (Math.hypot(pipe.x - dc.x, pipe.y - dc.y) < 64 * 1.6) out.push('Rohr liegt vor einer Tuer');
+    }
+    // Hineinlaufen -> Sprung
+    const from = g.room;
+    pipe.armT = 0; pipe.touching = false; g.pipeCooldown = 0;
+    g.player.x = pipe.x; g.player.y = pipe.y;
+    pipe.update(1 / 60, g);
+    if (g.room === from) out.push('Rohr teleportiert nicht');
+    if (g.room.type === 'boss' || g.room.type === 'secret') out.push('Rohr fuehrt in den ' + g.room.type + '-Raum');
+    if (!(g.pipeCooldown > 0)) out.push('Keine Sperrzeit nach dem Rohr-Sprung');
+    // Waehrend der Sperrzeit loest ein weiteres Rohr nicht aus
+    const here = g.room;
+    const p2 = new BOTA.Pipe(g.player.x, g.player.y); p2.armT = 0;
+    here.pickups.push(p2);
+    p2.update(1 / 60, g);
+    if (g.room !== here) out.push('Rohr-Ping-Pong waehrend der Sperrzeit');
+    p2.dead = true;
+    // Ziele ueber viele Spruenge: nie Boss/Geheim/aktueller Raum
+    for (let i = 0; i < 60; i++) {
+      const before = g.room;
+      g.pipeCooldown = 0;
+      g.pipeWarp({ x: g.player.x, y: g.player.y });
+      if (g.room === before || g.room.type === 'boss' || g.room.type === 'secret') { out.push('Rohr-Ziel unzulaessig: ' + g.room.type); break; }
+      BOTA.debug.killAll();
+    }
+    return out;
+  });
+  problems.push(...pipeProblems);
 
   // --- Graphics Glitch: Kontakt -> HUD-Stoerung; jeder Stoerungsbereich rendert; Spruenge landen auf Boden ---
   const glitchProblems = await page.evaluate(() => {

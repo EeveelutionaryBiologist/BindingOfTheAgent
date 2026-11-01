@@ -13,12 +13,15 @@
  *  8. Ab Tiefe 2 bekommt ein Kampfraum ein garantiertes Approval beim Clearing (assignKeyRoom).
  *  9. Manche Kampfraeume bekommen lose Pickups, die schon beim Betreten herumliegen (assignLooseLoot).
  * 10. Auf ~30 % der Etagen liegt in einem normalen Raum ein README.md, das die Karte aufdeckt (assignReadme).
+ * 11. ~10 % der Kampfraeume hinterlassen beim Clearing ein Rohr (Pipe), das in einen Zufallsraum teleportiert
+ *     (assignPipes; Objekt in pickup.js, Sprung in game.pipeWarp).
  */
 'use strict';
 
 (function (B) {
   const { MAP_W, MAP_H } = B.C;
   const README_CHANCE = 0.3; // Anteil der Etagen mit einem README.md (Playtest-Wunsch 2026-10-31)
+  const PIPE_CHANCE = 0.1;   // Anteil der Kampfraeume, die beim Clearing ein Rohr hinterlassen (2026-11-01)
   const DIRS = B.DIRS;
   const DIR_KEYS = ['up', 'down', 'left', 'right'];
 
@@ -94,6 +97,20 @@
       this.assignKeyRoom(ordered);
       this.assignLooseLoot(ordered);
       this.assignReadme(ordered);
+      this.assignPipes(ordered);
+    }
+
+    /**
+     * Rohre: Jeder Kampfraum (normaler Raum mit geplanten Gegnern) hinterlaesst mit PIPE_CHANCE beim Clearing
+     * ein Rohr. Eigener RNG-Strom (Karten bleiben gleich); fuer jede Zelle wird genau eine Zahl gezogen,
+     * damit das Ergebnis pro Raum stabil ist. Das Ziel wird erst beim Hineinspringen gewaehlt (game.pipeWarp).
+     */
+    assignPipes(ordered) {
+      const rng = new B.RNG(B.hashString(String(this.seed) + ':pipe'));
+      for (const cell of ordered) {
+        const hit = rng.chance(PIPE_CHANCE);
+        if (hit && cell.type === 'normal' && cell.room.plannedEnemies.length) cell.room.hasPipe = true;
+      }
     }
 
     /**

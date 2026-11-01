@@ -388,6 +388,12 @@
     FX.burst(e.game, e.x, e.y, col, 3, 160, { vary: true, lifeMin: 0.15, lifeMax: 0.3, sizeMin: 3, sizeMax: 6 });
   });
 
+  // Rohr-Sprung: Wasserspritzer am Ankunftsort (das Rohr liegt im alten Raum, daher nur am Ziel sichtbar)
+  on('pipeArrive', (e) => {
+    FX.ring(e.game, e.x, e.y, 70, '#3fa9d6', 0.4, 6);
+    FX.burst(e.game, e.x, e.y, '#7fd0f0', 16, 240, { vary: true, lifeMin: 0.2, lifeMax: 0.5 });
+  });
+
   // Gegner stirbt: Puff in Gegnerfarbe; Boss: Kettenexplosionen, Weissblitz, langes Beben
   on('enemyDeath', (e) => {
     const game = e.game, col = e.color || '#cccccc';

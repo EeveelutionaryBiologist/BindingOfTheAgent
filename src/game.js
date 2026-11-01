@@ -40,6 +40,7 @@
       this.restartHold = 0;
       this.hudGlitch = null; // { kind, t, dur } — verfremdeter HUD-Bereich (Graphics Glitch), siehe glitchHud
       this.bossHistory = []; // Boss-IDs der bisherigen Etagen dieses Runs (siehe assignFloorBoss)
+      this.pipeCooldown = 0; // Sperrzeit fuer Rohre nach einem Sprung (siehe pipeWarp)
       this.pendingBossIntro = false;
       this.death = null;
       this.runStats = { kills: 0, rooms: 0, time: 0 };
@@ -284,11 +285,59 @@
       }
       // Belohnung fuer das Clearing
       this.dropGuaranteedKey(room);
+      this.placePipe(room);
       const luck = this.player.stats.luck;
       if (this.rng.chance(Math.min(0.9, 0.35 + luck * 0.03))) {
         const pos = this.nearestFreePos(ROOM_W / 2, ROOM_H / 2, room);
         this.spawnPickup(B.rollRandomPickup(this.rng, luck), pos.x, pos.y, {}, room);
       }
+    }
+
+    /**
+     * Rohr ablegen, falls der Raum eins hinterlaesst (Floor.assignPipes). Position: freie Bodenkachel,
+     * nicht in der Raummitte (dort landen Drops), nicht direkt vor einer Tuer (sonst wuerde man beim
+     * Hereinkommen hineinfallen) und nicht unter dem Spieler.
+     */
+    placePipe(room) {
+      if (!room.hasPipe) return;
+      room.hasPipe = false;
+      const p = this.player;
+      const center = room.tileCenter(7, 4);
+      const doorNear = (pos) => Object.keys(room.doors).some((dir) => {
+        const dt = DOOR_TILES[dir];
+        const c = room.tileCenter(dt.col, dt.row);
+        return B.M.dist(pos.x, pos.y, c.x, c.y) < TILE * 1.6;
+      });
+      let pos = null;
+      for (let i = 0; i < 30 && !pos; i++) {
+        const q = room.randomFreePos(this.rng, { awayFrom: { x: p.x, y: p.y, d: 150 } });
+        if (B.M.dist(q.x, q.y, center.x, center.y) > TILE * 1.4 && !doorNear(q)) pos = q;
+      }
+      if (!pos) return; // kein passender Platz (sehr enge Layouts): dann eben kein Rohr
+      room.pickups.push(new B.Pipe(pos.x, pos.y));
+      B.bus.emit('pipeAppear', { game: this, x: pos.x, y: pos.y });
+    }
+
+    /**
+     * Durch ein Rohr springen: einseitig in einen zufaelligen anderen Raum der Etage (nicht Boss, nicht
+     * Geheimraum, nicht der aktuelle; besucht oder nicht). Die Wahl laeuft ueber game.rng.
+     */
+    pipeWarp(pipe) {
+      const cur = this.room && this.room.cell;
+      const cands = [...this.floor.cells.values()].filter((c) => c !== cur && c.type !== 'boss' && c.type !== 'secret');
+      if (!cands.length) return false;
+      const cell = this.rng.pick(cands);
+      B.bus.emit('pipeWarp', { game: this, x: pipe.x, y: pipe.y, to: cell.type });
+      // Wie bei changeRoom: fliegende Schuesse und Effekte des alten Raums verwerfen (Bomben bleiben)
+      this.room.projectiles = this.room.projectiles.filter((pr) => pr instanceof B.Bomb);
+      this.room.effects = [];
+      this.teleport(cell.room);
+      const p = this.player;
+      p.vx = p.vy = p.kbx = p.kby = 0;
+      for (const f of this.followers) { f.x = p.x; f.y = p.y + 30; }
+      this.pipeCooldown = 1.0;
+      B.bus.emit('pipeArrive', { game: this, x: p.x, y: p.y, to: cell.type });
+      return true;
     }
 
     /**
@@ -538,6 +587,7 @@
 
       this.runStats.time += dt;
       if (this.hudGlitch && (this.hudGlitch.t -= dt) <= 0) this.hudGlitch = null;
+      if (this.pipeCooldown > 0) this.pipeCooldown -= dt;
       p.update(dt, this);
 
       // Flow-Field zum Spieler regelmaessig aktualisieren (Pfadfindung der Laeufer)

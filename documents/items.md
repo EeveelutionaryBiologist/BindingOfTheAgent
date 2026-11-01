@@ -122,3 +122,12 @@ happens (at luck 0). Luck raises the share of rare drops.
 | ![README.md](images/pickup_readme.png) | **README.md** | `readme` | Reveals the map of the current floor, except the secret room. On about 30 % of floors one lies in a random normal room from the start | never dropped | — |
 
 All resources (credits, bombs, keys) are capped at 99. The shop sells 3 of the priced pickups above plus one item.
+
+---
+
+## Room objects
+
+| | Name | Where | Effect |
+|---|---|---|---|
+| ![Pipe](images/pipe.png) | **Pipe** | About 10 % of combat rooms leave one behind when cleared (never in front of a door or in the middle of the room) | Walk in and you're flushed one-way into a random other room of the floor: any room except the boss room, the secret room and the one you're in, visited or not. Reusable, with a new destination each time; after a jump, pipes ignore you for 1 s |
+| ![Trapdoor](images/trapdoor.png) | **Trapdoor** (`cd ..`) | Appears in the boss room after the boss dies | Drops you to the next floor |

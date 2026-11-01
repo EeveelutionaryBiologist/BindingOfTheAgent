@@ -957,6 +957,38 @@
     'kkkkkkkkkkk',
   ], { w: '#f4f0e6', b: '#4a86d8', g: '#9a948c' });
 
+  // Rohr ("|") von oben: Stahlflansch mit vier Schrauben, oben ein eingepraegtes "|", dunkle Oeffnung mit
+  // kreisendem Wasserstrudel (2 Frames). Bewusst grau/stahlblau statt gruen (keine Anleihe bei bekannten
+  // Videospiel-Roehren). Die Zeilen werden aus Abstaenden zur Mitte berechnet (exakt runde Form, 16x16).
+  function pipeFrame(alt) {
+    const rows = [];
+    for (let y = 0; y < 16; y++) {
+      let row = '';
+      for (let x = 0; x < 16; x++) {
+        const dx = x - 7.5, dy = y - 7.5, d = Math.hypot(dx, dy);
+        let ch = '.';
+        if (d <= 3.3) {
+          // Strudel: Spiralarme aus Winkel + Abstand; Frame 2 dreht sie weiter
+          const ang = Math.atan2(dy, dx) + d * 0.9 + (alt ? Math.PI / 2 : 0);
+          const arm = Math.cos(ang * 2);
+          ch = arm > 0.55 ? 'w' : arm > 0 ? 'c' : 'd';
+        } else if (d <= 4.4) ch = 'k';
+        else if (d <= 7.0) ch = 's';
+        else if (d <= 7.9) ch = 'k';
+        if (ch === 's' && Math.abs(Math.abs(dx) - 4.5) < 0.6 && Math.abs(Math.abs(dy) - 4.5) < 0.6) ch = 'b'; // Schrauben
+        if (ch === 's' && (x === 7 || x === 8) && (y === 1 || y === 2)) ch = 'j';                         // "|"
+        row += ch;
+      }
+      rows.push(row);
+    }
+    return rows;
+  }
+  B.defineSprite('pipe', {
+    palette: { k: '#16191d', s: '#8a929c', b: '#cfd5dc', j: '#3a4048', d: '#0a0d10', w: '#3fa9d6', c: '#1f5f7a' },
+    scale: 4,
+    frames: [pipeFrame(false), pipeFrame(true)],
+  });
+
   // Truhe (Holz, goldene Beschlaege)
   spr('pickup_chest', [
     '.kkkkkkkkkk.',

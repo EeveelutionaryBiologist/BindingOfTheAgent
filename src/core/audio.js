@@ -123,6 +123,13 @@
       voice({ f: 720, f2: 1200, dur: 0.5, type: 'square', vol: 0.03 });
       noise({ dur: 0.6, vol: 0.08, filter: 'bandpass', f: 1800, f2: 900, q: 2 });
     },
+    // Rohr: Gluckern beim Auftauchen; Absaugen + Plopp beim Hindurchspringen
+    pipeAppear() { arp([52, 59, 64], 0.06, 'triangle', 0.06); noise({ dur: 0.18, vol: 0.05, filter: 'lowpass', f: 900 }); },
+    pipeWarp() {
+      voice({ f: 700, f2: 90, dur: 0.35, type: 'sine', vol: 0.12 });
+      noise({ dur: 0.3, vol: 0.08, filter: 'bandpass', f: 600, f2: 200, q: 3 });
+      voice({ f: 180, f2: 420, dur: 0.12, type: 'square', vol: 0.05, delay: 0.32 });
+    },
     // HUD-Stoerung (Graphics Glitch): kurzes Bitcrush-Gezirpe aus zufaelligen hohen Tonschnipseln + Rauschen
     glitch() {
       for (let i = 0; i < 6; i++) voice({ f: rnd(300, 2400), dur: 0.035, type: 'square', vol: 0.045, delay: i * 0.04 });
@@ -440,7 +447,9 @@
   on('enemyReveal', () => p('denied'));        // Hallucination enttarnt sich ("NOT MONEY")
   on('enemyRevive', () => p('charged'));
   on('hudGlitch', () => p('glitch'));
-  on('bossBeam', () => p('beam'));            // Reviewer-Laser         // Graphics Glitch verfremdet das HUD       // Zombie Process steht wieder auf
+  on('bossBeam', () => p('beam'));            // Reviewer-Laser
+  on('pipeAppear', () => p('pipeAppear'));     // Rohr taucht nach dem Clearing auf
+  on('pipeWarp', () => p('pipeWarp'));         // durch ein Rohr gespuelt         // Graphics Glitch verfremdet das HUD       // Zombie Process steht wieder auf
 
   B.audio = audio;
 })(window.BOTA);

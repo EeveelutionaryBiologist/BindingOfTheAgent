@@ -79,6 +79,8 @@ Live state is under `BOTA.game` (`.player`, `.room`, `.floor`, `.depth`, `.state
   for the last member and emits exactly one boss death;
 - bosses never repeat on consecutive floors (300 simulated runs plus a real floor sequence), and README.md appears on
   about 30 % of floors, only in normal rooms, and reveals every room except the secret room;
+- pipes appear in about 10 % of combat rooms after clearing (never by a door), never lead to the boss room, the
+  secret room or the current room, and can't ping-pong during their cooldown;
 - the door transition, special rooms, pause screen and death screen work.
 
 Screenshots go to `tools/out/` (scratch; don't commit or ship). Setup without admin rights:
@@ -173,7 +175,7 @@ Global keys handled in every state: `M` (mute) and `F2` (debug). Holding `R` for
 - `explode(x, y, radius, damage, source)`: damages enemies and the player (2 halves), breaks rocks (8 % loot), reveals
   hidden doors, flings pickups, shakes the screen, emits `explosion`
 - `shake(intensity, seconds)` · `banner(title, subtitle)` · `freezeEnemies(seconds)` · `rollItem(pool)` ·
-  `nearestFreePos(x, y, room?)` · `nextFloor()` · `teleport(room)` · `glitchHud(seconds)` (scrambles one HUD area,
+  `nearestFreePos(x, y, room?)` · `nextFloor()` · `teleport(room)` · `pipeWarp(pipe)` · `glitchHud(seconds)` (scrambles one HUD area,
   stored in `game.hudGlitch`; a new call restarts the timer instead of stacking)
 
 ### 3.6 Dungeon generation (`world/dungeon.js`)
@@ -198,6 +200,10 @@ Global keys handled in every state: `M` (mute) and `F2` (debug). Holding `R` for
 8. `assignReadme` puts a `readme` pickup (README.md) into one random normal room on 30 % of floors (`room.hasReadme`,
    `floor.readmeRoom`, own stream `':readme'`). Collecting it calls `floor.documentMap()`: every room except the secret
    room becomes `seen`, and `floor.documented` makes the minimap draw connections between unvisited rooms too.
+9. `assignPipes` marks about 10 % of combat rooms `hasPipe` (own stream `':pipe'`). `game.onRoomClear` →
+   `placePipe` drops a `B.Pipe` (in `room.pickups`, not near doors or the centre). Walking onto it calls
+   `game.pipeWarp`, which teleports to a random room other than boss, secret and the current one (via `game.rng`).
+   Pipes only trigger on the step *onto* them, and `game.pipeCooldown` (1 s) blocks all pipes after a jump.
 
 **Boss choice:** each room build still pre-rolls `bossId` with `B.rollBoss` (so the floor RNG is unchanged), but
 `game.enterFloor` then calls `assignFloorBoss`, which replaces it with `B.rollBossVaried(rng, depth, game.bossHistory)`.
@@ -325,7 +331,7 @@ The previous floor's boss is excluded, and bosses already met count `weight / (1
   offscreen canvases, plus a white "flash" variant.
 - **Naming:**
   - `player_{down,up,left,right}` (4 walk frames), `player_hurt`, `player_itemget`, `player_dead`
-  - `tile_{rock(3 frames),block,pit,spikes}`, `hud_*`, `map_{boss,treasure,shop,secret}`
+  - `tile_{rock(3 frames),block,pit,spikes}`, `hud_*`, `map_{boss,treasure,shop,secret}`, `pipe` (2 frames, generated)
   - `item_<id>`, `pickup_<type>`, `pedestal`, `trapdoor`, `bomb`, `familiar_duck`, `orbital_test`
   - `enemy_<id>`, `boss_<id>`
 - **Count:** about 107 sprites. All of them are original pixel art written as ASCII in code.
@@ -339,6 +345,7 @@ Payloads usually include `game, x, y` and often `color`.
 | `enemyHit`, `enemyDeath` (`boss`, `segment`) | enemy | audio, effects |
 | `enemyReveal`, `enemyRevive` | enemy behaviours | audio, effects |
 | `hudGlitch` (`kind`) | game (`glitchHud`) | audio |
+| `pipeAppear`, `pipeWarp`, `pipeArrive` (`to`) | game | audio, effects |
 | `bossSpawn`, `bossIntro`, `bossPhase`, `bossStomp`, `bossBounce`, `bossBeam` | game, boss | audio (boss music), effects |
 | `playerHurt`, `playerDeath` | player, game | audio, effects, HUD |
 | `pickup` (`type`), `itemGet` (`id, def`), `purchase`, `chestOpen` | pickup, player | audio, effects, HUD |
@@ -352,7 +359,7 @@ Rule: audio and effects **only listen**. Game logic never calls them directly, e
 are game state.
 
 ### 3.12 Audio (`core/audio.js`) and effects (`entities/effects.js`)
-- **Audio:** 31 synthesized SFX in total. Every sound has a name; `audio.names()` lists them.
+- **Audio:** 33 synthesized SFX in total. Every sound has a name; `audio.names()` lists them.
   - Bus routing: voices → sfx/music bus → master → compressor.
   - Per-name rate limits (`RATE`) and a 40-voice cap keep it from getting noisy.
   - There is a procedural chiptune loop per floor plus a boss variant. Mute is persisted in storage; there's no
