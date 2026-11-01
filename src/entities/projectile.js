@@ -88,6 +88,17 @@
         else return this.die(game, true);
       } else this.y = ny;
 
+      // Geister-Schuesse (spectral) fliegen durch Objekte hindurch, beschaedigen sie dabei aber einmal pro
+      // Objekt — sonst koennte ein Spieler ohne Bomben hinter Kisten festsitzen (Playtest 2026-11-01)
+      if (this.team === 'player' && this.flags.spectral && game.hitProp) {
+        const c = Math.floor(this.x / B.C.TILE), r = Math.floor(this.y / B.C.TILE);
+        if (room.tileAt(c, r) === B.TILES.PROP) {
+          const key = c + ',' + r;
+          if (!this.propHits) this.propHits = new Set();
+          if (!this.propHits.has(key)) { this.propHits.add(key); game.hitProp(room, this.x, this.y, this.damage); }
+        }
+      }
+
       this.travel += Math.hypot(evx, evy) * dt;
       if (this.travel >= this.range) return this.die(game, false);
 

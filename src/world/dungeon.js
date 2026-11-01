@@ -154,14 +154,21 @@
       }
     }
 
-    /** Sind alle begehbaren Kacheln (Boden, Stacheln) von den Tuer-Vorplaetzen aus erreichbar? */
+    /**
+     * Haengen alle begehbaren Kacheln (Boden, Stacheln) zu EINER Flaeche zusammen, die alle Tuer-Vorplaetze
+     * enthaelt? Die Suche startet bewusst nur an einem Vorplatz: Bis 2026-11-01 startete sie an allen
+     * gleichzeitig — dann bestand auch ein Raum, den eine Kistenreihe in zwei Haelften mit je einer Tuer
+     * teilte (Softlock: auf der Baumkarte kann genau diese Tuer der einzige Weg sein).
+     */
     fullyWalkable(room, fronts) {
       const walk = (c, r) => { const t = room.tileAt(c, r); return t === TT.FLOOR || t === TT.SPIKES; };
       let total = 0;
       for (let r = 1; r < ROWS - 1; r++) for (let c = 1; c < COLS - 1; c++) if (walk(c, r)) total++;
       const seen = new Set();
-      const queue = fronts.filter(([c, r]) => walk(c, r));
-      for (const [c, r] of queue) seen.add(c + ',' + r);
+      const start = fronts.find(([c, r]) => walk(c, r));
+      if (!start) return total === 0;
+      const queue = [start];
+      seen.add(start[0] + ',' + start[1]);
       while (queue.length) {
         const [c, r] = queue.shift();
         for (const [dc, dr] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {

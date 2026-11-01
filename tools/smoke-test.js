@@ -396,6 +396,24 @@ const URL = 'file://' + path.join(ROOT, 'index.html').replace(/\\/g, '/') + '?se
     g.explode(b[0] * 64 + 32, b[1] * 64 + 32, 110, 0, 'the smoke test');
     if (g.room.tileAt(b[0], b[1]) !== T.FLOOR) out.push('Explosion zerstoert das Objekt nicht');
     if (breaks !== 2) out.push('propBreak-Events: ' + breaks + ' statt 2');
+    // Geister-Schuss (spectral): fliegt durch, zerbricht das Objekt trotzdem
+    const rest = [...g.room.props.keys()].map((k) => k.split(',').map(Number));
+    if (rest.length) {
+      const [sc, sr] = rest[0];
+      const tx = sc * 64 + 32, ty = sr * 64 + 32, fromX = sc >= 2 ? tx - 96 : tx + 96;
+      g.spawnProjectile({ x: fromX, y: ty, vx: fromX < tx ? 480 : -480, vy: 0, team: 'player', damage: 99, range: 300, flags: { spectral: true } });
+      await new Promise((r) => setTimeout(r, 400));
+      if (g.room.tileAt(sc, sr) !== T.FLOOR) out.push('Geister-Schuss zerstoert das Objekt nicht');
+    }
+    // Zusammenhangspruefung erkennt eine Kistenreihe, die den Raum in zwei Haelften teilt
+    const FR = { up: [7, 1], down: [7, 7], left: [1, 4], right: [13, 4] };
+    const split = [...g.floor.cells.values()].map((c) => c.room).find((rm) => rm.doors.left && rm.doors.right);
+    if (split) {
+      const saved = [];
+      for (let r = 1; r < 8; r++) { saved.push(split.tileAt(7, r)); split.tiles[r * 15 + 7] = T.PROP; }
+      if (g.floor.fullyWalkable(split, Object.keys(split.doors).map((d) => FR[d]))) out.push('fullyWalkable erkennt einen geteilten Raum nicht');
+      for (let r = 1; r < 8; r++) split.tiles[r * 15 + 7] = saved[r - 1];
+    }
     BOTA.bus.off('propBreak', onBreak);
     return out;
   });

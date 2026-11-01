@@ -210,9 +210,11 @@ Global keys handled in every state: `M` (mute) and `F2` (debug). Holding `R` for
    Pipes only trigger on the step *onto* them, and `game.pipeCooldown` (1 s) blocks all pipes after a jump.
 10. `assignProps` places breakable objects (tile `PROP`, data in `room.props` keyed `"c,r"`) in normal rooms, with kinds,
    chance and max count from the floor theme's `props` (`B.PROP_KINDS` in `layouts.js`). Own stream `':props'`. Never
-   on spawn points, the centre or the 3 × 3 area in front of a door, and `fullyWalkable` must still hold afterwards.
-   Player shots call `game.hitProp` (in `projectile.js`), explosions call `game.breakProp`; enemy shots don't damage
-   them. Breaking drops a random pickup with `B.PROP_LOOT_CHANCE` (10 %). Props are drawn per frame (`drawProps` in
+   on spawn points, the centre or the 3 × 3 area in front of a door, and `fullyWalkable` must still hold afterwards
+   (all walkable tiles form **one** connected area; the search starts from a single door front, because starting from
+   all of them at once let a row of props split a room between two doors, a soft-lock on the tree-shaped map).
+   Player shots call `game.hitProp` (in `projectile.js`), spectral shots too (once per prop while passing through),
+   explosions call `game.breakProp`; enemy shots don't damage them. Breaking drops a random pickup with `B.PROP_LOOT_CHANCE` (10 %). Props are drawn per frame (`drawProps` in
    `renderer.js`), not baked into the background.
 
 **Boss choice:** each room build still pre-rolls `bossId` with `B.rollBoss` (so the floor RNG is unchanged), but

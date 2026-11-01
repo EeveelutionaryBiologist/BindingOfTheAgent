@@ -207,8 +207,8 @@
     B.pixelText(ctx, name, W / 2 - slide, by + 56, { scale: sc, align: 'center', color: theme.accent, shadow: 'rgba(0,0,0,0.8)', outline: '#0a0807', alpha: clamp01((age - 0.1) / 0.3) });
     B.text(ctx, info.sub, W / 2 + slide, by + 124, { size: 19, align: 'center', color: '#d6cbc2', bold: false, alpha: clamp01((age - 0.3) / 0.3) });
 
-    // Fortschritt: ein Punkt pro Etage (die aktuelle leuchtet)
-    const n = Math.max(9, game.depth);
+    // Fortschritt: ein Punkt pro Etage (die aktuelle leuchtet); Anzahl = Laenge der Etagenliste
+    const n = Math.max((B.TEXT.FLOORS && B.TEXT.FLOORS.length) || 10, game.depth);
     const dx = 22, x0 = W / 2 - ((Math.min(n, 18) - 1) * dx) / 2;
     for (let i = 0; i < Math.min(n, 18); i++) {
       const d = i + 1;

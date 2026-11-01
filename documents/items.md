@@ -135,9 +135,11 @@ All resources (credits, bombs, keys) are capped at 99. The shop sells 3 of the p
 ### Breakable objects
 
 Normal rooms often contain 1–5 breakable objects. They block movement and shots like rocks, but your shots wear them
-down (about 2–3 shots at base damage; their HP grows 10 % per floor) and any bomb blast destroys them outright. Enemy
+down (about 2–3 shots at base damage; their HP grows 10 % per floor; spectral shots fly through but still damage
+them) and any bomb blast destroys them outright. Enemy
 shots don't damage them, so they also work as cover. Breaking one has a 10 % chance to drop a random pickup. They
-never block a door or the centre of the room, and you can always walk around them.
+never block a door or the centre of the room, and they never cut a room in two: you can always walk from every door
+to every other door without breaking anything.
 
 | | Name | `id` | HP (floor 1) | Floors |
 |---|---|---|---|---|
