@@ -82,6 +82,8 @@ Live state is under `BOTA.game` (`.player`, `.room`, `.floor`, `.depth`, `.state
 - pipes appear in about 10 % of combat rooms after clearing (never by a door), never lead to the boss room, the
   secret room or the current room, and can't ping-pong during their cooldown;
 - floor names and themes have the same length, floor 3 is Forgotten Branches, and its maps have ≥ 7 dead ends;
+- breakable objects use the floor's kinds, stay off spawn points, door fronts and the centre, never cut a room in two,
+  and break from player shots and explosions but not from enemy shots;
 - the door transition, special rooms, pause screen and death screen work.
 
 Screenshots go to `tools/out/` (scratch; don't commit or ship). Setup without admin rights:
@@ -133,7 +135,7 @@ depend on load order.
 
 | Global | File | What |
 |---|---|---|
-| `C`, `DIRS`, `OPPOSITE`, `TILES` | namespace | constants, directions, tile enum (FLOOR, WALL, ROCK, BLOCK, PIT, SPIKES, DOOR) |
+| `C`, `DIRS`, `OPPOSITE`, `TILES` | namespace | constants, directions, tile enum (FLOOR, WALL, ROCK, BLOCK, PIT, SPIKES, DOOR, PROP) |
 | `bus` | namespace | event bus `on/off/emit`; listener exceptions are caught and logged |
 | `storage`, `params` | namespace | validated localStorage (`muted, bestFloor, runs, deaths`); validated URL params |
 | `ITEMS, ENEMIES, BOSSES, BEHAVIORS, BOSS_BEHAVIORS, PICKUP_TYPES, LAYOUTS, TEXT` | namespace (filled by data/entities) | content registries |
@@ -206,6 +208,12 @@ Global keys handled in every state: `M` (mute) and `F2` (debug). Holding `R` for
    `placePipe` drops a `B.Pipe` (in `room.pickups`, not near doors or the centre). Walking onto it calls
    `game.pipeWarp`, which teleports to a random room other than boss, secret and the current one (via `game.rng`).
    Pipes only trigger on the step *onto* them, and `game.pipeCooldown` (1 s) blocks all pipes after a jump.
+10. `assignProps` places breakable objects (tile `PROP`, data in `room.props` keyed `"c,r"`) in normal rooms, with kinds,
+   chance and max count from the floor theme's `props` (`B.PROP_KINDS` in `layouts.js`). Own stream `':props'`. Never
+   on spawn points, the centre or the 3 × 3 area in front of a door, and `fullyWalkable` must still hold afterwards.
+   Player shots call `game.hitProp` (in `projectile.js`), explosions call `game.breakProp`; enemy shots don't damage
+   them. Breaking drops a random pickup with `B.PROP_LOOT_CHANCE` (10 %). Props are drawn per frame (`drawProps` in
+   `renderer.js`), not baked into the background.
 
 **Boss choice:** each room build still pre-rolls `bossId` with `B.rollBoss` (so the floor RNG is unchanged), but
 `game.enterFloor` then calls `assignFloorBoss`, which replaces it with `B.rollBossVaried(rng, depth, game.bossHistory)`.
@@ -226,7 +234,7 @@ The previous floor's boss is excluded, and bosses already met count `weight / (1
   |---|---|---|---|---|
   | WALL | solid | solid | solid | solid |
   | DOOR | solid unless `isPlayer` and the door is open | same | solid | solid |
-  | ROCK / BLOCK | solid | — | solid | — |
+  | ROCK / BLOCK / PROP | solid | — | solid | — |
   | PIT | solid | — | — | — |
   | SPIKES / FLOOR | — | — | — | — |
 
@@ -333,7 +341,8 @@ The previous floor's boss is excluded, and bosses already met count `weight / (1
   offscreen canvases, plus a white "flash" variant.
 - **Naming:**
   - `player_{down,up,left,right}` (4 walk frames), `player_hurt`, `player_itemget`, `player_dead`
-  - `tile_{rock(3 frames),block,pit,spikes}`, `hud_*`, `map_{boss,treasure,shop,secret}`, `pipe` (2 frames, generated)
+  - `tile_{rock(3 frames),block,pit,spikes}`, `hud_*`, `map_{boss,treasure,shop,secret}`, `pipe` (2 frames, generated),
+    `prop_{crate,bush,package,carton}` (frame 1 = damaged)
   - `item_<id>`, `pickup_<type>`, `pedestal`, `trapdoor`, `bomb`, `familiar_duck`, `orbital_test`
   - `enemy_<id>`, `boss_<id>`
 - **Count:** about 107 sprites. All of them are original pixel art written as ASCII in code.
@@ -348,6 +357,7 @@ Payloads usually include `game, x, y` and often `color`.
 | `enemyReveal`, `enemyRevive` | enemy behaviours | audio, effects |
 | `hudGlitch` (`kind`) | game (`glitchHud`) | audio |
 | `pipeAppear`, `pipeWarp`, `pipeArrive` (`to`) | game | audio, effects |
+| `propHit`, `propBreak` (`kind, color`) | game | audio, effects |
 | `bossSpawn`, `bossIntro`, `bossPhase`, `bossStomp`, `bossBounce`, `bossBeam` | game, boss | audio (boss music), effects |
 | `playerHurt`, `playerDeath` | player, game | audio, effects, HUD |
 | `pickup` (`type`), `itemGet` (`id, def`), `purchase`, `chestOpen` | pickup, player | audio, effects, HUD |
@@ -361,7 +371,7 @@ Rule: audio and effects **only listen**. Game logic never calls them directly, e
 are game state.
 
 ### 3.12 Audio (`core/audio.js`) and effects (`entities/effects.js`)
-- **Audio:** 33 synthesized SFX in total. Every sound has a name; `audio.names()` lists them.
+- **Audio:** 35 synthesized SFX in total. Every sound has a name; `audio.names()` lists them.
   - Bus routing: voices → sfx/music bus → master → compressor.
   - Per-name rate limits (`RATE`) and a 40-voice cap keep it from getting noisy.
   - There is a procedural chiptune loop per floor plus a boss variant. Mute is persisted in storage; there's no
@@ -538,8 +548,6 @@ work again, the same file-ownership split works well.
 - Better item-pool exhaustion handling (e.g. hand out `blockchain` forever).
 - A human balance pass on boss HP and spawn budgets.
 - Ideas from the 2026-11-01 brainstorm, in planned order:
-  - Destructible objects per floor (dusty crates on 1–2, bushes on Forgotten Branches, packages and overflowing
-    cartons on Dependency Hell and Production, wilder mixes deeper down).
   - Floor-specific enemies for Forgotten Branches: Detached HEAD (head shoots, body walks), Stale Branch (speeds up
     the longer it lives), Cherry-Pick (pair; hit one, the other gets angry), Orphan Commit (flees, drops credits).
   - Stash rooms: small bonus rooms behind a bush wall that has to be shot open.

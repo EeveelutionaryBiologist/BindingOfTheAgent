@@ -414,7 +414,7 @@ All milestones done. What shipped, compared with this doc:
 - **Layouts:** 30 (27 combat, the rest for special rooms), all validated.
 - **Presentation:**
   - 10 floor themes and an animated avatar with 4 directions plus hurt and item poses.
-  - 33 synthesized SFX and a procedural chiptune loop per floor, with a boss variant.
+  - 35 synthesized SFX and a procedural chiptune loop per floor, with a boss variant.
   - Pixel-font HUD and screens, including the "post-mortem" death report.
 - **QA:** headless-browser tests found zero console errors and held 60 fps with all items, 30 enemies and about 150 bullets.
   They also covered 300+ fuzzed floors, every enemy and boss, and multi-floor runs.

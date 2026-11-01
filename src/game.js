@@ -302,6 +302,42 @@
     }
 
     /**
+     * Zerstoerbares Objekt an Weltposition (x, y) treffen (Spielerschuesse, siehe projectile.js).
+     * Gibt true zurueck, wenn dort ein Objekt war. hitAt ist nur fuer die Wackel-Optik im Renderer.
+     */
+    hitProp(room, x, y, dmg) {
+      const c = Math.floor(x / TILE), r = Math.floor(y / TILE);
+      if (room.tileAt(c, r) !== T.PROP) return false;
+      const pr = room.props.get(c + ',' + r);
+      if (!pr) { this.breakProp(room, c, r); return true; } // Objekt ohne Daten (sollte nicht vorkommen)
+      pr.hp -= Math.max(0.5, dmg || 1);
+      pr.hitAt = performance.now() / 1000;
+      const tc = room.tileCenter(c, r);
+      B.bus.emit('propHit', { game: this, x: tc.x, y: tc.y, kind: pr.kind, color: this.propColor(pr.kind) });
+      if (pr.hp <= 0) this.breakProp(room, c, r);
+      return true;
+    }
+
+    /** Objekt zerstoeren: Kachel wird Boden, Truemmer-Event, mit kleiner Chance ein Zufalls-Pickup */
+    breakProp(room, c, r) {
+      if (room.tileAt(c, r) !== T.PROP) return;
+      const key = c + ',' + r;
+      const pr = room.props.get(key);
+      room.props.delete(key);
+      room.setTile(c, r, T.FLOOR);
+      const tc = room.tileCenter(c, r);
+      const kind = pr ? pr.kind : 'crate';
+      B.bus.emit('propBreak', { game: this, x: tc.x, y: tc.y, kind, color: this.propColor(kind) });
+      if (this.rng.chance(B.PROP_LOOT_CHANCE || 0)) {
+        this.spawnPickup(B.rollRandomPickup(this.rng, this.player.stats.luck), tc.x, tc.y, {}, room);
+      }
+    }
+
+    propColor(kind) {
+      return (B.PROP_KINDS && B.PROP_KINDS[kind] && B.PROP_KINDS[kind].color) || '#a07a4a';
+    }
+
+    /**
      * Rohr ablegen, falls der Raum eins hinterlaesst (Floor.assignPipes). Position: freie Bodenkachel,
      * nicht in der Raummitte (dort landen Drops), nicht direkt vor einer Tuer (sonst wuerde man beim
      * Hereinkommen hineinfallen) und nicht unter dem Spieler.
@@ -449,7 +485,14 @@
       // Felsen sprengen
       for (let r = 1; r < ROWS - 1; r++) {
         for (let c = 1; c < COLS - 1; c++) {
-          if (room.tileAt(c, r) !== T.ROCK) continue;
+          const tile = room.tileAt(c, r);
+          if (tile === T.PROP) {
+            // Zerstoerbare Objekte gehen bei jeder Explosion in Reichweite sofort kaputt
+            const pc = room.tileCenter(c, r);
+            if (B.M.dist(x, y, pc.x, pc.y) < radius + TILE * 0.25) this.breakProp(room, c, r);
+            continue;
+          }
+          if (tile !== T.ROCK) continue;
           const tc = room.tileCenter(c, r);
           if (B.M.dist(x, y, tc.x, tc.y) < radius + TILE * 0.25) {
             room.setTile(c, r, T.FLOOR);

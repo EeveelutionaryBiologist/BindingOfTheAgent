@@ -13,6 +13,7 @@
  *  8. Ab Tiefe 2 bekommt ein Kampfraum ein garantiertes Approval beim Clearing (assignKeyRoom).
  *  9. Manche Kampfraeume bekommen lose Pickups, die schon beim Betreten herumliegen (assignLooseLoot).
  * 10. Auf ~30 % der Etagen liegt in einem normalen Raum ein README.md, das die Karte aufdeckt (assignReadme).
+ * 12. Zerstoerbare Objekte (Kisten, Buesche, ...) je nach Etagen-Thema in normalen Raeumen (assignProps).
  * 11. ~10 % der Kampfraeume hinterlassen beim Clearing ein Rohr (Pipe), das in einen Zufallsraum teleportiert
  *     (assignPipes; Objekt in pickup.js, Sprung in game.pipeWarp).
  */
@@ -20,6 +21,10 @@
 
 (function (B) {
   const { MAP_W, MAP_H } = B.C;
+  const { COLS, ROWS, TILE } = B.C;
+  const TT = B.TILES;
+  // Kachel direkt vor jeder Tuer (Innenseite) — dort duerfen keine Objekte stehen
+  const DOOR_FRONT = { up: [7, 1], down: [7, ROWS - 2], left: [1, 4], right: [COLS - 2, 4] };
   const README_CHANCE = 0.3; // Anteil der Etagen mit einem README.md (Playtest-Wunsch 2026-10-31)
   const PIPE_CHANCE = 0.1;   // Anteil der Kampfraeume, die beim Clearing ein Rohr hinterlassen (2026-11-01)
   const DIRS = B.DIRS;
@@ -102,6 +107,71 @@
       this.assignLooseLoot(ordered);
       this.assignReadme(ordered);
       this.assignPipes(ordered);
+      this.assignProps(ordered);
+    }
+
+    /**
+     * Zerstoerbare Objekte (Kacheltyp PROP). Pro normalem Raum mit Chance theme.props.chance 1..max Stueck,
+     * Art zufaellig aus theme.props.kinds. Eigener RNG-Strom (Karten, Layouts, Gegner bleiben gleich).
+     * Regeln: nur auf freien Bodenkacheln, nicht auf Gegner-Spawnpunkten, nicht in der Raummitte und nicht
+     * im 3x3-Bereich vor einer Tuer; nach jedem Objekt muss jede begehbare Kachel erreichbar bleiben
+     * (sonst wird es zurueckgenommen) — man soll nie zum Freischiessen gezwungen sein.
+     */
+    assignProps(ordered) {
+      const theme = B.themeFor ? B.themeFor(this.depth) : null;
+      const cfg = theme && theme.props;
+      const kinds = cfg ? cfg.kinds.filter((k) => B.PROP_KINDS && B.PROP_KINDS[k]) : [];
+      if (!kinds.length) return;
+      const rng = new B.RNG(B.hashString(String(this.seed) + ':props'));
+      const hpScale = 1 + 0.1 * (this.depth - 1);
+      for (const cell of ordered) {
+        const has = rng.chance(cfg.chance || 0);
+        const count = rng.int(1, Math.max(1, cfg.max || 3));
+        if (!has || cell.type !== 'normal') continue;
+        const room = cell.room;
+        const spawnTiles = new Set(room.spawnPoints.map((p) => Math.floor(p.x / TILE) + ',' + Math.floor(p.y / TILE)));
+        const fronts = Object.keys(room.doors).map((dir) => DOOR_FRONT[dir]);
+        const cands = [];
+        for (let r = 1; r < ROWS - 1; r++) {
+          for (let c = 1; c < COLS - 1; c++) {
+            if (room.tileAt(c, r) !== TT.FLOOR || spawnTiles.has(c + ',' + r)) continue;
+            if (c === 7 && r === 4) continue;
+            if (fronts.some(([fc, fr]) => Math.abs(fc - c) <= 1 && Math.abs(fr - r) <= 1)) continue;
+            cands.push([c, r]);
+          }
+        }
+        rng.shuffle(cands);
+        let placed = 0;
+        for (const [c, r] of cands) {
+          if (placed >= count) break;
+          room.setTile(c, r, TT.PROP);
+          if (!this.fullyWalkable(room, fronts)) { room.setTile(c, r, TT.FLOOR); continue; }
+          const kind = rng.pick(kinds);
+          const hp = Math.round(B.PROP_KINDS[kind].hp * hpScale * 10) / 10;
+          room.props.set(c + ',' + r, { kind, hp, max: hp, hitAt: -1 });
+          placed++;
+        }
+      }
+    }
+
+    /** Sind alle begehbaren Kacheln (Boden, Stacheln) von den Tuer-Vorplaetzen aus erreichbar? */
+    fullyWalkable(room, fronts) {
+      const walk = (c, r) => { const t = room.tileAt(c, r); return t === TT.FLOOR || t === TT.SPIKES; };
+      let total = 0;
+      for (let r = 1; r < ROWS - 1; r++) for (let c = 1; c < COLS - 1; c++) if (walk(c, r)) total++;
+      const seen = new Set();
+      const queue = fronts.filter(([c, r]) => walk(c, r));
+      for (const [c, r] of queue) seen.add(c + ',' + r);
+      while (queue.length) {
+        const [c, r] = queue.shift();
+        for (const [dc, dr] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+          const nc = c + dc, nr = r + dr, k = nc + ',' + nr;
+          if (seen.has(k) || !walk(nc, nr)) continue;
+          seen.add(k);
+          queue.push([nc, nr]);
+        }
+      }
+      return seen.size === total;
     }
 
     /**

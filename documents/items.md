@@ -131,3 +131,20 @@ All resources (credits, bombs, keys) are capped at 99. The shop sells 3 of the p
 |---|---|---|---|
 | ![Pipe](images/pipe.png) | **Pipe** | About 10 % of combat rooms leave one behind when cleared (never in front of a door or in the middle of the room) | Walk in and you're flushed one-way into a random other room of the floor: any room except the boss room, the secret room and the one you're in, visited or not. Reusable, with a new destination each time; after a jump, pipes ignore you for 1 s |
 | ![Trapdoor](images/trapdoor.png) | **Trapdoor** (`cd ..`) | Appears in the boss room after the boss dies | Drops you to the next floor |
+
+### Breakable objects
+
+Normal rooms often contain 1–5 breakable objects. They block movement and shots like rocks, but your shots wear them
+down (about 2–3 shots at base damage; their HP grows 10 % per floor) and any bomb blast destroys them outright. Enemy
+shots don't damage them, so they also work as cover. Breaking one has a 10 % chance to drop a random pickup. They
+never block a door or the centre of the room, and you can always walk around them.
+
+| | Name | `id` | HP (floor 1) | Floors |
+|---|---|---|---|---|
+| ![Dusty crate](images/prop_crate.png) | **Dusty crate** | `crate` | 8 | 1–2 (Backlog, Legacy Codebase), mixed in on 6, 8, 9, 10 |
+| ![Bush](images/prop_bush.png) | **Bush** | `bush` | 6 | 3 (Forgotten Branches), mixed in on 7, 8, 10 |
+| ![Package](images/prop_package.png) | **Package** | `package` | 8 | 4–5 (Dependency Hell, Production), mixed in on 7–10 |
+| ![Overflowing carton](images/prop_carton.png) | **Overflowing carton** | `carton` | 7 | 4–5, mixed in on 6, 8, 10 |
+
+From floor 6 on, the floors mix them more and more: The Training Data has cartons and crates, The Latent Space bushes
+and packages, and Undefined Behavior and The Context Limit all four.

@@ -673,6 +673,7 @@
   function drawObstacle(g, room, c, r, t, theme) {
     const x = c * TILE, y = r * TILE, cx = x + TILE / 2, cy = y + TILE / 2;
     if (t === T.PIT) { drawPit(g, room, c, r); return; }
+    if (t === T.PROP) return; // zerstoerbare Objekte werden pro Frame gezeichnet (drawProps: Wackeln, Risse)
     const spriteName = { [T.ROCK]: 'tile_rock', [T.BLOCK]: 'tile_block', [T.SPIKES]: 'tile_spikes' }[t];
     if (spriteName && B.hasSprite(spriteName)) {
       // Variante deterministisch pro Kachel und Raum
@@ -1082,6 +1083,8 @@
     const k = updateDoorAnim(room);
     for (const dir of Object.keys(room.doors)) drawDoor(ctx, room, dir, room.doors[dir], theme, k);
 
+    drawProps(ctx, room);
+
     const list = [];
     for (const p of room.pickups) list.push(p);
     for (const e of room.enemies) list.push(e);
@@ -1097,6 +1100,32 @@
     for (const p of room.projectiles) p.draw(ctx, game);
     for (const fx of room.effects) fx.draw(ctx, game);
     if (theme.ambient === 'fireflies') drawFireflies(ctx, room);
+  }
+
+  /**
+   * Zerstoerbare Objekte (Kacheltyp PROP): Schatten, Sprite 'prop_<art>' (Frame 1 = beschaedigt ab 50 % HP),
+   * kurzes Wackeln und Aufblitzen nach einem Treffer (prop.hitAt, nur Optik).
+   */
+  function drawProps(ctx, room) {
+    if (!room.props || !room.props.size) return;
+    const now = performance.now() / 1000;
+    for (const [key, pr] of room.props) {
+      const i = key.indexOf(',');
+      const c = +key.slice(0, i), r = +key.slice(i + 1);
+      if (room.tileAt(c, r) !== T.PROP) continue;
+      const cx = c * TILE + TILE / 2, cy = r * TILE + TILE / 2;
+      const since = now - (pr.hitAt || -1);
+      const dx = since < 0.15 ? Math.sin(since * 90) * 3 * (1 - since / 0.15) : 0;
+      ctx.fillStyle = 'rgba(0,0,0,0.28)';
+      ctx.beginPath(); ctx.ellipse(cx, cy + 24, 26, 7, 0, 0, Math.PI * 2); ctx.fill();
+      const name = 'prop_' + pr.kind;
+      if (B.hasSprite(name)) {
+        B.drawSprite(ctx, name, cx + dx, cy, { frame: pr.hp < pr.max * 0.5 ? 1 : 0, flash: since < 0.06 });
+      } else {
+        ctx.fillStyle = '#8a6a44';
+        ctx.fillRect(cx - 24 + dx, cy - 24, 48, 48);
+      }
+    }
   }
 
   /**

@@ -388,6 +388,17 @@
     FX.burst(e.game, e.x, e.y, col, 3, 160, { vary: true, lifeMin: 0.15, lifeMax: 0.3, sizeMin: 3, sizeMax: 6 });
   });
 
+  // Zerstoerbare Objekte: kleine Splitter bei Treffern, Truemmer + Staub beim Zerbrechen
+  on('propHit', (e) => {
+    FX.burst(e.game, e.x, e.y - 8, e.color || '#a07a4a', 3, 140, { vary: true, lifeMin: 0.15, lifeMax: 0.3, sizeMin: 3, sizeMax: 5 });
+  });
+  on('propBreak', (e) => {
+    const col = e.color || '#a07a4a';
+    FX.debris(e.game, e.x, e.y, 9, [col, shade(col, -0.3), shade(col, 0.2)], 6);
+    FX.burst(e.game, e.x, e.y, col, 14, 240, { vary: true, lifeMin: 0.25, lifeMax: 0.55, drag: 5 });
+    FX.smoke(e.game, e.x, e.y, 3, 14, shade(col, -0.4));
+  });
+
   // Rohr-Sprung: Wasserspritzer am Ankunftsort (das Rohr liegt im alten Raum, daher nur am Ziel sichtbar)
   on('pipeArrive', (e) => {
     FX.ring(e.game, e.x, e.y, 70, '#3fa9d6', 0.4, 6);

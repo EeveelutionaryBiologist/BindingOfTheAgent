@@ -49,6 +49,7 @@ const SAFE_NAME = /^[a-z0-9_]{1,64}$/; // Sprite-Namen sind snake_case; alles an
     for (const def of Object.values(B.BOSSES)) if (def.sprite) names.add(def.sprite);
     for (const def of Object.values(B.PICKUP_TYPES)) if (def.sprite) names.add(def.sprite);
     for (const extra of ['pipe', 'trapdoor']) names.add(extra); // Raum-Objekte (Abschnitt "Room objects" in items.md)
+    for (const id of Object.keys(B.PROP_KINDS || {})) names.add('prop_' + id); // zerstoerbare Objekte
     const out = [];
     for (const name of names) {
       if (!B.hasSprite(name)) continue; // fehlende Sprites meldet der Rauchtest, hier nur ueberspringen

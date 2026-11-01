@@ -15,6 +15,8 @@
  *   - Etagen-Bosse: nie zweimal hintereinander derselbe (300 simulierte Runs + echte Etagenfolge)
  *   - README.md: ~30 % der Etagen, nur in normalen Raeumen, deckt die Karte auf, aber nicht den Geheimraum
  *   - Etagen: FLOORS und FLOOR_THEMES gleich lang; Etage 3 = Forgotten Branches mit verzweigteren Karten
+ *   - Zerstoerbare Objekte: richtige Arten je Etage, erlaubte Plaetze, Raeume bleiben begehbar; Spielerschuss und
+ *     Explosion zerbrechen sie, Gegnerschuss nicht
  *   - Rohre: ~10 % der Kampfraeume, erscheinen nach dem Clearing (nicht vor Tueren), Ziel nie Boss/Geheim/selbst,
  *     Sperrzeit verhindert Ping-Pong
  *   - Spezialraeume, Pause- und Todesbildschirm rendern
@@ -122,6 +124,26 @@ const URL = 'file://' + path.join(ROOT, 'index.html').replace(/\\/g, '/') + '?se
       const readmes = [...f.cells.values()].filter((c) => c.room.hasReadme);
       if (readmes.length > 1 || readmes.some((c) => c.type !== 'normal')) out.push('fuzz' + i + ': README in ' + readmes.map((c) => c.type));
       if (readmes.length) readmeFloors++;
+      // Zerstoerbare Objekte: nur normale Raeume, nur Arten des Themas, nie auf Spawnpunkten/vor Tueren/Mitte,
+      // jede begehbare Kachel bleibt erreichbar, props-Map und PROP-Kacheln stimmen ueberein
+      const kinds = BOTA.themeFor(f.depth).props.kinds;
+      const FRONT = { up: [7, 1], down: [7, 7], left: [1, 4], right: [13, 4] };
+      for (const c of f.cells.values()) {
+        const rm = c.room;
+        let tiles = 0;
+        for (let r = 1; r < 8; r++) for (let cc = 1; cc < 14; cc++) if (rm.tileAt(cc, r) === BOTA.TILES.PROP) tiles++;
+        if (tiles !== rm.props.size) out.push('fuzz' + i + ': PROP-Kacheln ' + tiles + ' vs props ' + rm.props.size);
+        if (!rm.props.size) continue;
+        if (c.type !== 'normal') out.push('fuzz' + i + ': Objekte in ' + c.type);
+        const fronts = Object.keys(rm.doors).map((d) => FRONT[d]);
+        const spawns = new Set(rm.spawnPoints.map((p) => Math.floor(p.x / 64) + ',' + Math.floor(p.y / 64)));
+        for (const [key, pr] of rm.props) {
+          const [pc, pr2] = key.split(',').map(Number);
+          if (!kinds.includes(pr.kind)) out.push('fuzz' + i + ': Objektart ' + pr.kind + ' auf Etage ' + f.depth);
+          if (spawns.has(key) || (pc === 7 && pr2 === 4) || fronts.some(([fc, fr]) => Math.abs(fc - pc) <= 1 && Math.abs(fr - pr2) <= 1)) out.push('fuzz' + i + ': Objekt an verbotener Stelle ' + key);
+        }
+        if (!f.fullyWalkable(rm, fronts)) out.push('fuzz' + i + ': Objekte sperren einen Raumteil ab');
+      }
       // Rohre nur in Kampfraeumen
       for (const c of f.cells.values()) {
         if (!c.room.hasPipe) continue;
@@ -336,6 +358,60 @@ const URL = 'file://' + path.join(ROOT, 'index.html').replace(/\\/g, '/') + '?se
   });
   problems.push(...pipeProblems);
 
+  // --- Zerstoerbare Objekte: Spielerschuss zerbricht, Gegnerschuss nicht, Explosion zerbricht ---
+  const propProblems = await page.evaluate(async () => {
+    const out = [];
+    const g = BOTA.game, T = BOTA.TILES;
+    BOTA.debug.god(true);
+    let cell = null;
+    for (let d = 1; d <= 5 && !cell; d++) {
+      g.enterFloor(d); g.setState('play');
+      cell = [...g.floor.cells.values()].find((c) => c.room.props.size >= 2 && c.type === 'normal') || null;
+    }
+    if (!cell) return ['Kein Raum mit mindestens 2 Objekten auf Etage 1–5'];
+    cell.room.populated = true; cell.room.cleared = true;
+    g.teleport(cell.room);
+    const keys = [...g.room.props.keys()].map((k) => k.split(',').map(Number));
+    let breaks = 0;
+    const onBreak = () => breaks++;
+    BOTA.bus.on('propBreak', onBreak);
+    const shootAt = (team, c, r) => {
+      const tx = c * 64 + 32, ty = r * 64 + 32;
+      // Schuss von 1.5 Kacheln links (oder rechts) waagerecht auf das Objekt
+      const fromX = c >= 2 ? tx - 96 : tx + 96;
+      g.spawnProjectile({ x: fromX, y: ty, vx: fromX < tx ? 480 : -480, vy: 0, team, damage: 99, range: 300 });
+    };
+    const [a, b] = keys;
+    shootAt('enemy', a[0], a[1]);
+    await new Promise((r) => setTimeout(r, 400));
+    if (g.room.tileAt(a[0], a[1]) !== T.PROP) out.push('Gegnerschuss zerstoert ein Objekt');
+    shootAt('player', a[0], a[1]);
+    await new Promise((r) => setTimeout(r, 400));
+    if (g.room.tileAt(a[0], a[1]) !== T.FLOOR || g.room.props.has(a.join(','))) out.push('Spielerschuss zerstoert das Objekt nicht');
+    // Schwacher Schaden: mehrere Treffer noetig
+    const pb = g.room.props.get(b.join(','));
+    g.hitProp(g.room, b[0] * 64 + 32, b[1] * 64 + 32, 1);
+    if (g.room.tileAt(b[0], b[1]) !== T.PROP) out.push('Objekt zerbricht schon beim ersten schwachen Treffer');
+    if (!(pb.hp < pb.max)) out.push('Treffer zieht keine Objekt-HP ab');
+    g.explode(b[0] * 64 + 32, b[1] * 64 + 32, 110, 0, 'the smoke test');
+    if (g.room.tileAt(b[0], b[1]) !== T.FLOOR) out.push('Explosion zerstoert das Objekt nicht');
+    if (breaks !== 2) out.push('propBreak-Events: ' + breaks + ' statt 2');
+    BOTA.bus.off('propBreak', onBreak);
+    return out;
+  });
+  problems.push(...propProblems);
+  for (const d of [1, 3, 4, 8]) {
+    await page.evaluate((d) => {
+      const g = BOTA.game; g.enterFloor(d); g.setState('play');
+      const c = [...g.floor.cells.values()].filter((x) => x.room.props.size).sort((x, y) => y.room.props.size - x.room.props.size)[0];
+      if (!c) return;
+      c.room.populated = true; c.room.cleared = true;
+      g.teleport(c.room); g.bannerState = null;
+    }, d);
+    await page.waitForTimeout(300);
+    await shot('13-props-floor' + d);
+  }
+
   // --- Graphics Glitch: Kontakt -> HUD-Stoerung; jeder Stoerungsbereich rendert; Spruenge landen auf Boden ---
   const glitchProblems = await page.evaluate(() => {
     const out = [];
@@ -441,14 +517,17 @@ const URL = 'file://' + path.join(ROOT, 'index.html').replace(/\\/g, '/') + '?se
     if (S.length !== 4) out.push('Swarm: ' + S.length + ' statt 4 Mitglieder');
     if (!S.every((m) => m.bossGroup === S[0].bossGroup && m.bossGroup.length === 4)) out.push('Swarm: kein gemeinsamer Balken');
     const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+    // Pollen statt fester Wartezeit: Items wie Garbage Collector frieren Gegner kurz ein (alle 12 Kills),
+    // dann pausiert auch der Geist-Countdown — eine feste Wartezeit war deshalb gelegentlich zu kurz.
+    const waitFor = async (cond, ms) => { for (let t = 0; t < ms && !cond(); t += 50) await wait(50); return cond(); };
     S[1].hp = S[1].maxHp * 0.5;
     S[0].hurt(99999, g, null);
     if (S[0].dead || S[0].state.mode !== 'dying') out.push('Swarm: kein Geist-Zustand vor dem Tod');
-    await wait(1400);
+    await waitFor(() => S[0].dead, 4000);
     if (!S[0].dead) out.push('Swarm: Geist stirbt nicht');
     if (Math.abs(S[1].hp - S[1].maxHp * 0.6) > 1) out.push('Swarm: Heilung ' + S[1].hp + ' statt ' + S[1].maxHp * 0.6);
     S[1].hurt(99999, g, null); S[2].hurt(99999, g, null);
-    await wait(1400);
+    await waitFor(() => S[1].dead && S[2].dead && S[3].state.group.solo && S[3].state.mode !== 'formation', 4000);
     if (!(S[3].state.group.solo && /^(soloIdle|dashTell|dash|spiral)$/.test(S[3].state.mode))) out.push('Swarm: letztes Mitglied nicht im Solo-Modus (' + S[3].state.mode + ')');
     S[3].hurt(99999, g, null);
     await wait(100);

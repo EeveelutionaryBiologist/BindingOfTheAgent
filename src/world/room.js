@@ -46,6 +46,7 @@
       this.looseLoot = [];       // Pickup-Typen, die beim ersten Betreten schon herumliegen (siehe dungeon.js)
       this.hasReadme = false;    // hier liegt das README.md der Etage (siehe dungeon.js: assignReadme)
       this.hasPipe = false;      // hinterlaesst beim Clearing ein Rohr (siehe dungeon.js: assignPipes)
+      this.props = new Map();    // "c,r" -> { kind, hp, max, hitAt } fuer PROP-Kacheln (dungeon.js: assignProps)
 
       // Render-Cache (Hintergrund); renderer.js setzt/liest das
       this.bgDirty = true;
@@ -154,6 +155,7 @@
         }
         case T.ROCK:
         case T.BLOCK:
+        case T.PROP:
           return mode === 'walk' || mode === 'shot';
         case T.PIT:
           return mode === 'walk';

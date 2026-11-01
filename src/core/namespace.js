@@ -54,6 +54,7 @@ window.BOTA = window.BOTA || {};
     PIT: 4,     // blockiert Laeufer, nicht Flieger
     SPIKES: 5,  // verletzt den Spieler
     DOOR: 6,    // Tuerkachel in der Wand (Zustand haengt an room.doors)
+    PROP: 7,    // zerstoerbares Objekt (Kiste, Busch, ...): wie ROCK, aber Spielerschuesse machen es kaputt
   };
 
   // ---------------------------------------------------------------------------

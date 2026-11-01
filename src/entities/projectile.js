@@ -73,13 +73,17 @@
 
       // Bewegung mit Kachelkollision (Mittelpunkt-Test, achsenweise fuer Abprallen)
       const mode = this.flags.spectral ? 'spectral' : 'shot';
+      // Spielerschuesse beschaedigen zerstoerbare Objekte (PROP), Gegnerschuesse prallen nur daran ab
+      const hitProp = (hx, hy) => { if (this.team === 'player' && game.hitProp) game.hitProp(room, hx, hy, this.damage); };
       const nx = this.x + evx * dt;
       if (room.isSolidAt(nx, this.y, mode, false)) {
+        hitProp(nx, this.y);
         if (this.flags.bounce && this.bounces < 3) { this.vx = -this.vx; this.bounces++; }
         else return this.die(game, true);
       } else this.x = nx;
       const ny = this.y + evy * dt;
       if (room.isSolidAt(this.x, ny, mode, false)) {
+        hitProp(this.x, ny);
         if (this.flags.bounce && this.bounces < 3) { this.vy = -this.vy; this.bounces++; }
         else return this.die(game, true);
       } else this.y = ny;

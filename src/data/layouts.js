@@ -402,4 +402,19 @@
     }
     return { ok: true };
   };
+
+  /**
+   * Zerstoerbare Objekte (Kacheltyp PROP). Welche Arten auf welcher Etage vorkommen, steht im Etagen-Thema
+   * (palette.js: props). Platziert werden sie in Floor.assignProps, kaputt gehen sie in game.hitProp /
+   * game.breakProp (Spielerschuesse, Explosionen). hp wird mit der Tiefe leicht skaliert (+10 % pro Etage).
+   *   name   Anzeigename (Doku)   hp   Treffer-Punkte (Spielerschaden 3.5 -> ~2–3 Schuesse)
+   *   color  Truemmer-/Partikelfarbe   sprite = 'prop_<id>' (sprites-core.js)
+   */
+  B.PROP_KINDS = {
+    crate:   { name: 'Dusty crate', hp: 8, color: '#a07a4a' },
+    bush:    { name: 'Bush', hp: 6, color: '#5f8f3a' },
+    package: { name: 'Package', hp: 8, color: '#c49a5c' },
+    carton:  { name: 'Overflowing carton', hp: 7, color: '#d6c7a6' },
+  };
+  B.PROP_LOOT_CHANCE = 0.1; // Chance auf einen Zufalls-Pickup beim Zerbrechen
 })(window.BOTA);

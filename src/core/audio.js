@@ -27,7 +27,7 @@
   const MUSIC_VOL = 0.13;   // Musik deutlich leiser als Effekte
 
   // Mindestabstand (s) zwischen zwei Wiedergaben desselben Effekts
-  const RATE = { shoot: 0.045, hit: 0.035, splat: 0.07, coin: 0.03, denied: 0.25, enemyDeath: 0.03, rock: 0.05, doorOpen: 0.1, doorClose: 0.1 };
+  const RATE = { propHit: 0.05, propBreak: 0.04, shoot: 0.045, hit: 0.035, splat: 0.07, coin: 0.03, denied: 0.25, enemyDeath: 0.03, rock: 0.05, doorOpen: 0.1, doorClose: 0.1 };
   const lastPlay = Object.create(null);
 
   const mtof = (m) => 440 * Math.pow(2, (m - 69) / 12);
@@ -129,6 +129,13 @@
       voice({ f: 700, f2: 90, dur: 0.35, type: 'sine', vol: 0.12 });
       noise({ dur: 0.3, vol: 0.08, filter: 'bandpass', f: 600, f2: 200, q: 3 });
       voice({ f: 180, f2: 420, dur: 0.12, type: 'square', vol: 0.05, delay: 0.32 });
+    },
+    // Zerstoerbare Objekte: kurzes "Tock" beim Treffer, Krachen + Splittern beim Zerbrechen
+    propHit() { voice({ f: 320, f2: 180, dur: 0.05, type: 'triangle', vol: 0.07 }); },
+    propBreak() {
+      noise({ dur: 0.22, vol: 0.16, filter: 'lowpass', f: 1600, f2: 300 });
+      voice({ f: 140, f2: 60, dur: 0.14, type: 'square', vol: 0.06 });
+      noise({ dur: 0.08, vol: 0.06, filter: 'highpass', f: 3000, delay: 0.05 });
     },
     // HUD-Stoerung (Graphics Glitch): kurzes Bitcrush-Gezirpe aus zufaelligen hohen Tonschnipseln + Rauschen
     glitch() {
@@ -456,7 +463,9 @@
   on('hudGlitch', () => p('glitch'));
   on('bossBeam', () => p('beam'));            // Reviewer-Laser
   on('pipeAppear', () => p('pipeAppear'));     // Rohr taucht nach dem Clearing auf
-  on('pipeWarp', () => p('pipeWarp'));         // durch ein Rohr gespuelt         // Graphics Glitch verfremdet das HUD       // Zombie Process steht wieder auf
+  on('pipeWarp', () => p('pipeWarp'));         // durch ein Rohr gespuelt
+  on('propHit', () => p('propHit'));           // Schuss trifft Kiste/Busch/...
+  on('propBreak', () => p('propBreak'));       // ... und es zerbricht         // Graphics Glitch verfremdet das HUD       // Zombie Process steht wieder auf
 
   B.audio = audio;
 })(window.BOTA);

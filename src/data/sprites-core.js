@@ -507,6 +507,111 @@
   })();
 
   // ===========================================================================
+  // Zerstoerbare Objekte (Kacheltyp PROP, siehe B.PROP_KINDS in layouts.js): je 16x16 bei Skalierung 4,
+  // Frame 0 heil, Frame 1 beschaedigt (Riss + abgebrochenes Eck bzw. kahle Stellen beim Busch).
+  // ===========================================================================
+
+  /** Zeilen aus einer Funktion (x, y) -> Zeichen */
+  function gridRows(w, h, fn) {
+    const rows = [];
+    for (let y = 0; y < h; y++) {
+      let row = '';
+      for (let x = 0; x < w; x++) row += fn(x, y);
+      rows.push(row);
+    }
+    return rows;
+  }
+  // Riss: feste Zickzacklinie von oben links nach unten rechts, plus Seitenast
+  const PROP_CRACK = [[2, 4], [3, 5], [4, 5], [5, 6], [6, 7], [7, 7], [8, 8], [8, 9], [9, 10], [10, 10], [11, 11], [9, 6], [10, 5]];
+  function propDamaged(rows) {
+    const cracked = stamp(rows, PROP_CRACK.map(([r, c]) => [r, c, 'k']));
+    return stamp(cracked, [[0, 13, 'k'], [0, 14, '.'], [1, 14, 'k'], [1, 15, '.'], [2, 15, 'k']]);
+  }
+
+  // Staubige Holzkiste: Rahmen mit Naegeln, Diagonalstrebe, Staubflecken
+  const CRATE = gridRows(16, 16, (x, y) => {
+    const edge = x === 0 || x === 15 || y === 0 || y === 15;
+    if (edge) return (x === 0 || x === 15) && (y === 0 || y === 15) ? '.' : 'k';
+    if (x <= 2 || x >= 13 || y <= 2 || y >= 13) {
+      if ((x === 1 || x === 14) && (y === 1 || y === 14)) return 'n';
+      if ((x * 7 + y * 13) % 11 === 0) return 'g';
+      return y <= 2 ? 'l' : 'w';
+    }
+    if (x === 3 || x === 12 || y === 3 || y === 12) return 'd';
+    if (x + y === 15 || x + y === 16) return 'w';
+    if (y === 7) return 'd';
+    return (x * 5 + y * 3) % 13 === 0 ? 'g' : 'p';
+  });
+  B.defineSprite('prop_crate', {
+    palette: { k: '#1f1a17', w: '#a07a4a', l: '#c29a66', p: '#7d5b36', d: '#4f3920', n: '#c9c1b8', g: '#b8b0a4' },
+    scale: 4,
+    frames: [CRATE, propDamaged(CRATE)],
+  });
+
+  // Busch: runde Silhouette mit Blattzacken, Licht von oben links, drei rote Beeren
+  const bushRows = (bare) => gridRows(16, 16, (x, y) => {
+    const dx = x - 7.5, dy = y - 8;
+    const d = Math.hypot(dx * 0.95, dy * 1.05);
+    const rim = 7.0 + 0.6 * Math.sin(Math.atan2(dy, dx) * 5);
+    if (d > rim + 0.8) return '.';
+    if (d > rim) return 'k';
+    if (bare && ((x * 3 + y * 5) % 7 === 0 || (x > 8 && y < 6))) return d > rim - 1.5 ? 'k' : 'b'; // kahle Stellen, Zweige
+    if ((x === 5 && y === 6) || (x === 10 && y === 9) || (x === 7 && y === 12)) return 'r';
+    const shade = -dx * 0.5 - dy * 0.6;
+    if (shade > 2.5) return 'l';
+    if (shade < -2.5) return 'd';
+    const n = (x * 13 + y * 7) % 5;
+    return n === 0 ? 'l' : n === 1 ? 'd' : 'g';
+  });
+  B.defineSprite('prop_bush', {
+    palette: { k: '#16240f', l: '#7fb850', g: '#5f8f3a', d: '#3d6326', r: '#c0392b', b: '#5a3d22' },
+    scale: 4,
+    frames: [bushRows(false), bushRows(true)],
+  });
+
+  // Paket (Dependency Hell): Karton mit Klebeband, Versandetikett mit Strichcode, roter "oben"-Pfeil
+  const PACKAGE = stamp(
+    ['.kkkkkkkkkkkkkk.'].concat(Array.from({ length: 13 }, () => 'kccccccttcccccCk'), ['kCCCCCCttCCCCCCk', '.kkkkkkkkkkkkkk.']),
+    [
+      [3, 11, 'r'], [3, 12, 'r'], [4, 10, 'r'], [4, 11, 'r'], [4, 12, 'r'], [4, 13, 'r'], [5, 11, 'r'], [5, 12, 'r'], [6, 11, 'r'], [6, 12, 'r'],
+      // Etikett: weisses Feld mit zwei Textzeilen (bewusst keine zwei Punkte nebeneinander — sah wie Augen aus)
+      [9, 1, 'w'], [9, 2, 'w'], [9, 3, 'w'], [9, 4, 'w'], [9, 5, 'w'],
+      [10, 1, 'w'], [10, 2, 'g'], [10, 3, 'g'], [10, 4, 'g'], [10, 5, 'w'],
+      [11, 1, 'w'], [11, 2, 'g'], [11, 3, 'g'], [11, 4, 'w'], [11, 5, 'w'],
+      [12, 1, 'w'], [12, 2, 'w'], [12, 3, 'w'], [12, 4, 'w'], [12, 5, 'w'],
+    ]);
+  B.defineSprite('prop_package', {
+    palette: { k: '#1f1a17', c: '#c49a5c', C: '#9c7843', t: '#e8d7a6', w: '#f4efe6', g: '#8a8478', r: '#d64545' },
+    scale: 4,
+    frames: [PACKAGE, propDamaged(PACKAGE)],
+  });
+
+  // Ueberquellender Karton (Production/Dependency Hell): offene Kiste, Papierstapel und ein Kabel quellen heraus
+  const CARTON = [
+    '......kkkk......',
+    '..kkk.kWWWk.....',
+    '.kwwwkkWgWWk.b..',
+    '.kwgwwkWWgWk.bb.',
+    '.kwwgwkWgWWkbb..',
+    '.kwwwwkWWWWkb...',
+    'kkkkkkkkkkkkkkkk',
+    'kCCCCCCCCCCCCCCk',
+    'kccccccddcccccCk',
+    'kccccccddcccccCk',
+    'kcccwwwddcccccCk',
+    'kccckkkddcccccCk',
+    'kcccccccccccccCk',
+    'kcccccccccccccCk',
+    'kCCCCCCCCCCCCCCk',
+    '.kkkkkkkkkkkkkk.',
+  ];
+  B.defineSprite('prop_carton', {
+    palette: { k: '#1f1a17', c: '#c9a46a', C: '#9c7843', d: '#b08a52', w: '#f4efe6', W: '#e8e2d4', g: '#9a948c', b: '#3a7fc0' },
+    scale: 4,
+    frames: [CARTON, propDamaged(CARTON)],
+  });
+
+  // ===========================================================================
   // HUD-Icons (Skalierung 2 -> knackig in der 64-px-Leiste)
   // ===========================================================================
 
