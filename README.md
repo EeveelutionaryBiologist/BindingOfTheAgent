@@ -34,6 +34,8 @@ Secret rooms hide behind cracked walls: Force Push them. There is no ending. The
 - **9 themed floors** that cycle forever, from *The Backlog* down to *The Context Limit*. **30 room layouts.**
 - All art is ASCII pixel maps in code and all sound is synthesized with Web Audio. There are no asset files.
 
+**For a documentation of all Enemies and items, see the documents/ folder!**
+
 ### URL options
 - `index.html?seed=ABCD-1234` plays a fixed seed, so the whole team can compare deaths on the same dungeon.
 - `index.html?debug` turns on the debug overlay (or press `F2` in-game). Keys: `G` god mode, `I` random item,
