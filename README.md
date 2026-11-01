@@ -3,7 +3,7 @@
 A discount Binding-of-Isaac-style roguelite. You are a loose Claude Agent, a small coral-coloured minion descending into
 ever-deeper codebases. Shoot tokens at bugs, pick up items of questionable value, die to a Merge Conflict, repeat.
 
-<img width="1944" height="870" alt="bota-showcase" src="https://github.com/user-attachments/assets/3c454327-83e6-4c34-bb01-5af1004640b4" />
+<img width="1944" height="870" alt="Six screenshots: title screen, a combat room, the Rogue Agent Swarm boss intro, the Antagonistic Reviewer firing its laser, an item showcase, and the post-mortem death screen" src="screenshots/bota-showcase.png" />
 
 ## Play
 
