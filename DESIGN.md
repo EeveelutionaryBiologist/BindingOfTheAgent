@@ -408,8 +408,8 @@ clearly marked hook additions.
 
 ### Implementation status (v1)
 All milestones done. What shipped, compared with this doc:
-- **Items:** 43 (38 passive, 5 active). There are 7 extras beyond §9, e.g. Ctrl+C Ctrl+V, On-Call Pager,
-  Garbage Collector, Feature Flag, and Ctrl+Z (active). Locked chests cost an Approval.
+- **Items:** 45 (40 passive, 5 active). There are 9 extras beyond §9, e.g. Ctrl+C Ctrl+V, On-Call Pager,
+  Garbage Collector, Feature Flag, Ctrl+Z (active), and the Extra GPU / Off-Brand GPU pair (added 2026-11-02). Locked chests cost an Approval.
 - **Enemies and bosses:** 13 spawnable enemies plus 3 minions. Each of the 6 bosses has two phases and telegraphed attacks.
 - **Layouts:** 30 (27 combat, the rest for special rooms), all validated.
 - **Presentation:**

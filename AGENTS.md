@@ -84,6 +84,7 @@ Live state is under `BOTA.game` (`.player`, `.room`, `.floor`, `.depth`, `.state
 - floor names and themes have the same length, floor 3 is Forgotten Branches, and its maps have ≥ 7 dead ends;
 - breakable objects use the floor's kinds, stay off spawn points, door fronts and the centre, never cut a room in two,
   and break from player shots and explosions but not from enemy shots;
+- the Off-Brand GPU turns about 12 % of shots into duds that deal no damage, and the GPU prices are 30¢ / 20¢;
 - the door transition, special rooms, pause screen and death screen work.
 
 Screenshots go to `tools/out/` (scratch; don't commit or ship). Setup without admin rights:
@@ -387,18 +388,20 @@ are game state.
 
 ## 4. Content registries (current state)
 
-**Items:** 43 in total, 38 passive and 5 active (marked `*`). Pools: t = treasure, s = shop, b = boss, s/s = shop+secret.
+**Items:** 45 in total, 40 passive and 5 active (marked `*`). Pools: t = treasure, s = shop, b = boss, s/s = shop+secret.
 ```
 cold_brew mech_keyboard stack_overflow context_window prompt_caching tab_completion max_effort monorepo
 kubernetes blockchain technical_debt temperature few_shot regex chain_of_thought confident_hallucination
 linter dark_mode microservices vibe_coding the_cloud rlhf constitutional_guardrails retry_backoff code_review
 daily_standup lgtm off_by_one yaml_config git_blame rubber_duck unit_tests copy_paste on_call_pager
-garbage_collector seed_funding benchmark_overfitting feature_flag
+garbage_collector seed_funding benchmark_overfitting feature_flag extra_gpu offbrand_gpu
 regenerate_response* stop_generating* rm_rf* compact* ctrl_z*
 ```
 Item conventions:
 - Per-run rolled values go in `player.bonus`, and one-shot state in `player.itemState[id]`.
 - Active items return `false` from `use()` to keep their charge (and should emit `denied`).
+- A player shot with `damage <= 0` is a dud (Off-Brand GPU): it fizzles on enemies and breakable objects without
+  damage, knockback or `onHitEnemy` hooks (`projectile.js`).
 - The default price is 15 (`B.itemPrice(id)`).
 
 **Enemies** (id: behaviour, minFloor, base HP):

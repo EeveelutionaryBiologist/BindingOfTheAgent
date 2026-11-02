@@ -17,6 +17,7 @@
  *   - Etagen: FLOORS und FLOOR_THEMES gleich lang; Etage 3 = Forgotten Branches mit verzweigteren Karten
  *   - Zerstoerbare Objekte: richtige Arten je Etage, erlaubte Plaetze, Raeume bleiben begehbar; Spielerschuss und
  *     Explosion zerbrechen sie, Gegnerschuss nicht
+ *   - Off-Brand GPU: ~12 % Blindgaenger ohne Schaden; GPU-Preise 30/20
  *   - Rohre: ~10 % der Kampfraeume, erscheinen nach dem Clearing (nicht vor Tueren), Ziel nie Boss/Geheim/selbst,
  *     Sperrzeit verhindert Ping-Pong
  *   - Spezialraeume, Pause- und Todesbildschirm rendern
@@ -429,6 +430,29 @@ const URL = 'file://' + path.join(ROOT, 'index.html').replace(/\\/g, '/') + '?se
     await page.waitForTimeout(300);
     await shot('13-props-floor' + d);
   }
+
+  // --- Off-Brand GPU: ~12 % Blindgaenger; ein Blindgaenger macht keinen Schaden ---
+  const gpuProblems = await page.evaluate(async () => {
+    const out = [];
+    const g = BOTA.game, def = BOTA.ITEMS.offbrand_gpu;
+    let duds = 0;
+    for (let i = 0; i < 2000; i++) {
+      const proj = { damage: 3.5, knockbackForce: 160, range: 420, color: '#fff', flags: {} };
+      def.onShoot(g.player, proj, g);
+      if (proj.damage === 0) duds++;
+    }
+    if (Math.abs(duds / 2000 - 0.12) > 0.03) out.push('Off-Brand GPU: Blindgaenger-Anteil ' + (duds / 2000).toFixed(3));
+    if (BOTA.ITEMS.extra_gpu.price !== 30 || def.price !== 20) out.push('GPU-Preise falsch');
+    BOTA.debug.gotoRoom('start'); BOTA.debug.god(true);
+    const e = BOTA.debug.spawn('bug', 600, 300); e.spawnDelay = 0;
+    const hp = e.hp;
+    g.spawnProjectile({ x: 540, y: 300, vx: 480, vy: 0, team: 'player', damage: 0, range: 300 });
+    await new Promise((r) => setTimeout(r, 300));
+    if (e.hp !== hp) out.push('Blindgaenger macht Schaden');
+    BOTA.debug.killAll();
+    return out;
+  });
+  problems.push(...gpuProblems);
 
   // --- Graphics Glitch: Kontakt -> HUD-Stoerung; jeder Stoerungsbereich rendert; Spruenge landen auf Boden ---
   const glitchProblems = await page.evaluate(() => {

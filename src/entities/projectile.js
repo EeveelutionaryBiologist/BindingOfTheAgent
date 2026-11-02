@@ -74,7 +74,7 @@
       // Bewegung mit Kachelkollision (Mittelpunkt-Test, achsenweise fuer Abprallen)
       const mode = this.flags.spectral ? 'spectral' : 'shot';
       // Spielerschuesse beschaedigen zerstoerbare Objekte (PROP), Gegnerschuesse prallen nur daran ab
-      const hitProp = (hx, hy) => { if (this.team === 'player' && game.hitProp) game.hitProp(room, hx, hy, this.damage); };
+      const hitProp = (hx, hy) => { if (this.team === 'player' && this.damage > 0 && game.hitProp) game.hitProp(room, hx, hy, this.damage); };
       const nx = this.x + evx * dt;
       if (room.isSolidAt(nx, this.y, mode, false)) {
         hitProp(nx, this.y);
@@ -90,7 +90,7 @@
 
       // Geister-Schuesse (spectral) fliegen durch Objekte hindurch, beschaedigen sie dabei aber einmal pro
       // Objekt — sonst koennte ein Spieler ohne Bomben hinter Kisten festsitzen (Playtest 2026-11-01)
-      if (this.team === 'player' && this.flags.spectral && game.hitProp) {
+      if (this.team === 'player' && this.damage > 0 && this.flags.spectral && game.hitProp) {
         const c = Math.floor(this.x / B.C.TILE), r = Math.floor(this.y / B.C.TILE);
         if (room.tileAt(c, r) === B.TILES.PROP) {
           const key = c + ',' + r;
@@ -111,6 +111,8 @@
       for (const e of game.room.enemies) {
         if (e.dead || e.intangible || this.hitSet.has(e)) continue;
         if (!B.M.circlesOverlap(this, e)) continue;
+        // Blindgaenger (Off-Brand GPU: damage 0) zerplatzen am Gegner, ohne Treffer, Rueckstoss oder Item-Hooks
+        if (this.damage <= 0) { this.die(game, true); return; }
         this.hitSet.add(e);
         const applied = e.hurt(this.damage, game, this);
         if (applied && !e.noKnockback) e.knockback(this.vx, this.vy, this.knockbackForce);

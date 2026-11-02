@@ -26,12 +26,12 @@ and drop through the trapdoor. From floor 2 onwards, treasure and shop doors nee
 Secret rooms hide behind cracked walls: Force Push them. There is no ending. There is only the next floor.
 
 ### What's inside
-- **43 items** (38 passive, 5 active). Examples: Blockchain (*"Does absolutely nothing. Market cap: $4B."*),
+- **45 items** (40 passive, 5 active). Examples: Blockchain (*"Does absolutely nothing. Market cap: $4B."*),
   Few-Shot Examples, Chain of Thought, Rubber Duck, Technical Debt, Regenerate Response, `rm -rf node_modules`.
 - **13 enemies** plus minions: Flaky Test, Merge Conflict, Graphics Glitch, Hallucination (it looks like loot), Zombie Process…
 - **6 bosses**, each with two phases: The Monolith, The Stakeholder, Friday Deploy, The Infinite Loop, the Rogue Agent Swarm,
   The Antagonistic Reviewer.
-- **9 themed floors** that cycle forever, from *The Backlog* down to *The Context Limit*. **30 room layouts.**
+- **10 themed floors** that cycle forever, from *The Backlog* through *Forgotten Branches* down to *The Context Limit*. **30 room layouts.**
 - All art is ASCII pixel maps in code and all sound is synthesized with Web Audio. There are no asset files.
 
 **For a documentation of all Enemies and items, see the documents/ folder!**

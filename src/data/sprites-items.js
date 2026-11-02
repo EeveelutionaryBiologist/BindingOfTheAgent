@@ -52,6 +52,36 @@
   // PASSIVE ITEMS (Design-Doc)
   // ===========================================================================
 
+  // Extra GPU — schlichte Grafikkarte: Slotblech links, dunkle Abdeckung mit zwei grossen Luefter, gruene
+  // Platine, goldene Kontakte
+  spr('item_extra_gpu', [
+    '.kkkkkkkkkkkkkk.',
+    'kGkddddddddddddk',
+    'kGkdkkkkkdkkkkkk',
+    'kGkdkgGgkdkgGgkk',
+    'kGkdkGDGkdkGDGkk',
+    'kGkdkgGgkdkgGgkk',
+    'kGkdkkkkkdkkkkkk',
+    'kGkddddddddddddk',
+    'kGknnnnnnnnnnnnk',
+    '.k.kYkYkYkYkYkk.',
+    '...kkkkkkkkkkk..',
+  ], { n: '#3f8f4f' });
+
+  // Off-Brand GPU — dieselbe Karte als Billigversion: aggressives Gold-Rot, drei winzige Luefter, Zierstreifen
+  spr('item_offbrand_gpu', [
+    '.kkkkkkkkkkkkkk.',
+    'kGkRRRRRRRRRRRRk',
+    'kGkRkkkRkkkRkkkk',
+    'kGkYkykYkykYkykk',
+    'kGkRkkkRkkkRkkkk',
+    'kGkYRRYRRYRRYRRk',
+    'kGkRRRRRRRRRRRRk',
+    'kGknnnnnnnnnnnnk',
+    '.k.kYkYkYkYkYkk.',
+    '...kkkkkkkkkkk..',
+  ], { n: '#3f8f4f', R: '#b3262b' });
+
   // Cold Brew — Eiskaffee-Becher mit Deckel, Strohhalm und Eiswuerfeln
   spr('item_cold_brew', [
     '.........kkkk...',

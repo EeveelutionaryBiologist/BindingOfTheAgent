@@ -42,6 +42,8 @@ All items and pickups in the game.
 | ![Technical Debt](images/item_technical_debt.png) | **Technical Debt** `technical_debt` | Damage ×1.6, but you lose one heart container (never below 1 heart) | Treasure, Secret | — | Ship now, pay later. With interest. Compounding. |
 | ![Off-by-One Error](images/item_off_by_one.png) | **Off-by-One Error** `off_by_one` | Damage +0, +1 or +2, rolled once when picked up | Treasure, Secret | — | We counted from zero. Or did we. |
 | ![YAML Config](images/item_yaml_config.png) | **YAML Config** `yaml_config` | Every stat shifts randomly, slightly positive on average. The range per stat runs from −1 to +1.3 times its step: speed 0.15, damage 0.8, fire delay 0.05 s, shot speed 0.15, range 90, shot size 0.2, luck 2 | Treasure, Secret | — | Your stats are now whitespace-sensitive. |
+| ![Extra GPU](images/item_extra_gpu.png) | **Extra GPU** `extra_gpu` | Speed +0.1, shot speed +0.1. Outrageously expensive for what it does; that's the joke | Treasure, Shop, Boss | 30¢ | More FLOPS = More Good! |
+| ![Off-Brand GPU](images/item_offbrand_gpu.png) | **Off-Brand GPU** `offbrand_gpu` | Speed +0.1, shot speed +0.1, but 12 % of your shots are duds: grey, no damage, and they fizzle out after about a third of their range | Treasure, Shop, Boss | 20¢ | We need more compute, but is this worth it...? |
 
 ### Shot modifiers
 

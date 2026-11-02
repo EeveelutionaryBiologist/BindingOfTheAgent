@@ -150,6 +150,34 @@
     add: { speed: 0.25 },
   };
 
+  // Extra GPU / Off-Brand GPU (Vorschlag 2026-11-02): bewusst ueberteuert fuer einen kleinen Bonus —
+  // das ist der Witz. Die Billig-Variante spart 10 Credits, dafuer "versagt" ab und zu ein Schuss.
+  I.extra_gpu = {
+    name: 'Extra GPU', tagline: 'Speed up, shot speed up',
+    desc: 'More FLOPS = More Good!',
+    pools: ['treasure', 'shop', 'boss'], sprite: 'item_extra_gpu', price: 30,
+    add: { speed: 0.1, shotSpeed: 0.1 },
+  };
+
+  I.offbrand_gpu = {
+    name: 'Off-Brand GPU', tagline: 'Speed up, shot speed up... mostly',
+    desc: 'We need more compute, but is this worth it...?',
+    pools: ['treasure', 'shop', 'boss'], sprite: 'item_offbrand_gpu', price: 20,
+    add: { speed: 0.1, shotSpeed: 0.1 },
+    onShoot(player, proj, game) {
+      // 12 % "Hardwarefehler": Der Schuss ist ein Blindgaenger — grau, kein Schaden, kein Rueckstoss,
+      // verpufft nach gut einem Drittel der Reichweite (projectile.js behandelt damage <= 0 als Blindgaenger).
+      // Zufall ueber game.rng (deterministisch pro Seed).
+      const g = G(game);
+      if (!g || !proj || !g.rng.chance(0.12)) return;
+      proj.damage = 0;
+      proj.knockbackForce = 0;
+      proj.range *= 0.35;
+      proj.color = '#7a7470';
+      proj.flags = Object.assign({}, proj.flags, { split: false, homing: false });
+    },
+  };
+
   I.mech_keyboard = {
     name: 'Mechanical Keyboard', tagline: 'Fire rate up',
     desc: 'Clack clack clack. Your open-plan office has filed a complaint.',
