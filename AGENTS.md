@@ -98,7 +98,7 @@ Live state is under `BOTA.game` (`.player`, `.room`, `.floor`, `.depth`, `.state
   - **Orphan Commit** is a rare bonus only on its floor (at most 1 per room, close to its `bonusChance`), never
     holds the doors, flees into a corner, drops 2–3 credits when caught (even while frozen) or shot, and is
     garbage-collected after its warning without loot or a kill;
-- the **Octopus Merge** is only rolled on Forgotten Branches (about 41 % there on a first visit); it has 8 arms of
+- the **Octopus Merge** is only rolled on Forgotten Branches (at its weight share there on a first visit); it has 8 arms of
   5 segments that pass 60 % of their damage to the knot and stay inside the room; every sweep, slam, tip shot and
   stream has its telegraph first; an arm merges every 12 % of HP (at least one stays), phase 2 starts once at 50 %
   with opposing streams; arms hurt on contact along their whole length; the death is a single boss death and no
@@ -484,8 +484,10 @@ floors 13, 23, … The roll functions take an optional `theme` argument (default
 Content without these fields rolls exactly as before (same RNG draws), so **existing seeds only change once you give
 an enemy or boss a theme field**; say so in that commit. In use by the Forgotten Branches family (below).
 
-**Bosses** (base HP): `monolith` 360, `stakeholder` 250, `friday_deploy` 240, `infinite_loop` 300, `rogue_swarm` 4 × 80,
-`reviewer` 340 (floor 3+), `octopus_merge` 330 (floor 3+, Forgotten Branches only, weight 12, so about 41 % there).
+**Bosses** (base HP): `monolith` 360, `stakeholder` 250, `friday_deploy` 240 (floor 4+), `infinite_loop` 300,
+`rogue_swarm` 4 × 80, `reviewer` 340 (floor 4+), `octopus_merge` 330 (Forgotten Branches only, weight 12: about 52 % on
+floor 3, about 41 % on floors 13, 23, …). Friday Deploy and the Reviewer moved from floors 2 and 3 to floor 4 on
+2026-11-02, which gives floor 3 to the Octopus Merge and floor 2 to Monolith, Stakeholder, Loop and Swarm.
 - **Octopus Merge** works like the Infinite Loop: the knot is the boss, its 8 arms are 5 `octo_arm` segments each
   (`proxy`, 60 %). The knot positions them every tick and draws the arms itself; only the tip (a commit dot) draws
   as a sprite. Arm contact is checked along the drawn line, not per segment. Speed-ups from merges (`state.sm`)
@@ -611,7 +613,8 @@ work again, the same file-ownership split works well.
 - A separate music toggle (extend the `storage` schema with validation).
 - Scale item damage with depth.
 - Better item-pool exhaustion handling (e.g. hand out `blockchain` forever).
-- A human balance pass on boss HP and spawn budgets.
+- A human balance pass on boss HP and spawn budgets, and on enemy and boss odds per floor (`minFloor`, `weight`,
+  `weightPerFloor`, `themes`). The floor-3/4 boss shuffle on 2026-11-02 was a first step; the rest is untuned.
 - Ideas from the 2026-11-01 brainstorm, in planned order:
   - ~~Floor-based enemy variety~~: done 2026-11-02 (`themes` / `themeOnly`, see §4, Floor themes). The themed
     content below builds on it.

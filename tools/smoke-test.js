@@ -1040,12 +1040,17 @@ const URL = 'file://' + path.join(ROOT, 'index.html').replace(/\\/g, '/') + '?se
   const octoProblems = await page.evaluate(() => {
     const out = [];
     const g = BOTA.game, AI = BOTA.AI, DEF = BOTA.BOSSES.octopus_merge;
-    // 1) Boss-Wahl: nur auf Forgotten Branches, dort beim ersten Besuch grob mit seinem Gewichtsanteil
+    // 1) Boss-Wahl: nur auf Forgotten Branches, dort beim ersten Besuch grob mit seinem Gewichtsanteil (aus den
+    //    Gewichten der auf dieser Etage moeglichen Bosse berechnet, damit spaeteres Feintuning den Test nicht bricht)
     for (let d = 1; d <= 2 * BOTA.FLOOR_THEMES.length; d++) {
       let n = 0;
-      for (let i = 0; i < 300; i++) if (BOTA.rollBossVaried(new BOTA.RNG(BOTA.hashString('octo' + d + ':' + i)), d, []) === 'octopus_merge') n++;
+      for (let i = 0; i < 400; i++) if (BOTA.rollBossVaried(new BOTA.RNG(BOTA.hashString('octo' + d + ':' + i)), d, []) === 'octopus_merge') n++;
       if (BOTA.themeKeyAt(d) !== 'branches') { if (n) out.push('Octopus Merge auf Etage ' + d); continue; }
-      if (n / 300 < 0.3 || n / 300 > 0.53) out.push('Octopus Merge: Anteil ' + (n / 300).toFixed(2) + ' auf Etage ' + d);
+      const th = BOTA.themeKeyAt(d);
+      const ids = Object.keys(BOTA.BOSSES).filter((id) => (BOTA.BOSSES[id].minFloor || 1) <= d);
+      const total = ids.reduce((sum, id) => sum + BOTA.bossWeightAt(BOTA.BOSSES[id], th), 0);
+      const want = BOTA.bossWeightAt(DEF, th) / total;
+      if (Math.abs(n / 400 - want) > 0.08) out.push('Octopus Merge: Anteil ' + (n / 400).toFixed(2) + ' statt ~' + want.toFixed(2) + ' auf Etage ' + d);
     }
 
     BOTA.debug.gotoRoom('start'); BOTA.debug.god(true);

@@ -44,7 +44,7 @@
     subtitle: 'What could go wrong at 16:55?',
     hp: 240, r: 38, speed: 175, contactDamage: 2, flying: true,
     behavior: 'friday_deploy', sprite: 'boss_friday_deploy', color: '#ff7a2f',
-    minFloor: 2, weight: 3,
+    minFloor: 4, weight: 3,
     desc: 'A burning server rack bouncing off the walls. Rollback scheduled for never.',
   };
 
@@ -72,12 +72,13 @@
     subtitle: 'This does, in fact, NOT look good to me.',
     hp: 340, r: 40, speed: 45, contactDamage: 2, flying: true,
     behavior: 'reviewer', sprite: 'boss_reviewer', color: '#e8b896',
-    minFloor: 3, weight: 3,
+    minFloor: 4, weight: 3,
     desc: 'A floating face behind mirrored glasses. Slow, methodical, and never satisfied.',
   };
 
-  // Etagen-Boss von Forgotten Branches (themeOnly). Gewicht 12 gegen 17 fuer die uebrigen sechs: dort beim ersten
-  // Besuch etwa 41 % (die Abwechslungs-Regeln in rollBossVaried gelten wie fuer alle). hp gilt fuer den Knoten;
+  // Etagen-Boss von Forgotten Branches (themeOnly). Gewicht 12: auf Etage 3 gegen 11 fuer die vier anderen dort
+  // moeglichen Bosse (~52 %), auf Etage 13, 23, ... gegen 17 fuer alle sechs (~41 %) — jeweils beim ersten Besuch;
+  // die Abwechslungs-Regeln in rollBossVaried gelten wie fuer alle. hp gilt fuer den Knoten;
   // Treffer auf die Arme zaehlen zu 60 % (proxyMult in entities/boss.js).
   B.BOSSES.octopus_merge = {
     name: 'Octopus Merge',
@@ -91,9 +92,11 @@
   /**
    * Waehlt einen Boss fuer die Etage (deterministisch ueber den Etagen-RNG).
    * Auf Etage 1 nur die beiden "zugaenglicheren" Bosse (Monolith 60 %, Stakeholder 40 %);
-   * ab Etage 2 kommen Friday Deploy, Infinite Loop und der Rogue Agent Swarm dazu, ab Etage 3 der Antagonistic Reviewer
+   * ab Etage 2 kommen Infinite Loop und der Rogue Agent Swarm dazu, ab Etage 4 Friday Deploy und der Antagonistic Reviewer
+   * (seit 2026-11-02; vorher ab 2 bzw. 3 — so hat die Octopus Merge auf Etage 3 mehr Platz)
    * (Gewichte 3, Stakeholder 2 — er ist etwas seltener, weil man ihn auf Etage 1 schon oft gesehen hat).
-   * Etage 2: je 21 %, Stakeholder 14 %; ab Etage 3: je 18 %, Stakeholder 12 %.
+   * Etage 2: je 27 %, Stakeholder 18 %; Etage 3 (Forgotten Branches): Octopus Merge 52 %, sonst je 13 %, Stakeholder 9 %;
+   * ab Etage 4: je 18 %, Stakeholder 12 % (Etage 13, 23, ...: Octopus Merge 41 %, sonst je 10 %, Stakeholder 7 %).
    */
   /**
    * Boss-Abwechslung ueber einen Run (game.assignFloorBoss ruft das beim Betreten jeder Etage auf):

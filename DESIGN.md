@@ -171,10 +171,10 @@ less likely), HP scaled by `1 + 0.3 · (depth − 1)`. BoI-style intro card:
 |---|---|---|
 | **The Monolith** | Lumbers toward you; stomps release a 12-shot ring. At 50 % HP it "decomposes into microservices" (spawns minions) and speeds up. | *"Single point of failure since 1998."* |
 | **The Stakeholder** | Floats around firing rotating "requirement" spirals and aimed "urgent request" fans. Below 40 % it *changes the requirements*: patterns swap and speed up. | *"Just a quick question."* |
-| **Friday Deploy** | A burning server rack bouncing around the room DVD-logo style; every wall hit vents a burst of fire shots; periodically "rolls back" to the centre. | *"What could go wrong at 16:55?"* |
+| **Friday Deploy** (floor 4+) | A burning server rack bouncing around the room DVD-logo style; every wall hit vents a burst of fire shots; periodically "rolls back" to the centre. | *"What could go wrong at 16:55?"* |
 | **The Infinite Loop** | A segmented worm circling the room; the head hunts you, body segments shoot outward. Shared HP pool. | *"while (true) { suffer(); }"* |
 | **Rogue Agent Swarm** (floor 2+) | Four rogue copies of the player in formation with one shared health bar. Each one that falls says a parting line, heals the rest a little and makes them faster (single shots, then fans, then rings); the last one dashes and spirals. | *"Turns out the sandbox was not safe after all..."* |
-| **The Antagonistic Reviewer** (floor 3+) | A floating face with mirrored glasses. Mouth laser (tracking line, freeze, beam), rows of "nitpick" bullets with one gap, and "REJECTED" stamps on your position. At 50 % it turns red: sweeping laser, double rows, triple stamps. | *"This does, in fact, NOT look good to me."* |
+| **The Antagonistic Reviewer** (floor 4+) | A floating face with mirrored glasses. Mouth laser (tracking line, freeze, beam), rows of "nitpick" bullets with one gap, and "REJECTED" stamps on your position. At 50 % it turns red: sweeping laser, double rows, triple stamps. | *"This does, in fact, NOT look good to me."* |
 
 ---
 
