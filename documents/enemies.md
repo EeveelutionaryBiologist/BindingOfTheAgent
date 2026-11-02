@@ -35,6 +35,7 @@ Some enemies belong to one floor theme and only appear there; floor themes repea
 | ![Deprecation Warning](images/enemy_deprecation_warning.png) | **Deprecation Warning** `deprecation_warning` | 3 | 12 | Flies in circles around you at a distance (160–220 px) and fires an aimed shot every 2.4 s. Max 3 per room. 2.5× as common on Sandbox Borders | Will be removed in a future release. Not this one. |
 | ![Zombie Process](images/enemy_zombie_process.png) | **Zombie Process** `zombie_process` | 3 | 14 | Chases you. When killed, it lies down for 1.8 s and gets back up once with half its HP, angrier | `kill -9` recommended. |
 | ![Scope Creep](images/enemy_scope_creep.png) | **Scope Creep** `scope_creep` | 4 | 10 | Slowly grows (up to 1.9× size and 1.6× HP). Once big enough, fires a ring of shots every 3.6 s. Max 2 per room | Just one more small feature. |
+| ![Rogue Agent](images/boss_rogue_agent_a.png) | **Rogue Agent** `rogue_agent` | 7 | 16 | A single member of the Rogue Agent Swarm, escaped from the sandbox (looks like one of the four Swarm agents). Runs around quickly and keeps 200–320 px away from you, strafing to the side. After a green glow it fires either two 3-shot fans in a row or three quick single shots at you. Max 2 per room | Same weights, different goals. Escaped the sandbox and is in no hurry to go back. |
 
 ### Forgotten Branches family
 

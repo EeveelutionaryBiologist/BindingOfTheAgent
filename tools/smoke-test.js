@@ -43,6 +43,7 @@
  *     unverwundbar, taucht auf freiem Sand nahe dem Spieler auf, Telegraph, 8er-Ring, Bombe scheucht heraus)
  *   - Nested Infinite Loop: ab Etage 8 statt der Infinite Loop; nur der aeussere lebende Ring feuert und ist
  *     greifbar; Ringe zerfallen bei 50 % / 16,67 %; Schuesse 165–260 px/s; Teile bleiben im Raum; ein Boss-Tod
+ *   - Rogue Agent: nie vor Etage 7; haelt Abstand; jede Salve nach Gluehen, zwei 3er-Faecher oder drei Einzelschuesse
  *   - Spezialraeume, Pause- und Todesbildschirm rendern
  * Screenshots landen in tools/out/ (nicht einchecken).
  *
@@ -1481,6 +1482,59 @@ const URL = 'file://' + path.join(ROOT, 'index.html').replace(/\\/g, '/') + '?se
     return out;
   });
   problems.push(...nestProblems);
+
+  // --- Rogue Agent (ab Etage 7): haelt Abstand, Salven nur nach Gluehen; zwei 3er-Faecher oder drei Einzelschuesse ---
+  const rogueProblems = await page.evaluate(() => {
+    const out = [];
+    const g = BOTA.game, AI = BOTA.AI, DT = 1 / 60;
+    const def = BOTA.ENEMIES.rogue_agent;
+    for (let d = 1; d <= 6; d++) {
+      for (let i = 0; i < 200; i++) if (BOTA.rollRoomEnemies(new BOTA.RNG(BOTA.hashString('rogue' + d + ':' + i)), d).includes('rogue_agent')) { out.push('Rogue Agent auf Etage ' + d); break; }
+    }
+    BOTA.debug.gotoRoom('start'); BOTA.debug.god(true);
+    for (let i = 0; i < 4; i++) BOTA.debug.killAll();
+    g.room.projectiles.length = 0;
+    const p = g.player; p.x = 480; p.y = 290;
+    const A = BOTA.debug.spawn('rogue_agent', 200, 150);
+    A.spawnDelay = 0;
+    if (!['boss_rogue_agent_a', 'boss_rogue_agent_b', 'boss_rogue_agent_c', 'boss_rogue_agent_d'].includes(A.spriteName)) out.push('Rogue Agent: unbekanntes Sprite ' + A.spriteName);
+    // Mitschnitt der Salven: pro Salve Muster, Anzahl Aufrufe, Telegraph-Dauer davor, Geschwindigkeiten
+    const volleys = [];
+    let cur = null, tellT = 0;
+    const origFan = AI.fan, origAt = AI.shootAt;
+    const rec = (kind, speed) => {
+      if (!cur) { cur = { pattern: A.state.pattern, calls: [], tell: tellT }; volleys.push(cur); }
+      cur.calls.push({ kind, speed });
+    };
+    AI.fan = function (game, e, t, n, spr, speed) { if (e === A) rec('fan' + n, speed); return origFan.apply(this, arguments); };
+    AI.shootAt = function (game, e, t, speed) { if (e === A) rec('single', speed); return origAt.apply(this, arguments); };
+    let minD = Infinity, maxD = 0;
+    try {
+      for (let i = 0; i < 1500; i++) {
+        A.frozen = 0; A.update(DT, g);
+        if (A.state.mode === 'tell') tellT += DT;
+        if (A.state.mode === 'move') { cur = null; tellT = 0; }
+        if (g.room.projectiles.length > 150) g.room.projectiles.length = 0;
+        if (i > 120) { const d = Math.hypot(A.x - p.x, A.y - p.y); minD = Math.min(minD, d); maxD = Math.max(maxD, d); }
+      }
+    } finally {
+      AI.fan = origFan; AI.shootAt = origAt;
+    }
+    if (minD < def.params.near - 60 || maxD > def.params.far + 60) out.push('Rogue Agent: Abstand ' + Math.round(minD) + '–' + Math.round(maxD) + ' px');
+    if (volleys.length < 5) out.push('Rogue Agent: nur ' + volleys.length + ' Salven in 25 s');
+    for (const v of volleys) {
+      const sig = v.calls.map((c) => c.kind).join(',');
+      if (v.pattern === 'fans' && sig !== 'fan3,fan3') out.push('Rogue Agent: Faecher-Salve ' + sig);
+      if (v.pattern === 'burst' && sig !== 'single,single,single') out.push('Rogue Agent: Einzelschuss-Salve ' + sig);
+      if (v.tell < def.params.tell - 0.02) out.push('Rogue Agent: Salve nach nur ' + v.tell.toFixed(2) + ' s Gluehen');
+      if (v.calls.some((c) => c.speed < 165 || c.speed > 260)) out.push('Rogue Agent: Schussgeschwindigkeit ausserhalb 165–260');
+    }
+    if (!volleys.some((v) => v.pattern === 'fans') || !volleys.some((v) => v.pattern === 'burst')) out.push('Rogue Agent: nicht beide Salven-Muster gesehen');
+    for (let i = 0; i < 4; i++) BOTA.debug.killAll();
+    g.room.projectiles.length = 0;
+    return out;
+  });
+  problems.push(...rogueProblems);
 
   // Mehrfach toedlicher Schaden, weil Items wie "Retry with Backoff" den ersten Tod abfangen
   await page.evaluate(() => {

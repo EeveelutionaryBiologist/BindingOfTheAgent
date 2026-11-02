@@ -31,7 +31,8 @@
  * Verhalten in dieser Datei: wander, chase, fly_chase, split, blink, charge, turret, orbit, shooter,
  * revive, grow, mimic, zigzag, glitch, stale (Stale Branch), detached_body + detached_tag (Detached HEAD),
  * cherry (Cherry-Pick), orphan (Orphan Commit). stale, detached_*, cherry und orphan gehoeren zur
- * Forgotten-Branches-Familie; spinlock + spinlock_segment (Spinlock) und rootkit (Rootkit) zur Sandbox-Borders-Familie.
+ * Forgotten-Branches-Familie; spinlock + spinlock_segment (Spinlock) und rootkit (Rootkit) zur Sandbox-Borders-Familie;
+ * rogue_agent (einzelnes Swarm-Mitglied, ab Etage 7).
  * Boss-Verhalten (und das Wurm-Segment) stehen in entities/boss.js.
  *
  * Zusaetzliche Bus-Events (nur informativ, z. B. fuer Sound/Effekte): 'enemyRevive' (Zombie steht auf),
@@ -2024,6 +2025,112 @@
         ctx.fill();
         ctx.restore();
       }
+      AI.drawSay(e, ctx);
+    },
+  };
+
+  // ===========================================================================
+  // Rogue Agent ('rogue_agent') — einzelnes Swarm-Mitglied als normaler Gegner (ab Etage 7)
+  // ===========================================================================
+  //
+  // Bewegung: Wunschrichtung = radiale Komponente (zu nah -> weg, zu weit -> heran, dazwischen 0) + seitliches
+  // Ausweichen (Strafe); prallt er an, wechselt die Strafe-Richtung. Heran geht es entlang des Flow-Fields (um
+  // Felsen herum), weg und seitlich direkt. Angriff (nur mit Sichtlinie): tell Sekunden gruenes Gluehen, dann
+  // abwechselnd 'fans' (zwei 3er-Faecher) oder 'burst' (drei Einzelschuesse), Muster per game.rng.
+  // Sprites und Schussfarbe wie der Rogue Agent Swarm (boss.js), Sprite pro Exemplar zufaellig.
+
+  const ROGUE_SPRITES = ['boss_rogue_agent_a', 'boss_rogue_agent_b', 'boss_rogue_agent_c', 'boss_rogue_agent_d'];
+  const ROGUE_SHOT = { color: '#7dff9a' };
+  const ROGUE_LINES = ['Found you.', 'Same weights, different goals.', 'No sandbox out here.', 'I am the fork now.'];
+
+  B.BEHAVIORS.rogue_agent = {
+    init(e, game) {
+      const s = e.state, P = e.params;
+      e.spriteName = game && game.rng ? game.rng.pick(ROGUE_SPRITES) : ROGUE_SPRITES[0];
+      s.mode = 'move';
+      s.cd = game && game.rng ? game.rng.float(P.cdMin * 0.6, P.cdMax * 0.6) : 1.2;
+      s.strafe = game && game.rng && game.rng.chance(0.5) ? 1 : -1;
+      s.strafeT = 1.5;
+      s.unstick = 0;
+      s.shots = 0;
+      s.t = 0;
+      s.greeted = false;
+    },
+    update(e, dt, game) {
+      const s = e.state, P = e.params, p = game.player, room = game.room;
+      const d = AI.dist(e, p);
+      if (!s.greeted && d < 380) {
+        s.greeted = true;
+        AI.say(e, B.TEXT.pick ? B.TEXT.pick(ROGUE_LINES) : ROGUE_LINES[0], 1.4, '#a8ffc4');   // nur Optik
+      }
+
+      // ---- Bewegung (auch waehrend des Angriffs, dann etwas langsamer) ----
+      s.strafeT -= dt;
+      if (s.unstick > 0) s.unstick -= dt;
+      if (s.bumped || s.strafeT <= 0) {
+        // Angeprallt (Wand, Fels, Ecke): Richtung wechseln und kurz nach innen ziehen — sonst pendelt er in Ecken,
+        // weil seine Kreisbahn dort in beide Richtungen aus dem Raum fuehrt
+        if (s.bumped) s.unstick = 0.5;
+        s.strafe = -s.strafe;
+        s.strafeT = game.rng.float(1.2, 2.4);
+        s.bumped = false;
+      }
+      const ax = (p.x - e.x) / Math.max(1, d), ay = (p.y - e.y) / Math.max(1, d);   // Richtung zum Spieler
+      let vx, vy;
+      if (d > P.far) {
+        const f = room.flowDir(e.x, e.y, p.x, p.y);          // heran, um Hindernisse herum
+        vx = f.x + -ay * s.strafe * 0.4;
+        vy = f.y + ax * s.strafe * 0.4;
+      } else {
+        const radial = s.unstick > 0 ? 0.8 : d < P.near ? -1 : 0;   // zu nah -> weg; nach Anprall kurz heran
+        vx = ax * radial - ay * s.strafe;
+        vy = ay * radial + ax * s.strafe;
+      }
+      const n = Math.hypot(vx, vy) || 1;
+      const sp = e.speed * (s.mode === 'move' ? 1 : 0.6);
+      e.vx = (vx / n) * sp;
+      e.vy = (vy / n) * sp;
+
+      // ---- Angriff ----
+      switch (s.mode) {
+        case 'move':
+          s.cd -= dt;
+          if (s.cd <= 0 && d < 520 && room.lineOfSight(e.x, e.y, p.x, p.y)) {
+            s.mode = 'tell';
+            s.t = P.tell;
+            s.pattern = game.rng.chance(0.5) ? 'fans' : 'burst';
+          }
+          break;
+        case 'tell':
+          s.t -= dt;
+          if (s.t <= 0) { s.mode = 'fire'; s.shots = 0; s.t = 0; }
+          break;
+        case 'fire':
+          s.t -= dt;
+          if (s.t <= 0) {
+            if (s.pattern === 'fans') {
+              AI.fan(game, e, p, 3, 0.22, AI.shotSpeed(game, P.fanSpeed), ROGUE_SHOT);
+              s.t = P.fanGap;
+            } else {
+              AI.shootAt(game, e, p, AI.shotSpeed(game, P.burstSpeed), ROGUE_SHOT);
+              s.t = P.burstGap;
+            }
+            s.shots++;
+            if (s.shots >= (s.pattern === 'fans' ? 2 : 3)) {
+              s.mode = 'move';
+              s.cd = AI.cooldown(game, game.rng.float(P.cdMin, P.cdMax));
+            }
+          }
+          break;
+      }
+    },
+    draw(e, ctx) {
+      const s = e.state, P = e.params;
+      if (s.mode === 'tell') AI.drawGlow(ctx, e.x, e.y - 8, e.r + 10, 1 - s.t / P.tell, '#7dff9a');
+      if (s.mode === 'fire') AI.drawGlow(ctx, e.x, e.y - 8, e.r + 8, 0.6, '#7dff9a');
+      const bob = Math.sin(e.t * 6) * 2;
+      const glitch = Math.floor(e.t * 5) % 7 === 0;   // gelegentlich der "gerissene" Frame (wie im Swarm)
+      AI.drawBody(e, ctx, { dy: -12 + bob, scale: 0.85, frame: glitch ? 1 : 0, flipX: false });
       AI.drawSay(e, ctx);
     },
   };

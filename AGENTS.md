@@ -105,6 +105,8 @@ Live state is under `BOTA.game` (`.player`, `.room`, `.floor`, `.depth`, `.state
   shields its head, it coils on a ring, rattles ≥ 0.6 s before lunging (2 damage) without the chain tearing, and its
   body falls apart with the head; the **Rootkit** can't be hurt while buried, surfaces on free sand near the player
   after its telegraph with a ring of 8 shots, and a bomb flushes it out without the ring;
+- the **Rogue Agent** never rolls before floor 7, keeps its distance, and every volley (two 3-shot fans or three
+  single shots) comes after its green glow at 165–260 px/s;
 - the **Nested Infinite Loop** replaces the Infinite Loop from floor 8 (never before, and the Loop never after); it has
   rings of 14 / 9 / 5 parts, only the outermost living ring fires and can be hit, the rings break at 50 % and
   16.67 % (one `bossPhase` each), its shots stay at 165–260 px/s, its parts stay inside the room, and it dies once
@@ -472,12 +474,17 @@ Item conventions:
 | deprecation_warning | orbit | 3 | 12 |
 | zombie_process | revive | 3 | 14 |
 | scope_creep | grow | 4 | 10 |
+| rogue_agent | rogue_agent | 7 | 16 |
 | stale_branch | stale | 3, Forgotten Branches only | 12 |
 | detached_head | detached_body (+ head `detached_tag`) | 3, Forgotten Branches only | 12 + 6 |
 | cherry_pick | cherry | 3, Forgotten Branches only | 7 (pair of 2) |
 | orphan_commit | orphan | 3, Forgotten Branches only | 6 (bonus spawn, harmless) |
 | spinlock | spinlock (+ 4 `spinlock_segment`) | Sandbox Borders only | 16 |
 | rootkit | rootkit | Sandbox Borders only | 12 |
+
+The **Rogue Agent** (floor 7+, "outside the box") reuses the Rogue Agent Swarm's four sprites (one per agent, picked
+with `game.rng`) and its green shots. It strafes at 200–320 px and cuts inward for 0.5 s after bumping into
+something, so it doesn't get stuck shuffling in corners.
 
 The last four are the **Forgotten Branches family** (`themeOnly: ['branches']`, `family: 'branches'`). The first
 three have weight 6 each: on floor 3 they make up about 24 % of enemies, and about 58 % of combat rooms have at least

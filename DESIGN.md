@@ -410,7 +410,7 @@ clearly marked hook additions.
 All milestones done. What shipped, compared with this doc:
 - **Items:** 45 (40 passive, 5 active). There are 9 extras beyond §9, e.g. Ctrl+C Ctrl+V, On-Call Pager,
   Garbage Collector, Feature Flag, Ctrl+Z (active), and the Extra GPU / Off-Brand GPU pair (added 2026-11-02). Locked chests cost an Approval.
-- **Enemies and bosses:** 19 spawnable enemies plus 7 minions (4 of the enemies are the Forgotten Branches family and 2 the Sandbox Borders family, added 2026-11-02). Each of the 8 bosses has phases and telegraphed attacks; the Octopus Merge (2026-11-02) is the floor boss of Forgotten Branches, and the Nested Infinite Loop (2026-11-02) replaces the Infinite Loop from floor 8.
+- **Enemies and bosses:** 20 spawnable enemies plus 7 minions (4 of the enemies are the Forgotten Branches family and 2 the Sandbox Borders family, added 2026-11-02). Each of the 8 bosses has phases and telegraphed attacks; the Octopus Merge (2026-11-02) is the floor boss of Forgotten Branches, and the Nested Infinite Loop (2026-11-02) replaces the Infinite Loop from floor 8.
 - **Layouts:** 30 (27 combat, the rest for special rooms), all validated.
 - **Presentation:**
   - 11 floor themes (Sandbox Borders, a desert with cacti and border fences, added 2026-11-02) and an animated avatar with 4 directions plus hurt and item poses.

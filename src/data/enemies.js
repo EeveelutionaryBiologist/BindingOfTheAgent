@@ -260,6 +260,24 @@
   };
 
   // ---------------------------------------------------------------------------
+  // Rogue Agent: ein einzelnes Mitglied des Rogue Agent Swarm als normaler Gegner ab Etage 7 ("outside the box":
+  // die erste Etage nach Sandbox Borders). Schnell, haelt Abstand (~200–320 px), weicht seitlich aus und feuert nach
+  // gruenem Gluehen entweder zwei 3er-Faecher kurz nacheinander oder drei schnelle Einzelschuesse auf den Spieler.
+  // Aussehen: eines der vier Swarm-Sprites (zufaellig pro Exemplar). Verhalten 'rogue_agent' in enemy.js.
+  E.rogue_agent = {
+    name: 'Rogue Agent', hp: 16, r: 17, speed: 165, contactDamage: 1,
+    behavior: 'rogue_agent', params: {
+      near: 200, far: 320,      // Wunschabstand zum Spieler (px)
+      tell: 0.45,               // gruenes Gluehen vor jeder Salve
+      cdMin: 1.8, cdMax: 2.6,   // Pause zwischen zwei Salven
+      fanSpeed: 205, fanGap: 0.35,      // zwei 3er-Faecher im Abstand von 0.35 s
+      burstSpeed: 225, burstGap: 0.16,  // drei Einzelschuesse im Abstand von 0.16 s
+    },
+    sprite: 'boss_rogue_agent_a', color: '#7dff9a', noFlip: true,
+    minFloor: 7, weight: 4, weightPerFloor: 0.2, maxWeight: 6, cost: 2, maxPerRoom: 2, tags: ['ranged'],
+    desc: 'Same weights, different goals. Escaped the sandbox and is in no hurry to go back.',
+  };
+
   // --- Sandbox Borders: Spinlock ---
   // Eine kleine Wuestenschlange (Kopf + 4 Glieder, das letzte ist die Rassel), die als geschlossener Ring auf der
   // Stelle kreiselt ("busy wait") und langsam naeherrueckt. Im Ring schirmen die Glieder ab (unverwundbar), nur

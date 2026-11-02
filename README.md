@@ -28,7 +28,7 @@ Secret rooms hide behind cracked walls: Force Push them. There is no ending. The
 ### What's inside
 - **45 items** (40 passive, 5 active). Examples: Blockchain (*"Does absolutely nothing. Market cap: $4B."*),
   Few-Shot Examples, Chain of Thought, Rubber Duck, Technical Debt, Regenerate Response, `rm -rf node_modules`.
-- **19 enemies** plus minions: Flaky Test, Merge Conflict, Graphics Glitch, Hallucination (it looks like loot), Zombie Process…
+- **20 enemies** plus minions: Flaky Test, Merge Conflict, Graphics Glitch, Hallucination (it looks like loot), Zombie Process, Rogue Agent…
   Forgotten Branches has its own family (Stale Branch, Detached HEAD, Cherry-Pick, Orphan Commit), and so does Sandbox
   Borders (Spinlock, Rootkit).
 - **8 bosses** with distinct phases: The Monolith, The Stakeholder, Friday Deploy, The Infinite Loop (later replaced by
