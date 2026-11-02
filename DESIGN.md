@@ -410,11 +410,11 @@ clearly marked hook additions.
 All milestones done. What shipped, compared with this doc:
 - **Items:** 45 (40 passive, 5 active). There are 9 extras beyond §9, e.g. Ctrl+C Ctrl+V, On-Call Pager,
   Garbage Collector, Feature Flag, Ctrl+Z (active), and the Extra GPU / Off-Brand GPU pair (added 2026-11-02). Locked chests cost an Approval.
-- **Enemies and bosses:** 13 spawnable enemies plus 3 minions. Each of the 6 bosses has two phases and telegraphed attacks.
+- **Enemies and bosses:** 16 spawnable enemies plus 4 minions (3 of the enemies are the Forgotten Branches family, added 2026-11-02). Each of the 6 bosses has two phases and telegraphed attacks.
 - **Layouts:** 30 (27 combat, the rest for special rooms), all validated.
 - **Presentation:**
   - 10 floor themes and an animated avatar with 4 directions plus hurt and item poses.
-  - 35 synthesized SFX and a procedural chiptune loop per floor, with a boss variant.
+  - 39 synthesized SFX and a procedural chiptune loop per floor, with a boss variant.
   - Pixel-font HUD and screens, including the "post-mortem" death report.
 - **QA:** headless-browser tests found zero console errors and held 60 fps with all items, 30 enemies and about 150 bullets.
   They also covered 300+ fuzzed floors, every enemy and boss, and multi-floor runs.
@@ -429,8 +429,8 @@ All milestones done. What shipped, compared with this doc:
   - Guaranteed Approval per floor from depth 2 (see §6, step 8). Before this, 55–80 % of floors had no
     Approval drop at all.
 - **Floor themes for spawns (2026-11-02):** enemies and bosses can be weighted per floor theme (`themes`) or limited
-  to certain themes (`themeOnly`), so a floor like Forgotten Branches can get its own enemy family. No content uses it
-  yet, and seeds are unchanged until some does. Details in AGENTS.md §4.
+  to certain themes (`themeOnly`), so a floor like Forgotten Branches can get its own enemy family. Details in
+  AGENTS.md §4. First users: Stale Branch, Detached HEAD and Cherry-Pick, which only appear on Forgotten Branches.
 
 ## 14. Stretch goals
 Gamepad support · procedural chiptune loop · seed entry on the title screen · trinkets · curse rooms

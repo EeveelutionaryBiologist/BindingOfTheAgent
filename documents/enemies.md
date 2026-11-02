@@ -17,6 +17,8 @@ For comparison, the player has 3 hearts at the start and moves at 240 px/s; enem
 ## Enemies
 
 HP is the floor-1 value. "First floor" is the earliest floor where an enemy can appear in normal rooms.
+Some enemies belong to one floor theme and only appear there; floor themes repeat every 10 floors, so
+"Forgotten Branches" means floors 3, 13, 23 and so on.
 
 | | Name | First floor | HP | Behaviour | Flavour text |
 |---|---|---|---|---|---|
@@ -34,6 +36,17 @@ HP is the floor-1 value. "First floor" is the earliest floor where an enemy can 
 | ![Zombie Process](images/enemy_zombie_process.png) | **Zombie Process** `zombie_process` | 3 | 14 | Chases you. When killed, it lies down for 1.8 s and gets back up once with half its HP, angrier | `kill -9` recommended. |
 | ![Scope Creep](images/enemy_scope_creep.png) | **Scope Creep** `scope_creep` | 4 | 10 | Slowly grows (up to 1.9× size and 1.6× HP). Once big enough, fires a ring of shots every 3.6 s. Max 2 per room | Just one more small feature. |
 
+### Forgotten Branches family
+
+These only appear on Forgotten Branches floors. They share a woody look with leaf colours, rustle and knock
+instead of clicking when hit, and shed leaves when they take damage.
+
+| | Name | First floor | HP | Behaviour | Flavour text |
+|---|---|---|---|---|---|
+| ![Stale Branch](images/enemy_stale_branch.png) | **Stale Branch** `stale_branch` | 3 (Forgotten Branches only) | 12 | A twig creature whose leaves go green → yellow → brown → bare over about 15 s while a "-N commits behind" counter above it counts up. Starts slow (60 px/s) and speeds up to 150 px/s. Once bare it says "STALE" and every 2–3 s shudders for 0.5 s (a coral line shows the direction), then lunges at you for a full heart. Kill it early. Max 3 per room | This branch is 47 commits behind main. And counting. |
+| ![Detached HEAD](images/enemy_detached_head.png) | **Detached HEAD** `detached_head` | 3 (Forgotten Branches only) | 12 + 6 | A stump on twig legs walks toward you; its head, a floating wooden tag with one eye, orbits behind it on a dashed tether and fires a slow amber shot every 2.2 s (its eye glows first). Kill the body first and the head panics ("HEAD detached!"), flying erratically and shooting more often. Kill the head first and the body wanders aimlessly ("where is my HEAD?"), only hurting on contact. Max 2 per room | You are in 'detached HEAD' state. The body did not get the memo. |
+| ![Cherry-Pick](images/enemy_cherry_pick.png) | **Cherry-Pick** `cherry_pick` | 3 (Forgotten Branches only) | 7 each | Always a pair joined by a stem (at most 140 px long), hopping around you. Hit one and the *other* gets angry for 3 s: darker, faster hops straight at you, and it spits a pit after puffing its cheeks. Kill one and the other stays angry for good. Max 4 per room | Hand-picked from another branch. Comes as a pair; hurt one and the other takes it personally. |
+
 ### Minions
 
 These are only spawned by other enemies or bosses.
@@ -41,6 +54,7 @@ These are only spawned by other enemies or bosses.
 | | Name | Spawned by | HP | Behaviour | Flavour text |
 |---|---|---|---|---|---|
 | ![Leaklet](images/enemy_leaklet.png) | **Leaklet** `leaklet` | Memory Leak (on death) | 4 | Chases you | A smaller leak. Still not freed. |
+| ![Detached HEAD's head](images/enemy_detached_head_tag.png) | **Detached HEAD (head)** `detached_head_tag` | Detached HEAD (spawns with it) | 6 | Orbits the body and shoots; panics when the body dies (see above) | Points at a commit. Any commit. Just not yours. |
 | ![Microservice](images/enemy_microservice.png) | **Microservice** `microservice` | The Monolith (phase 2) | 7 | Chases you | One of 47. Nobody knows which one is failing. |
 | ![Infinite Loop segment](images/boss_infinite_loop_segment.png) | **Loop segment** `loop_segment` | The Infinite Loop | — | Body segment of the worm; fires outward. Damage goes to the head's HP. Doesn't count for clearing the room | while (true) { suffer(); } |
 

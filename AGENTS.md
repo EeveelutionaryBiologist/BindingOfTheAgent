@@ -88,6 +88,13 @@ Live state is under `BOTA.game` (`.player`, `.room`, `.floor`, `.depth`, `.state
 - breakable objects use the floor's kinds, stay off spawn points, door fronts and the centre, never cut a room in two,
   and break from player shots and explosions but not from enemy shots;
 - the Off-Brand GPU turns about 12 % of shots into duds that deal no damage, and the GPU prices are 30¢ / 20¢;
+- the Forgotten Branches family (see §4):
+  - **Stale Branch** appears only on its floor, ages through its leaf stages, speeds up, counts up its counter,
+    and lunges only after the windup (2 damage, then back to 1); leaf effects and family sounds fire on hit and death;
+  - **Detached HEAD** spawns as a linked pair; body dies first → head panics, head dies first → body wanders with
+    contact damage only; the room clears only when both are dead, and `killAll` leaves nothing behind;
+  - **Cherry-Pick** rolls come in pairs that link up; a hit angers the *partner* for about 3 s (it spits a pit),
+    a widowed cherry stays angry, the stem never stretches past its leash, and a solo spawn grows a partner;
 - the door transition, special rooms, pause screen and death screen work.
 
 Screenshots go to `tools/out/` (scratch; don't commit or ship). One-time setup without admin rights:
@@ -157,12 +164,13 @@ depend on load order.
 | `Entity, Projectile, Bomb, Player, Enemy, Boss, AI, BossHelpers` | entities | gameplay classes and AI helpers |
 | `Pickup, Pedestal, Trapdoor, rollRandomPickup, openChest, rerollPickup, drawSpriteIfExists` | pickup | economy objects |
 | `syncFollowers, Duck, UnitTest` | familiar | followers (Rubber Duck, Unit Tests orbitals) |
-| `FX, Particle` | effects | visual effects API |
+| `FX, Particle, Leaf` | effects | visual effects API (`Leaf` = falling leaf, used by the branches family) |
 | `itemPrice, itemFx` | items | price helper, pop-up text fallback |
 | `themeKeyAt, themeWeight, enemyWeightAt, rollRoomEnemies, bossWeightAt, rollBoss, rollBossVaried, validateLayout` | data | spawn and layout logic (floor themes: §4) |
 | `Renderer, text`, `HUD, pixelText, pixelTextWidth`, `Screens` | render | drawing |
 | `Game`, `game`, `debug` | game, main | state machine instance and debug API |
 | `spriteTools` | sprites-core | `shiftRow, stamp, mirror, padRows` helpers for composing sprites |
+| `BRANCH_LEAVES` | sprites-enemies | shared Forgotten Branches palette (`outline, bark, green, yellow, brown`); use it for new family members |
 
 ### 3.4 Main loop and state machine (`main.js`, `game.js`)
 `main.js` sets up the canvas, scaling, input and storage, then runs `requestAnimationFrame`. Each frame it runs N fixed
@@ -290,7 +298,9 @@ The previous floor's boss is excluded, and bosses already met count `weight · t
   - An enemy marked `intangible` lets shots pass through; one marked `invulnerable` absorbs them.
 - **`Bomb`:** sits in `room.projectiles` with a 1.5 s fuse, then calls `game.explode(…, 110, 30)`. It hurts the player too.
 - **`Enemy`** (`entities/enemy.js`):
-  - **Behaviour contract:** `init`, `update`, `onDeath`, `onLethal`, `onExplosion`, `onHitPlayer`, `draw` / `drawUnder` / `drawOver`.
+  - **Behaviour contract:** `init`, `update`, `afterMove`, `onDeath`, `onLethal`, `onExplosion`, `onHitPlayer`,
+    `draw` / `drawUnder` / `drawOver`. `afterMove` is optional and runs **every** tick after movement and separation,
+    even during `spawnDelay` or while frozen (Cherry-Pick enforces its stem leash there).
   - **Common fields:** `e.state` (free scratch space), `e.params`, `spawnDelay` (0.5 s with no action and no contact
     damage), `frozen`.
   - **Optional flags:** `intangible, invulnerable, static, noKnockback, ignoreForClear, noHpBar, noSeparate`.
@@ -355,7 +365,7 @@ The previous floor's boss is excluded, and bosses already met count `weight · t
     `prop_{crate,bush,package,carton}` (frame 1 = damaged)
   - `item_<id>`, `pickup_<type>`, `pedestal`, `trapdoor`, `bomb`, `familiar_duck`, `orbital_test`
   - `enemy_<id>`, `boss_<id>`
-- **Count:** about 107 sprites. All of them are original pixel art written as ASCII in code.
+- **Count:** about 117 sprites. All of them are original pixel art written as ASCII in code.
 
 ### 3.11 Event bus (who emits → who listens)
 Payloads usually include `game, x, y` and often `color`.
@@ -365,6 +375,7 @@ Payloads usually include `game, x, y` and often `color`.
 | `shoot`, `familiarShoot` | player, familiar | audio |
 | `enemyHit`, `enemyDeath` (`boss`, `segment`) | enemy | audio, effects |
 | `enemyReveal`, `enemyRevive` | enemy behaviours | audio, effects |
+| `enemyShed` (`colors, count, big`), `enemyWindup` | Stale Branch | audio (`rustle`, `creak`), effects (falling leaves) |
 | `hudGlitch` (`kind`) | game (`glitchHud`) | audio |
 | `pipeAppear`, `pipeWarp`, `pipeArrive` (`to`) | game | audio, effects |
 | `propHit`, `propBreak` (`kind, color`) | game | audio, effects |
@@ -381,13 +392,16 @@ Rule: audio and effects **only listen**. Game logic never calls them directly, e
 are game state.
 
 ### 3.12 Audio (`core/audio.js`) and effects (`entities/effects.js`)
-- **Audio:** 35 synthesized SFX in total. Every sound has a name; `audio.names()` lists them.
+- **Audio:** 39 synthesized SFX in total. Every sound has a name; `audio.names()` lists them.
   - Bus routing: voices → sfx/music bus → master → compressor.
   - Per-name rate limits (`RATE`) and a 40-voice cap keep it from getting noisy.
   - There is a procedural chiptune loop per floor plus a boss variant. Mute is persisted in storage; there's no
     separate music toggle.
   - The AudioContext unlocks on the first key press.
-- **Effects:** use `B.FX.burst / ring / flash / smoke / debris / sparkles / text / shimmer / tint / later(game, delay, fn)`.
+- **Effects:** use `B.FX.burst / ring / flash / smoke / debris / sparkles / text / shimmer / tint / leaves / later(game, delay, fn)`.
+- **Enemy families:** an enemy def with `family: 'branches'` gets leafy hit/death effects (`FAMILY_FX` in `effects.js`)
+  and sounds (`FAMILY_SOUNDS` in `audio.js`: `leafHit`, `branchDeath`, plus `creak` on windup) instead of the
+  defaults. It's purely presentational; a new family needs an entry in both tables.
   Each room holds at most 300 effects; "important" ones (text, rings, flashes) push out the oldest particles.
   Effects use `Math.random` only.
 
@@ -428,8 +442,14 @@ Item conventions:
 | deprecation_warning | orbit | 3 | 12 |
 | zombie_process | revive | 3 | 14 |
 | scope_creep | grow | 4 | 10 |
+| stale_branch | stale | 3, Forgotten Branches only | 12 |
+| detached_head | detached_body (+ head `detached_tag`) | 3, Forgotten Branches only | 12 + 6 |
+| cherry_pick | cherry | 3, Forgotten Branches only | 7 (pair of 2) |
 
-Minions (`spawn: false`): `leaklet`, `microservice`, `loop_segment`.
+The last three are the **Forgotten Branches family** (`themeOnly: ['branches']`, `family: 'branches'`, weight 6 each).
+On floor 3 they make up about 24 % of enemies, and about 58 % of combat rooms have at least one (measured 2026-11-02).
+
+Minions (`spawn: false`): `leaklet`, `microservice`, `loop_segment`, `detached_head_tag` (Detached HEAD's head).
 
 Room spawning (`rollRoomEnemies`) works on a **budget**:
 - Each enemy has a `cost`. The budget is `min(11, 2.4 + 0.9·depth + rand(0..1.5))`, and a room starts with at most
@@ -449,7 +469,7 @@ excluded enemy is skipped entirely, including its bonus roll. Bosses use the sam
 in both `rollBoss` and `rollBossVaried`. Because themes repeat every 10 floors, a `branches` enemy also appears on
 floors 13, 23, … The roll functions take an optional `theme` argument (default: the depth's theme) for tests.
 Content without these fields rolls exactly as before (same RNG draws), so **existing seeds only change once you give
-an enemy or boss a theme field**; say so in that commit. Currently no content uses them.
+an enemy or boss a theme field**; say so in that commit. In use by the Forgotten Branches family (below).
 
 **Bosses** (base HP): `monolith` 360, `stakeholder` 250, `friday_deploy` 240, `infinite_loop` 300, `rogue_swarm` 4 × 80,
 `reviewer` 340 (floor 3+).
@@ -586,33 +606,8 @@ work again, the same file-ownership split works well.
       colours (amber `#ffcf4d`, coral `#ff7a5c`, cherry `#d64545`); green is only for harmless or friendly things.
     - **Sound and effects:** leafy rustles and wood knocks instead of metal clicks. Small falling-leaf particles on
       hits fit (`FX.burst` with leaf colours via a bus listener; effects only listen).
-    - **Detached HEAD** (pair: head about 6 HP, body about 12 HP, floor 3+):
-      - *Look:* two parts joined by a thin **dashed tether** (the detached pointer, drawn in `drawUnder` like the
-        Graphics Glitch's landing preview). The **head** is a floating wooden tag in the shape of an arrow label,
-        with one big eye; it bobs. The **body** is a stubby walking stump on twig legs with an empty glowing socket
-        on top, where the head belongs.
-      - *Behaviour:* the body walks slowly toward the player (`pathToward`); the head orbits it at about 80–140 px
-        and fires one slow aimed amber shot every ~2.2 s. Warning: its eye glows for 0.4 s first.
-        Kill the body first and the tether snaps ("HEAD detached!"): the head panics, flies erratically
-        and shoots more often, but has little HP. Kill the head first and the body wanders aimlessly
-        ("where is my HEAD?") and only does contact damage.
-      - *Code:* two enemies linked via `state.partner` (not `proxy`: they have separate HP); spawn the second in
-        the first one's `init`, as the Rogue Agent Swarm does with `game.spawnEnemy`. Count it as one spawn
-        (`pack`-like) in the room budget.
-    - **Stale Branch** (about 12 HP, floor 3+):
-      - *Look:* a twig creature carrying a few leaves. As it ages, the leaves go **green → yellow → brown → bare**
-        (switch `e.spriteName` between 3–4 variants), and dead leaves drop off as particles. A small counter floats
-        above it, e.g. "-12", for "commits behind" (`AI.say` or a `drawOver` with the pixel font), going up every
-        2–3 s.
-      - *Behaviour:* starts slow (~60 px/s) and gets faster with age, up to ~150 px/s after 20 s. Once bare, it
-        shudders for 0.5 s (warning), then lunges along a line at the player every few seconds. Killing it early
-        is easy, waiting is punished.
-    - **Cherry-Pick** (pair via `pack: 2`, about 7 HP each, floor 3+):
-      - *Look:* two cherries joined by a green stem that is drawn as a stretchy line between them (max ~140 px).
-        They hop in small arcs: a squash before the jump, a separate shadow, a squash on landing.
-      - *Behaviour:* they hop around the player. Hitting one makes the **other** angry for 3 s: darker red,
-        narrowed eyes, faster hops straight at you, and it spits a pit (one slow aimed shot, warning: puffed
-        cheeks). If one dies, the other stays angry for good.
+    - ~~Detached HEAD~~, ~~Stale Branch~~, ~~Cherry-Pick~~: done 2026-11-02 (§4). The rules above still apply to
+      new members; reuse `B.BRANCH_LEAVES` and set `family: 'branches'`.
     - **Orphan Commit** (about 6 HP, contact damage 0, `ignoreForClear`, rare bonus spawn like the Hallucination):
       - *Look:* a small white commit dot with a leaf hat and big sad eyes, trailing a faint dashed line (its lost
         history). A soft sparkle now and then hints that it's a reward, not a threat.
