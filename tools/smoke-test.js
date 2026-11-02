@@ -27,6 +27,9 @@
  *     Sperrzeit verhindert Ping-Pong
  *   - Stale Branch: nur auf Forgotten Branches; altert gruen -> gelb -> braun -> kahl (Laub faellt), wird schneller,
  *     Commit-Zaehler steigt; kahl: Warnung, dann Sprung mit vollem Herz; Laub-Effekte/-Sounds der Familie "branches"
+ *   - Cherry-Pick: Raum-Wuerfe liefern Kirschen paarweise, beim Bevoelkern gegenseitig verbunden; ein Treffer macht
+ *     den PARTNER ~3 s wuetend (er spuckt einen Kern), stirbt einer, bleibt der andere wuetend; der Stiel dehnt
+ *     sich nie ueber die Leine (auch nicht bei Rueckstoss); ein Einzel-Spawn bekommt einen Partner
  *   - Spezialraeume, Pause- und Todesbildschirm rendern
  * Screenshots landen in tools/out/ (nicht einchecken).
  *
@@ -868,6 +871,88 @@ const URL = 'file://' + path.join(ROOT, 'index.html').replace(/\\/g, '/') + '?se
     return out;
   });
   problems.push(...headProblems);
+
+  // --- Cherry-Pick: Paare aus dem Raum-Wurf, Wut des Partners, Witwen-Wut, Stiel-Leine ---------------
+  // Die Kirschen werden direkt (synchron) per e.update getaktet, damit Begleiter und Items aus den
+  // vorigen Bloecken (Ente, Unit Tests, ...) sie nicht zwischendurch treffen und die Wut verfaelschen.
+  problems.push(...await page.evaluate(() => {
+    const out = [];
+    const g = BOTA.game, DT = 1 / 60;
+    const def = BOTA.ENEMIES.cherry_pick;
+    const leash = def.params.leash;
+    const cherries = () => g.room.enemies.filter((e) => e.id === 'cherry_pick' && !e.dead);
+    // 1) Raum-Wurf auf Forgotten Branches: Kirschen immer paarweise, hoechstens maxPerRoom
+    let list = null, withCherries = 0;
+    for (let i = 0; i < 400; i++) {
+      const l = BOTA.rollRoomEnemies(new BOTA.RNG(BOTA.hashString('cherry' + i)), 3);
+      const n = l.filter((x) => x === 'cherry_pick').length;
+      if (!n) continue;
+      withCherries++;
+      if (n % 2 || n > def.maxPerRoom) out.push('Cherry-Pick: ' + n + ' Kirschen in einem Raum');
+      if (!list || n > list.filter((x) => x === 'cherry_pick').length) list = l;
+    }
+    if (!withCherries) { out.push('Cherry-Pick: kein Raum auf Etage 3 mit Kirschen'); return out; }
+    // 2) Echter Raum: Bevoelkern verbindet die Kirschen paarweise und gegenseitig, Stiel innerhalb der Leine
+    g.enterFloor(3);
+    const cell = [...g.floor.cells.values()].find((c) => c.type === 'normal');
+    cell.room.plannedEnemies = list.slice();
+    cell.room.looseLoot = []; cell.room.hasReadme = false;
+    g.teleport(cell.room);
+    BOTA.debug.god(true);
+    const cs = cherries();
+    for (const e of cs) {
+      const o = e.state.partner;
+      if (!o || o.state.partner !== e || o === e) { out.push('Cherry-Pick: Kirsche ohne gegenseitigen Partner'); break; }
+      if (e.state.lead === o.state.lead) out.push('Cherry-Pick: Paar ohne genau einen Lead');
+      if (Math.hypot(e.x - o.x, e.y - o.y) > leash + 1) out.push('Cherry-Pick: Paar startet ueber der Leine');
+    }
+    // 3) Treffer auf a -> b (der Partner) ist ~3 s wuetend und spuckt einen Kern, a selbst bleibt ruhig
+    const a = cs[0], b = a.state.partner;
+    let maxD = 0;
+    const step = (n, pair) => {
+      for (let i = 0; i < n; i++) {
+        for (const e of pair) if (!e.dead) e.update(DT, g);
+        if (!pair[0].dead && !pair[1].dead) maxD = Math.max(maxD, Math.hypot(pair[0].x - pair[1].x, pair[0].y - pair[1].y));
+      }
+    };
+    a.spawnDelay = b.spawnDelay = 0;
+    a.frozen = b.frozen = 0; // Items wie Daily Standup frieren beim Betreten ein
+    // Spieler in die von b am weitesten entfernte Ecke (gespuckt wird erst ab ~70 px Abstand)
+    const corners = [[100, 100], [860, 100], [100, 476], [860, 476]];
+    const far = corners.reduce((m, c) => (Math.hypot(c[0] - b.x, c[1] - b.y) > Math.hypot(m[0] - b.x, m[1] - b.y) ? c : m));
+    const fp = g.nearestFreePos(far[0], far[1]);
+    g.player.x = fp.x; g.player.y = fp.y;
+    const shotsBefore = g.room.projectiles.filter((p) => p.team === 'enemy').length;
+    a.hurt(1, g);
+    step(2, [a, b]);
+    if (!(b.state.angry > 2.5) || a.state.angry > 0) out.push('Cherry-Pick: Treffer macht nicht den Partner wuetend (a ' + a.state.angry + ', b ' + b.state.angry + ')');
+    step(150, [a, b]);
+    if (!(b.state.angry > 0)) out.push('Cherry-Pick: Wut endet zu frueh');
+    if (g.room.projectiles.filter((p) => p.team === 'enemy').length <= shotsBefore) out.push('Cherry-Pick: wuetende Kirsche spuckt keinen Kern');
+    step(60, [a, b]);
+    if (b.state.angry > 0) out.push('Cherry-Pick: Wut haelt laenger als ~3 s');
+    // 4) Leine haelt auch bei kraeftigem Rueckstoss direkt vom Partner weg und wenn a weit weggesetzt wird
+    a.knockback(a.x - b.x || 1, a.y - b.y, 2500);
+    step(60, [a, b]);
+    const away = g.nearestFreePos(b.x < 480 ? 860 : 100, b.y < 288 ? 476 : 100);
+    a.x = away.x; a.y = away.y;
+    step(1, [a, b]);
+    if (maxD > leash + 1) out.push('Cherry-Pick: Stiel gedehnt auf ' + maxD.toFixed(1) + ' px (max ' + leash + ')');
+    // 5) Stirbt a, bleibt b fuer immer wuetend (ohne Partner)
+    a.die(g);
+    step(400, [a, b]);
+    if (b.state.partner || !b.state.widowed || !(b.state.angry > 0)) out.push('Cherry-Pick: Ueberlebende ist nicht dauerhaft wuetend');
+    // 6) Einzeln erzeugt (Debug-Spawn): waechst sich einen Partner
+    BOTA.debug.killAll();
+    const solo = BOTA.debug.spawn('cherry_pick', 480, 300);
+    solo.spawnDelay = 0;
+    solo.update(DT, g);
+    if (!solo.state.partner || solo.state.partner.state.partner !== solo || cherries().length !== 2) out.push('Cherry-Pick: Einzel-Spawn bekommt keinen Partner');
+    for (let i = 0; i < 3; i++) BOTA.debug.killAll();
+    g.room.projectiles.length = 0;
+    return out;
+  }));
+
   // Mehrfach toedlicher Schaden, weil Items wie "Retry with Backoff" den ersten Tod abfangen
   await page.evaluate(() => {
     const g = BOTA.game; BOTA.debug.god(false);
