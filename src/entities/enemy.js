@@ -27,10 +27,11 @@
  *   e.sayText/sayT kurzer schwebender Text ueber dem Gegner (siehe AI.say)
  *
  * Verhalten in dieser Datei: wander, chase, fly_chase, split, blink, charge, turret, orbit, shooter,
- * revive, grow, mimic, zigzag, glitch. Boss-Verhalten (und das Wurm-Segment) stehen in entities/boss.js.
+ * revive, grow, mimic, zigzag, glitch, stale (Forgotten Branches). Boss-Verhalten (und das Wurm-Segment) stehen in entities/boss.js.
  *
  * Zusaetzliche Bus-Events (nur informativ, z. B. fuer Sound/Effekte): 'enemyRevive' (Zombie steht auf),
- * 'enemyReveal' (Hallucination enttarnt sich); aus boss.js: 'bossPhase', 'bossStomp', 'bossBounce'.
+ * 'enemyReveal' (Hallucination enttarnt sich), 'enemyShed' (Stale Branch verliert Laub: { colors, count, big }),
+ * 'enemyWindup' (Stale Branch zittert vor dem Sprung); aus boss.js: 'bossPhase', 'bossStomp', 'bossBounce'.
  * 'enemyDeath' kann zusaetzlich { segment: true } tragen (platzende Wurm-Segmente, ohne Kill-Zaehlung).
  *
  * SICHERHEIT: reine Spiellogik, kein DOM-Zugriff (ausser Canvas-Zeichnen), kein eval/innerHTML,
@@ -1112,6 +1113,168 @@
         o.speed *= 1.3;
         AI.say(o, 'won the race', 1.0, '#ffcf4d');
       }
+    },
+  };
+
+  // ===========================================================================
+  // Forgotten Branches: Stale Branch
+  // ===========================================================================
+
+  // Altersstufen: Sprite-Suffix, Laubfarben (B.BRANCH_LEAVES-Schluessel) und Farbe des Commit-Zaehlers.
+  // Gelb/Braun-Zaehler bleiben bewusst "neutral" warm; erst kahl (= gefaehrlich) wird er Bernstein.
+  const STALE_STAGES = [
+    { suffix: '', leaves: 'green', count: '#c8e6a0' },
+    { suffix: '_yellow', leaves: 'yellow', count: '#f0d264' },
+    { suffix: '_brown', leaves: 'brown', count: '#d9a066' },
+    { suffix: '_bare', leaves: null, count: '#ffcf4d' },
+  ];
+
+  /** Altersstufe 0..3 aus dem Alter (Anzahl ueberschrittener Schwellen in params.stageAt) */
+  function staleStage(e) {
+    const at = e.params.stageAt || [5, 10, 15];
+    let st = 0;
+    while (st < at.length && e.state.age >= at[st]) st++;
+    return Math.min(st, STALE_STAGES.length - 1);
+  }
+
+  /** Laubfarben einer Stufe (Fallback, falls die Sprite-Datei sie nicht registriert hat) */
+  function staleLeafColors(stage) {
+    const key = STALE_STAGES[stage] && STALE_STAGES[stage].leaves;
+    const BL = B.BRANCH_LEAVES;
+    return (key && BL && BL[key]) || ['#6f9a3c'];
+  }
+
+  /**
+   * Stale Branch — altert sichtbar und wird dabei schneller; kahl springt er in gerader Linie.
+   *
+   *   chase   laeuft per Flow-Field auf den Spieler zu; Tempo steigt linear von e.speed auf params.maxSpeed
+   *           (nach params.rampTime Sekunden Alter). Kahl laeuft nebenher der Sprung-Countdown.
+   *   windup  0.5 s Zittern auf der Stelle, Richtung ist schon fest (Ziellinie wird gezeichnet) -> 'enemyWindup'
+   *   lunge   gerader Sprint mit params.lungeSpeed bis zur Wand oder params.lungeTime; dabei kein Knockback und
+   *           ein volles Herz Kontaktschaden (Charge-Konvention wie Merge Conflict, DESIGN.md §5)
+   *   recover kurz stehen bleiben, dann wieder chase mit neuer Pause (game.rng)
+   *
+   * Das Alter laeuft nur, waehrend das Verhalten aktiv ist: Spawn-Verzoegerung und Einfrieren (Stop Generating,
+   * Daily Standup) halten es an. Bus-Events (nur fuer Effekte/Sound): 'enemyShed' { colors, count, big }
+   * (Blaetter fallen: big = Stufenwechsel, sonst einzelnes Blatt) und 'enemyWindup' (Sprung-Warnung).
+   * params: siehe data/enemies.js (stale_branch)
+   */
+  B.BEHAVIORS.stale = {
+    init(e, game) {
+      const s = e.state, P = e.params;
+      s.age = game.rng.float(0, P.headStart || 0);  // leicht versetztes Altern mehrerer Exemplare
+      s.base = game.rng.int(1, 4);                  // Start-Rueckstand in Commits
+      s.stage = staleStage(e);
+      s.mode = 'chase';
+      s.cd = 0.8;                                   // erster Sprung kurz nach dem Kahlwerden
+      s.leafT = 0.9;                                // Takt fuer einzelne fallende Blaetter (gelb/braun)
+      s.pop = 0;                                    // kurzes Aufploppen des Zaehlers beim Hochzaehlen
+      s.ticks = 0;
+      e.sayOffset = 16;                             // Sprechtext ueber dem Commit-Zaehler
+      e.spriteName = e.def.sprite + STALE_STAGES[s.stage].suffix;
+    },
+    update(e, dt, game) {
+      const s = e.state, P = e.params, p = game.player;
+      s.age += dt;
+      if (s.pop > 0) s.pop -= dt;
+
+      // Rueckstand waechst: alle tick Sekunden ein Commit mehr (Zaehler ploppt kurz auf)
+      const ticks = Math.floor(s.age / (P.tick || 2.5));
+      if (ticks !== s.ticks) { s.ticks = ticks; s.pop = 0.18; }
+
+      // Altersstufe wechseln: Sprite tauschen, die Blaetter der alten Stufe fallen ab
+      const st = staleStage(e);
+      if (st !== s.stage) {
+        B.bus.emit('enemyShed', { game, enemy: e, x: e.x, y: e.y - 14, colors: staleLeafColors(s.stage), count: 7, big: true });
+        s.stage = st;
+        e.spriteName = e.def.sprite + STALE_STAGES[st].suffix;
+        if (st === STALE_STAGES.length - 1) { s.cd = 0.8; AI.say(e, 'STALE', 1.0, '#ff7a5c'); }
+      } else if (st === 1 || st === 2) {
+        // Welkes Laub rieselt nebenbei (rein optisch; fester Takt statt Zufall, damit kein RNG-Zug noetig ist)
+        s.leafT -= dt;
+        if (s.leafT <= 0) {
+          s.leafT = 0.8;
+          B.bus.emit('enemyShed', { game, enemy: e, x: e.x, y: e.y - 14, colors: staleLeafColors(st), count: 1, big: false });
+        }
+      }
+
+      const ramp = B.M.clamp(s.age / (P.rampTime || 20), 0, 1);
+      const spd = B.M.lerp(e.speed, P.maxSpeed || 150, ramp);
+      const bare = st === STALE_STAGES.length - 1;
+
+      switch (s.mode) {
+        case 'chase':
+          AI.pathToward(e, game, p.x, p.y, spd);
+          if (!bare) break;
+          s.cd -= dt;
+          if (s.cd > 0) break;
+          if (AI.dist(e, p) < (P.lungeRange || 460) && game.room.lineOfSight(e.x, e.y, p.x, p.y)) {
+            s.mode = 'windup';
+            s.t = P.windup || 0.5;
+            s.ang = AI.angleTo(e, p); // Richtung steht ab hier fest — seitlich ausweichen ist die Antwort
+            B.bus.emit('enemyWindup', { game, enemy: e, x: e.x, y: e.y });
+          } else {
+            s.cd = 0.3; // kein freier Weg: gleich nochmal pruefen
+          }
+          break;
+        case 'windup':
+          AI.stop(e);
+          s.t -= dt;
+          if (s.t <= 0) {
+            s.mode = 'lunge';
+            s.t = P.lungeTime || 0.42;
+            s.bumped = false;
+            e.noKnockback = true;
+            e.contactDamage = 2;
+          }
+          break;
+        case 'lunge': {
+          const ls = P.lungeSpeed || 430;
+          e.vx = Math.cos(s.ang) * ls;
+          e.vy = Math.sin(s.ang) * ls;
+          s.t -= dt;
+          if (s.bumped || s.t <= 0) {
+            if (s.bumped) game.shake(2, 0.1);
+            s.mode = 'recover';
+            s.t = P.recover || 0.5;
+            e.noKnockback = false;
+            e.contactDamage = e.def.contactDamage !== undefined ? e.def.contactDamage : 1;
+          }
+          break;
+        }
+        case 'recover':
+          AI.stop(e);
+          s.t -= dt;
+          if (s.t <= 0) {
+            s.mode = 'chase';
+            s.cd = game.rng.float(P.cdMin || 2.2, P.cdMax || 3.4);
+          }
+          break;
+      }
+    },
+    draw(e, ctx) {
+      const s = e.state, P = e.params;
+      const winding = s.mode === 'windup';
+      const k = winding ? 1 - Math.max(0, s.t) / (P.windup || 0.5) : 0;
+      // Zittern vor dem Sprung (quer zur Sprungrichtung, damit es nicht wie Anlauf aussieht)
+      const sh = winding ? Math.sin(e.t * 75) * (1.5 + 2 * k) : 0;
+      const dx = winding ? -Math.sin(s.ang) * sh : 0, dy = winding ? Math.cos(s.ang) * sh : 0;
+      // Ziellinie am Boden: warm (Koralle), wird zum Absprung hin deutlicher
+      if (winding) AI.drawRays(ctx, e.x, e.y, [s.ang], e.r + 6, 60 + 110 * k, 0.35 + 0.55 * k, '#ff7a5c');
+      AI.drawBody(e, ctx, { dx, dy, frame: s.mode === 'lunge' ? 1 : undefined });
+      // Commit-Zaehler "-N" ueber dem Kopf (Pixelschrift); blinkt beim Zittern korallrot
+      if (B.pixelText && e.spawnDelay <= 0) {
+        const stage = STALE_STAGES[s.stage] || STALE_STAGES[0];
+        const col = winding && Math.floor(e.t * 16) % 2 ? '#ff7a5c' : stage.count;
+        const n = s.base + s.ticks;
+        const pop = s.pop > 0 ? 1 + s.pop * 2 : 1;
+        ctx.save();
+        ctx.translate(e.x, e.y - e.r - 28);
+        ctx.scale(pop, pop);
+        B.pixelText(ctx, '-' + n, 0, 0, { scale: 2, align: 'center', baseline: 'middle', color: col, outline: '#16240f', alpha: e.alpha });
+        ctx.restore();
+      }
+      AI.drawSay(e, ctx);
     },
   };
 

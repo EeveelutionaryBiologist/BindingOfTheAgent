@@ -27,7 +27,10 @@
   const MUSIC_VOL = 0.13;   // Musik deutlich leiser als Effekte
 
   // Mindestabstand (s) zwischen zwei Wiedergaben desselben Effekts
-  const RATE = { propHit: 0.05, propBreak: 0.04, shoot: 0.045, hit: 0.035, splat: 0.07, coin: 0.03, denied: 0.25, enemyDeath: 0.03, rock: 0.05, doorOpen: 0.1, doorClose: 0.1 };
+  const RATE = { propHit: 0.05, propBreak: 0.04, shoot: 0.045, hit: 0.035, splat: 0.07, coin: 0.03, denied: 0.25, enemyDeath: 0.03, rock: 0.05, doorOpen: 0.1, doorClose: 0.1,
+    leafHit: 0.04, branchDeath: 0.03, rustle: 0.2, creak: 0.12 };
+  // Effekte, die bei vielen gleichzeitigen Stimmen zuerst wegfallen (dauernd feuernde Treffer/Schuesse)
+  const SPAMMY = { shoot: true, hit: true, splat: true, leafHit: true };
   const lastPlay = Object.create(null);
 
   const mtof = (m) => 440 * Math.pow(2, (m - 69) / 12);
@@ -129,6 +132,29 @@
       voice({ f: 700, f2: 90, dur: 0.35, type: 'sine', vol: 0.12 });
       noise({ dur: 0.3, vol: 0.08, filter: 'bandpass', f: 600, f2: 200, q: 3 });
       voice({ f: 180, f2: 420, dur: 0.12, type: 'square', vol: 0.05, delay: 0.32 });
+    },
+    // Gegner-Familie "branches" (Forgotten Branches): Holz und Laub statt Metall-Klicks
+    // Treffer: kurzes Laubrascheln + hohles Holz-"Tock"
+    leafHit() {
+      noise({ dur: 0.09, vol: 0.07, filter: 'bandpass', f: 3800, f2: 2200, q: 1.2 });
+      voice({ f: 260 * rnd(0.92, 1.08), f2: 150, dur: 0.045, type: 'triangle', vol: 0.08 });
+    },
+    // Tod: Knacken (Ast bricht), dumpfer Holzschlag, dann ein laengeres Rascheln (Laub faellt)
+    branchDeath() {
+      noise({ dur: 0.04, vol: 0.12, filter: 'highpass', f: 2500 });
+      voice({ f: 900, f2: 180, dur: 0.06, type: 'square', vol: 0.045 });
+      voice({ f: 180, f2: 90, dur: 0.12, type: 'triangle', vol: 0.1, delay: 0.02 });
+      noise({ dur: 0.35, vol: 0.06, filter: 'bandpass', f: 3200, f2: 1400, q: 0.9, delay: 0.03 });
+    },
+    // Blaetter fallen ab (Stale Branch wechselt die Altersstufe): leises, doppeltes Rascheln
+    rustle() {
+      noise({ dur: 0.28, vol: 0.045, filter: 'bandpass', f: 3000, f2: 1800, q: 0.9 });
+      noise({ dur: 0.2, vol: 0.03, filter: 'bandpass', f: 4200, f2: 2600, q: 1.1, delay: 0.09 });
+    },
+    // Sprung-Warnung (Stale Branch zittert): knarzendes Holz
+    creak() {
+      voice({ f: 95, f2: 140, dur: 0.42, type: 'sawtooth', vol: 0.035, vib: 18, vibDepth: 6, lin: true });
+      noise({ dur: 0.4, vol: 0.03, filter: 'bandpass', f: 600, q: 4 });
     },
     // Zerstoerbare Objekte: kurzes "Tock" beim Treffer, Krachen + Splittern beim Zerbrechen
     propHit() { voice({ f: 320, f2: 180, dur: 0.05, type: 'triangle', vol: 0.07 }); },
@@ -380,7 +406,7 @@
     play(name) {
       const fn = this.sounds[name];
       if (!fn || !ctx || this.muted) return false;
-      if (activeVoices > MAX_VOICES && (name === 'shoot' || name === 'hit' || name === 'splat')) return false;
+      if (activeVoices > MAX_VOICES && SPAMMY[name]) return false;
       const t = ctx.currentTime;
       const gap = RATE[name] !== undefined ? RATE[name] : 0.015;
       if (lastPlay[name] !== undefined && t - lastPlay[name] < gap) return false;
@@ -424,15 +450,29 @@
   };
   const isCurrentRoom = (room) => !B.game || !room || B.game.room === room;
 
+  /**
+   * Gegner-Familien (def.family) mit eigenen Sounds: hit / death ersetzen 'hit' / 'enemyDeath',
+   * windup gehoert zu 'enemyWindup'. Bosse behalten ihren Todes-Sound. Gegenstueck: FAMILY_FX in effects.js.
+   */
+  const FAMILY_SOUNDS = {
+    branches: { hit: 'leafHit', death: 'branchDeath', windup: 'creak' },
+  };
+  const famSound = (e, kind) => {
+    const fam = e && e.enemy && e.enemy.def && FAMILY_SOUNDS[e.enemy.def.family];
+    return (fam && fam[kind]) || null;
+  };
+
   on('shoot', () => p('shoot'));
-  on('enemyHit', () => p('hit'));
+  on('enemyHit', (e) => p(famSound(e, 'hit') || 'hit'));
   on('enemyDeath', (e) => {
     if (e.boss) {
       p('bossDeath');
       // Nach dem Boss zurueck zur normalen Etagenmusik
       if (ctx && music.boss) setTimeout(() => { if (music.boss) music.start(music.depth, false); }, 1600);
-    } else p('enemyDeath');
+    } else p(famSound(e, 'death') || 'enemyDeath');
   });
+  on('enemyShed', (e) => { if (e.big) p('rustle'); });  // Stale Branch verliert sein Laub
+  on('enemyWindup', (e) => { const n = famSound(e, 'windup'); if (n) p(n); });
   on('playerHurt', () => p('hurt'));
   on('playerDeath', () => { p('playerDeath'); music.stop(0.6); });
   on('pickup', (e) => p(PICKUP_SOUND[e.type] || 'pickup'));

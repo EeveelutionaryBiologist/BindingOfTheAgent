@@ -826,4 +826,85 @@
       '.kkkk....kkkk.',
     ],
   });
+  // ===========================================================================
+  // Forgotten Branches: Stale Branch
+  // ===========================================================================
+  // Gemeinsame Farbwelt der "branches"-Familie (Etage Forgotten Branches): Rinde, Laub und die dunkelgruene
+  // Kontur des Busch-Objekts (prop_bush) statt Schwarz. Gruen ist dort nur fuer Harmloses/Laub — Gefahr
+  // (Schuesse, Telegraphen, wuetende Augen) ist warm (Bernstein/Koralle/Kirsche).
+  // B.BRANCH_LEAVES wird auch von den Laub-Partikeln (effects.js) und dem Stale-Branch-Verhalten genutzt,
+  // damit fallende Blaetter exakt die Farben der Sprites haben.
+  B.BRANCH_LEAVES = {
+    outline: '#16240f',
+    bark: ['#5a3d22', '#a3602c'],                 // dunkle / helle Rinde
+    green: ['#4f7a30', '#6f9a3c', '#86ad4a'],     // je [dunkel, mittel, hell]
+    yellow: ['#a8822a', '#d6ae3a', '#f0d264'],
+    brown: ['#6b4423', '#93602e', '#b8803f'],
+  };
+
+  // Stale Branch — Zweig-Kreatur mit erhobenen Aesten; das Laub altert gruen -> gelb -> braun -> kahl.
+  // Aufbau: kahles Geruest (Rinde, Gesicht im Stamm, zwei Beine) + Laub-Ebene, die darueber gestempelt wird
+  // ('.' = Geruest bleibt sichtbar). So teilen sich alle Altersstufen dieselbe Silhouette.
+  // Zeichen: k Kontur, b/B Rinde dunkel/hell, w Augenweiss, e Pupille, m Mund; Laub: o Kontur, d/l/L dunkel/mittel/hell.
+  const STALE_SKEL = [
+    '...............',
+    '...............',
+    '...............',
+    '..B.........B..',
+    '...B...B...B...',
+    '....B..B..B....',
+    '.....B.B.B.....',
+    '.....kBBBk.....',
+    '....kbBBBbk....',
+    '....kwebwek....',
+    '....kbbBbbk....',
+    '....kbbmbbk....',
+    '.....kbbbk.....',
+    '.....kbbbk.....',
+  ];
+  // Beine (zwei Lauf-Frames): Zweig-Beinchen, die abwechselnd ausschreiten
+  const STALE_LEGS_A = ['....kBk.kBk....', '...kBk...kBk...'];
+  const STALE_LEGS_B = ['.....kBkBk.....', '....kBk.kBk....'];
+  // Volles Laub: drei Buesche an den Astspitzen (links, oben, rechts) — linke Haelfte, gespiegelt
+  const STALE_LEAVES_FULL = symOdd([
+    '.....ooo',
+    '.oo.oLLl',
+    'oLLooLll',
+    'oLlldodd',
+    '.oddo...',
+    '..oo....',
+  ]);
+  // Welkes Laub (braun): rechter Busch schon abgefallen, die anderen ausgeduennt
+  const STALE_LEAVES_SPARSE = [
+    '......ooo......',
+    '.oo..oLldo.....',
+    'oLdo..odo......',
+    'oldo...........',
+    '.oo............',
+    '...............',
+  ];
+  /** Laub-Ebene ueber das Geruest stempeln ('.' in der Ebene = Geruest bleibt) */
+  function overlay(base, layer) {
+    return base.map((row, r) => {
+      const top = layer[r];
+      if (!top) return row;
+      let out = '';
+      for (let c = 0; c < row.length; c++) out += top[c] && top[c] !== '.' ? top[c] : row[c];
+      return out;
+    });
+  }
+  function staleFrames(leaves) {
+    const body = leaves ? overlay(STALE_SKEL, leaves) : STALE_SKEL;
+    return [body.concat(STALE_LEGS_A), body.concat(STALE_LEGS_B)];
+  }
+  const BL = B.BRANCH_LEAVES;
+  const STALE_PAL = { k: BL.outline, o: BL.outline, b: BL.bark[0], B: BL.bark[1], w: '#f3ead8', e: BL.outline, m: '#2a1a0e' };
+  const leafPal = (cols) => Object.assign({}, STALE_PAL, { d: cols[0], l: cols[1], L: cols[2] });
+  B.defineSprite('enemy_stale_branch', { palette: leafPal(BL.green), scale: 4, frames: staleFrames(STALE_LEAVES_FULL) });
+  B.defineSprite('enemy_stale_branch_yellow', { palette: leafPal(BL.yellow), scale: 4, frames: staleFrames(STALE_LEAVES_FULL) });
+  B.defineSprite('enemy_stale_branch_brown', { palette: leafPal(BL.brown), scale: 4, frames: staleFrames(STALE_LEAVES_SPARSE) });
+  // Kahl: nur noch das Geruest — und die Pupillen gluehen kirschrot (Warnung: jetzt springt er)
+  B.defineSprite('enemy_stale_branch_bare', {
+    palette: Object.assign({}, STALE_PAL, { e: '#d64545' }), scale: 4, frames: staleFrames(null),
+  });
 })(window.BOTA);
