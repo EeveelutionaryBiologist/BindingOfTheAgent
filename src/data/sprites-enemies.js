@@ -775,10 +775,8 @@
   });
 
   // The Infinite Loop — Kopf (zeigt nach rechts, wird in Fahrtrichtung gedreht); Frame 2 = Maul offen
-  B.defineSprite('boss_infinite_loop', {
-    palette: { k: K, c: '#3fb8c9', d: '#237a87', l: '#8fe3ee', w: W, r: '#e04848', R: '#7a1f2a' },
-    scale: 4,
-    frames: [
+  const LOOP_HEAD_PAL = { k: K, c: '#3fb8c9', d: '#237a87', l: '#8fe3ee', w: W, r: '#e04848', R: '#7a1f2a' };
+  const LOOP_HEAD_FRAMES = [
       [
         '.....kkkkk......',
         '...kkcccccckk...',
@@ -809,23 +807,20 @@
         '...kkcccccckk...',
         '.....kkkkk......',
       ],
-    ],
-  });
+    ];
+  B.defineSprite('boss_infinite_loop', { palette: LOOP_HEAD_PAL, scale: 4, frames: LOOP_HEAD_FRAMES });
 
   // Infinite-Loop-Segment — ein ∞-Glied (wird entlang des Koerpers gedreht)
-  B.defineSprite('boss_infinite_loop_segment', {
-    palette: { k: K, c: '#3fb8c9', l: '#8fe3ee', d: '#237a87' },
-    scale: 4,
-    rows: [
-      '.kkkk....kkkk.',
-      'kcllck..kcllck',
-      'kc..kckkck..dk',
-      'kc...kcck...dk',
-      'kc..kckkck..dk',
-      'kcddck..kcddck',
-      '.kkkk....kkkk.',
-    ],
-  });
+  const LOOP_SEG_ROWS = [
+    '.kkkk....kkkk.',
+    'kcllck..kcllck',
+    'kc..kckkck..dk',
+    'kc...kcck...dk',
+    'kc..kckkck..dk',
+    'kcddck..kcddck',
+    '.kkkk....kkkk.',
+  ];
+  B.defineSprite('boss_infinite_loop_segment', { palette: { k: K, c: '#3fb8c9', l: '#8fe3ee', d: '#237a87' }, scale: 4, rows: LOOP_SEG_ROWS });
   // ===========================================================================
   // Forgotten Branches: Stale Branch
   // ===========================================================================
@@ -1265,4 +1260,50 @@
     palette: MOUND_PAL, scale: 4,
     frames: [MOUND, stampRows(MOUND, [[2, 7, 'k'], [3, 7, 'k'], [3, 8, 'k'], [4, 6, 'k'], [4, 9, 'k'], [5, 9, 'k'], [2, 10, 'D']])],
   });
+
+  // ===========================================================================
+  // The Nested Infinite Loop (Boss ab Etage 8)
+  // ===========================================================================
+  // Die drei Ringe nutzen Kopf und Glied der Infinite Loop in drei Farben: aussen Tuerkis (wie das Original),
+  // Mitte Violett, innen Koralle. Ihre Schuesse haben dieselben Farben (entities/boss.js), so sieht man sofort,
+  // welcher Ring gerade feuert.
+  const NEST_COLORS = [
+    { c: '#3fb8c9', d: '#237a87', l: '#8fe3ee' },
+    { c: '#9b7bf0', d: '#5e45b0', l: '#cdb8ff' },
+    { c: '#ff6a5c', d: '#b03a30', l: '#ffb3a8' },
+  ];
+  NEST_COLORS.forEach((col, k) => {
+    B.defineSprite('boss_nested_loop_head_' + k, { palette: Object.assign({}, LOOP_HEAD_PAL, col), scale: 4, frames: LOOP_HEAD_FRAMES });
+    B.defineSprite('boss_nested_loop_segment_' + k, { palette: Object.assign({ k: K }, col), scale: 4, rows: LOOP_SEG_ROWS });
+  });
+  // Emblem (Intro-Karte, Inhaltsliste): drei ineinanderliegende, gegliederte Ringe mit je einem Auge (Kopf).
+  // Prozedural: Ringband um Radius R, Kontur aussen/innen, Luecken zwischen den Gliedern.
+  (function () {
+    const N = 26, C = (N - 1) / 2;
+    const RINGS = [{ R: 11, n: 14, k: 0 }, { R: 7.2, n: 9, k: 1 }, { R: 3.6, n: 5, k: 2 }];
+    const rows = [];
+    for (let y = 0; y < N; y++) {
+      let row = '';
+      for (let x = 0; x < N; x++) {
+        const d = Math.hypot(x - C, y - C);
+        const a = Math.atan2(y - C, x - C);
+        let ch = '.';
+        for (const rg of RINGS) {
+          const off = Math.abs(d - rg.R);
+          const u = (((a + Math.PI) / (Math.PI * 2)) * rg.n) % 1;
+          if (off <= 0.9 && u > 0.12) ch = ['a', 'b', 'c'][rg.k];
+          else if (off <= 1.6 && u > 0.06 && ch === '.') ch = 'k';
+        }
+        // Auge (Kopf) oben auf jedem Ring
+        for (const rg of RINGS) if (Math.abs(x - C) < 0.6 && Math.abs(y - (C - rg.R)) < 0.6) ch = 'w';
+        row += ch;
+      }
+      rows.push(row);
+    }
+    B.defineSprite('boss_nested_loop', {
+      palette: { k: K, a: NEST_COLORS[0].c, b: NEST_COLORS[1].c, c: NEST_COLORS[2].c, w: W },
+      scale: 4,
+      rows,
+    });
+  })();
 })(window.BOTA);

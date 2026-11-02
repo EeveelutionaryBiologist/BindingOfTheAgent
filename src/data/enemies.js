@@ -342,6 +342,16 @@
     desc: 'Part of the lock. Not the part you want to hit.',
   };
 
+  // Ringteil der Nested Infinite Loop (Kopf oder Glied eines der drei Ringe): vom Boss positioniert (static),
+  // Schaden geht an den gemeinsamen Pool (proxy). Nur der aeussere lebende Ring ist greifbar; die inneren drehen
+  // sich geisterhaft mit (intangible, kein Kontaktschaden). Sprite je Ring und Rolle setzt das Verhalten.
+  E.nested_loop_part = {
+    name: 'The Nested Infinite Loop', hp: 1, r: 18, speed: 0, contactDamage: 1, flying: true,
+    behavior: 'nested_part', sprite: 'boss_nested_loop_segment_0', color: '#3fb8c9', noFlip: true,
+    spawn: false, cost: 0,
+    desc: 'One iteration of many. Of many. Of many.',
+  };
+
   // Arm-Segment der Octopus Merge (Boss, Forgotten Branches): 5 pro Arm, vom Knoten positioniert (static).
   // Leitet Schaden an den Knoten weiter (proxy, 60 %). Nur das Spitzen-Segment ist sichtbar (der Commit-Punkt,
   // der schiesst); den Holzarm selbst zeichnet der Boss, und er prueft auch den Kontaktschaden entlang des

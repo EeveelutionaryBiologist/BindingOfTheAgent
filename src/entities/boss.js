@@ -28,6 +28,9 @@
  *                                    Segment-Enemies, proxy). Arme schwingen und schlagen (Faecher- bzw.
  *                                    Ziellinien-Telegraph), Spitzen schiessen; je 12 % HP verschmilzt ein Arm,
  *                                    der Rest wird schneller; ab 50 % "CONFLICT": Marker + zwei Schussstroeme.
+ *   nested_loop    The Nested Infinite Loop — ab Etage 8 statt der Infinite Loop: drei Ringe (gross/mittel/klein)
+ *                                    um einen Mittelpunkt, gemeinsamer HP-Pool; nur der aeussere lebende Ring
+ *                                    feuert und ist greifbar; zerfaellt bei 50 % bzw. 16,67 %.
  *
  * Zusaetzliche Bus-Events (nur informativ): 'bossBeam' (Reviewer feuert den Laser), 'bossMerge' (Octopus Merge
  * zieht einen Arm ein: { x, y, left }).
@@ -1484,7 +1487,10 @@
     }
     const step = REV.wallStep;
     const half = (REV.wallGap[p2 ? 1 : 0] * step) / 2;
-    const gapC = game.rng.float(a0 + half + 10, a1 - half - 10);
+    // Luecke innerhalb der Reihe: relativ zur letzten tatsaechlichen Kugelposition (nicht a1), sonst konnte sie den
+    // letzten Schuss mitschlucken und zur Oeffnung an der Wand werden (ca. 0,75 % der Reihen, Rauchtest 2026-11-02)
+    const last = a0 + step * Math.floor((a1 - a0) / step);
+    const gapC = game.rng.float(a0 + half + 10, last - half - 10);
     for (let v = a0; v <= a1; v += step) {
       if (Math.abs(v - gapC) < half) continue; // die Luecke
       const o = Object.assign({}, NIT_SHOT, horizontal ? { x: v, y: fixed } : { x: fixed, y: v });
@@ -2222,6 +2228,291 @@
       const g = e.state.glow || 0;
       if (g > 0) AI.drawGlow(ctx, e.x, e.y, e.r + 8, g, '#ffcf4d');
       AI.drawBody(e, ctx, { frame: g > 0 ? 1 : 0, flipX: false, alpha: e.intangible ? 0.6 : 1, noFrost: true });
+    },
+  };
+
+  // ===========================================================================
+  // THE NESTED INFINITE LOOP (spaete Abloesung der Infinite Loop, ab Etage 8)
+  // ===========================================================================
+  //
+  // Drei ineinanderliegende Ringe (gross, mittel, klein) aus Koepfen und Gliedern der Infinite Loop, die sich um
+  // einen gemeinsamen, langsam wandernden Mittelpunkt drehen (abwechselnde Richtung, innen schneller). Der Boss
+  // selbst ist nur der unsichtbare Mittelpunkt mit dem gemeinsamen HP-Pool (intangible, kein Kontaktschaden);
+  // alle sichtbaren Teile sind 'nested_loop_part'-Enemies mit proxy auf ihn.
+  //
+  // Balance-Regel: Nur der aeussere LEBENDE Ring ist "echt" — er feuert, verletzt bei Beruehrung und nimmt
+  // Schaden. Die inneren drehen sich geisterhaft mit (intangible, halbtransparent). Bei 50 % zerfaellt der
+  // grosse Ring, bei 16,67 % der mittlere (Stueck fuer Stueck, Banner, Schuesse geloescht, kurze Pause), der kleine
+  // stirbt mit dem Boss. So beginnt der Kampf langsam und wird mit jeder Phase hektischer.
+  //   Ring 0 (gross, langsam):   Puls (jedes Glied schiesst nach innen und aussen) + gezielter 3er-Faecher vom Kopf
+  //   Ring 1 (mittel, schneller): Puls abwechselnd quer / als X + 5er-Faecher
+  //   Ring 2 (klein, sehr schnell): Spiral-Salven (Glied fuer Glied nach aussen) + 3er-Faecher; der Mittelpunkt
+  //                                 haelt ~150 px Abstand zum Spieler (damit die Spirale ihn erreicht)
+  // Telegraphe: der ganze Ring glueht vor Puls/Salve, der Kopf glueht vor jedem Faecher.
+
+  const NEST = {
+    rings: [
+      { R: 190, n: 14, spin: 0.35, scale: 1.1, shot: { color: '#58d0e0' }, pulse: 2.8, head: 3.4, fan: 3, fanSpeed: 180, pulseSpeed: 165 },
+      { R: 118, n: 9, spin: -0.9, scale: 0.95, shot: { color: '#b88cff' }, pulse: 2.0, head: 2.6, fan: 5, fanSpeed: 195, pulseSpeed: 185 },
+      { R: 58, n: 5, spin: 2.0, scale: 0.8, shot: { color: '#ff7a6a' }, pulse: 0, head: 3.0, fan: 3, fanSpeed: 215, pulseSpeed: 205 },
+    ],
+    breakAt: [0.5, 1 / 6],   // Ring 0 bei 50 %, Ring 1 bei 16,67 % des gemeinsamen Pools
+    move: [28, 48, 85],      // Tempo des Mittelpunkts je aktivem Ring (px/s)
+    tell: 0.55,              // Gluehen vor einem Puls / einer Salve
+    headTell: 0.45,          // Gluehen des Kopfes vor einem Faecher
+    spiral: { fire: 2.4, gap: 0.09, rest: 1.3 },
+    grace: 1.6,              // Pause nach dem Zerfall eines Rings (und nach dem Intro)
+  };
+
+  /** Bewegungsrahmen des Mittelpunkts, damit der aeussere aktive Ring im Raum bleibt */
+  function nestBox(k) {
+    const m = NEST.rings[k].R + 28;
+    return { x0: INNER.x0 + m, x1: INNER.x1 - m, y0: INNER.y0 + m, y1: INNER.y1 - m };
+  }
+  function nestClamp(k, x, y, out) {
+    const b = nestBox(k);
+    out.x = b.x0 <= b.x1 ? B.M.clamp(x, b.x0, b.x1) : CX;
+    out.y = b.y0 <= b.y1 ? B.M.clamp(y, b.y0, b.y1) : CY;
+    return out;
+  }
+
+  /** Ring k zerfaellt: Teile platzen nacheinander, Schuesse weg, Banner, kurze Pause, naechster Ring wird aktiv */
+  function nestBreak(e, game, k) {
+    const s = e.state, ring = s.rings[k];
+    ring.broken = true;
+    ring.parts.forEach((pt, i) => {
+      pt.intangible = true;
+      pt.contactDamage = 0;
+      pt.state.popIn = 0.06 * i;
+    });
+    BH.clearEnemyShots(game);
+    game.shake(8, 0.45);
+    s.active = k + 1;
+    s.grace = NEST.grace;
+    if (k === 0) {
+      AI.say(e, 'break;', 1.4, '#cdb8ff');
+      game.banner('break;', 'One loop down. The inner ones did not notice.');
+    } else {
+      AI.say(e, 'WHYYYYYYYY?', 1.6, '#ffb3a8');
+      game.banner('WHYYYYYYYY?', 'Innermost loop. Maximum speed.');
+    }
+    B.bus.emit('bossPhase', { game, boss: e, phase: k + 2 });
+  }
+
+  /** Puls des aktiven Rings: jedes Glied (nicht der Kopf) feuert quer zum Ring nach innen und aussen, oder als X */
+  function nestPulse(e, game, ring) {
+    const sp = AI.shotSpeed(game, ring.pulseSpeed);
+    const x = ring.pattern === 'x';
+    for (let i = 1; i < ring.parts.length; i++) {
+      const pt = ring.parts[i];
+      if (pt.dead) continue;
+      const radial = Math.atan2(pt.y - e.y, pt.x - e.x);
+      if (x) for (let q = 0; q < 4; q++) AI.shoot(game, pt, radial + Math.PI / 4 + (q * Math.PI) / 2, sp, ring.shot);
+      else { AI.shoot(game, pt, radial, sp, ring.shot); AI.shoot(game, pt, radial + Math.PI, sp, ring.shot); }
+    }
+  }
+
+  B.BOSS_BEHAVIORS.nested_loop = {
+    init(e, game) {
+      const s = e.state;
+      e.x = CX;                 // die Ringe brauchen die Raummitte (der grosse fuellt fast die ganze Hoehe)
+      e.y = CY;
+      e.intangible = true;      // nur Mittelpunkt + HP-Pool; getroffen werden die Ringteile
+      e.contactDamage = 0;
+      e.noShadow = true;
+      e.aoeDedupe = true;       // eine Explosion ueber viele Ringteile zaehlt nur einmal
+      s.fx = [];
+      s.active = 0;
+      s.grace = NEST.grace;
+      s.wp = { x: CX, y: CY };
+      s.wpT = 0;
+      s.rings = NEST.rings.map((cfg, k) => ({
+        k, cfg, R: cfg.R, n: cfg.n, spin: cfg.spin, shot: cfg.shot,
+        theta: game.rng.angle(),
+        parts: [], broken: false,
+        tell: 0, tellMax: NEST.tell, pulseT: cfg.pulse || 0, pattern: 'perp',
+        headTell: 0, headT: cfg.head,
+        spiral: 'rest', spiralT: 1.0, spiralGap: 0, spiralIdx: 0,
+      }));
+      const def = B.ENEMIES.nested_loop_part;
+      if (def && game.room) {
+        for (const ring of s.rings) {
+          for (let i = 0; i < ring.n; i++) {
+            const pt = new B.Enemy(def, 'nested_loop_part', e.x, e.y, game, 1);
+            pt.proxy = e;
+            pt.state.ringObj = ring;
+            pt.state.index = i;
+            pt.state.head = i === 0;
+            pt.spriteName = (i === 0 ? 'boss_nested_loop_head_' : 'boss_nested_loop_segment_') + ring.k;
+            pt.scale = ring.cfg.scale;
+            pt.r = (i === 0 ? 22 : 18) * ring.cfg.scale;
+            pt.spawnDelay = e.spawnDelay;
+            game.room.enemies.push(pt);
+            ring.parts.push(pt);
+          }
+        }
+      }
+      B.BOSS_BEHAVIORS.nested_loop.place(e, 0);
+    },
+
+    /** Ringteile auf ihre Plaetze setzen und ihren Zustand (aktiv / Geist) an den aktiven Ring anpassen */
+    place(e, dt) {
+      const s = e.state;
+      for (const ring of s.rings) {
+        ring.theta += ring.spin * dt;
+        if (ring.broken) continue;
+        const live = ring.k === s.active;
+        const sign = ring.spin >= 0 ? 1 : -1;
+        for (let i = 0; i < ring.parts.length; i++) {
+          const pt = ring.parts[i];
+          if (pt.dead) continue;
+          const a = ring.theta - sign * i * (TAU / ring.n);   // Glieder folgen hinter dem Kopf
+          pt.x = e.x + Math.cos(a) * ring.R;
+          pt.y = e.y + Math.sin(a) * ring.R;
+          pt.state.ang = a + sign * Math.PI / 2;              // in Laufrichtung
+          pt.state.ghost = !live;
+          pt.intangible = !live;
+          pt.contactDamage = live ? (pt.state.head ? 2 : 1) : 0;
+        }
+      }
+    },
+
+    update(e, dt, game) {
+      const s = e.state, p = game.player;
+      BH.updateFx(e, dt);
+
+      // ---- Phasen: Ringe zerfallen bei ihren Schwellen ----
+      if (s.active === 0 && e.hp <= e.maxHp * NEST.breakAt[0]) nestBreak(e, game, 0);
+      if (s.active === 1 && e.hp <= e.maxHp * NEST.breakAt[1]) nestBreak(e, game, 1);
+      const k = s.active;
+      const ring = s.rings[k];
+
+      // ---- Mittelpunkt bewegen (Rahmen haengt vom aktiven Ring ab) ----
+      s.wpT -= dt;
+      if (k === 2) {
+        // innerster Ring: ~150 px Abstand zum Spieler halten, damit die Spirale ihn erreicht
+        const d = Math.max(1, AI.dist(e, p));
+        nestClamp(k, p.x + ((e.x - p.x) / d) * 150, p.y + ((e.y - p.y) / d) * 150, s.wp);
+      } else if (s.wpT <= 0) {
+        const b = nestBox(k);
+        nestClamp(k, game.rng.float(b.x0, b.x1), game.rng.float(b.y0, b.y1), s.wp);
+        s.wpT = game.rng.float(3.5, 5.5);
+      }
+      if (Math.hypot(s.wp.x - e.x, s.wp.y - e.y) > 6) AI.toward(e, s.wp.x, s.wp.y, NEST.move[k]);
+      else AI.stop(e);
+
+      // ---- Angriffe nur vom aktiven Ring, nicht in der Schonfrist ----
+      if (s.grace > 0) {
+        s.grace -= dt;
+      } else if (ring && !ring.broken) {
+        const cfg = ring.cfg;
+        if (cfg.pulse) {
+          if (ring.tell > 0) {
+            ring.tell -= dt;
+            if (ring.tell <= 0) { nestPulse(e, game, ring); ring.pattern = k === 1 && ring.pattern === 'perp' ? 'x' : 'perp'; }
+          } else {
+            ring.pulseT -= dt;
+            if (ring.pulseT <= 0) { ring.tell = NEST.tell; ring.pulseT = AI.cooldown(game, cfg.pulse); }
+          }
+        } else {
+          // Spiral-Salven: Gluehen -> Glied fuer Glied nach aussen feuern -> Pause
+          const S = NEST.spiral;
+          if (ring.spiral === 'rest') {
+            ring.spiralT -= dt;
+            if (ring.spiralT <= 0) { ring.spiral = 'tell'; ring.tell = NEST.tell; }
+          } else if (ring.spiral === 'tell') {
+            ring.tell -= dt;
+            if (ring.tell <= 0) { ring.spiral = 'fire'; ring.spiralT = S.fire; ring.spiralGap = 0; }
+          } else {
+            ring.spiralT -= dt;
+            ring.spiralGap -= dt;
+            if (ring.spiralGap <= 0) {
+              ring.spiralGap = S.gap;
+              const pt = ring.parts[ring.spiralIdx++ % ring.parts.length];
+              if (pt && !pt.dead) AI.shoot(game, pt, Math.atan2(pt.y - e.y, pt.x - e.x), AI.shotSpeed(game, cfg.pulseSpeed), ring.shot);
+            }
+            if (ring.spiralT <= 0) { ring.spiral = 'rest'; ring.spiralT = AI.cooldown(game, S.rest); }
+          }
+        }
+        // Kopf: gezielter Faecher nach kurzem Gluehen
+        if (ring.headTell > 0) {
+          ring.headTell -= dt;
+          const head = ring.parts[0];
+          if (ring.headTell <= 0 && head && !head.dead) AI.fan(game, head, p, cfg.fan, 0.2, AI.shotSpeed(game, cfg.fanSpeed), ring.shot);
+        } else {
+          ring.headT -= dt;
+          if (ring.headT <= 0) { ring.headTell = NEST.headTell; ring.headT = AI.cooldown(game, cfg.head); }
+        }
+      }
+    },
+
+    // Ringteile erst nach der Bewegung des Mittelpunkts setzen (sonst haengen sie einen Frame hinterher)
+    afterMove(e, dt) {
+      if (!e.dead) B.BOSS_BEHAVIORS.nested_loop.place(e, dt);
+    },
+
+    onDeath(e) {
+      // der letzte Ring (und was sonst noch steht) platzt nacheinander
+      let n = 0;
+      for (const ring of e.state.rings) {
+        if (ring.broken) continue;
+        ring.broken = true;
+        for (const pt of ring.parts) {
+          if (pt.dead) continue;
+          pt.intangible = true;
+          pt.contactDamage = 0;
+          pt.state.popIn = 0.07 * n++;
+        }
+      }
+    },
+
+    draw(e, ctx) {
+      BH.drawFx(e, ctx);
+      // Mittelpunkt: nur ein schwacher Schimmer, damit man sieht, worum sich alles dreht
+      AI.drawGlow(ctx, e.x, e.y, 16, 0.08 + 0.06 * Math.sin(e.t * 4), '#cdb8ff');
+      BH.drawFrost(e, ctx);
+      AI.drawSay(e, ctx);
+    },
+  };
+
+  /** Ringteil der Nested Infinite Loop: positioniert vom Boss; platzt, wenn sein Ring zerfaellt oder der Boss stirbt */
+  B.BEHAVIORS.nested_part = {
+    init(e) {
+      e.static = true;
+      e.noKnockback = true;
+      e.noHpBar = true;
+      e.noSeparate = true;
+      e.ignoreForClear = true;   // gezaehlt wird nur der Boss
+      e.state.ang = 0;
+    },
+    update(e, dt, game) {
+      AI.stop(e);
+      const s = e.state, host = e.proxy;
+      if (host && !host.dead && !(s.ringObj && s.ringObj.broken)) return;
+      e.intangible = true;
+      e.contactDamage = 0;
+      if (s.popIn === undefined) s.popIn = 0.06 * (s.index || 0);
+      s.popIn -= dt;
+      if (s.popIn <= 0) {
+        e.dead = true;
+        B.bus.emit('enemyDeath', { game, enemy: e, x: e.x, y: e.y, color: s.ringObj ? s.ringObj.shot.color : e.def.color, boss: false, segment: true });
+      }
+    },
+    draw(e, ctx) {
+      const s = e.state, ring = s.ringObj;
+      const ghost = !!s.ghost;
+      const popping = ring && ring.broken;
+      if (ring && !ring.broken && !ghost) {
+        if (ring.tell > 0) AI.drawGlow(ctx, e.x, e.y, e.r + 8, 1 - ring.tell / ring.tellMax, ring.shot.color);
+        if (s.head && ring.headTell > 0) AI.drawGlow(ctx, e.x, e.y, e.r + 12, 1 - ring.headTell / NEST.headTell, '#ff5040');
+      }
+      AI.drawBody(e, ctx, {
+        rotation: s.ang,
+        flipX: false,
+        frame: s.head && ring && ring.headTell > 0 ? 1 : 0,
+        alpha: ghost ? 0.32 : popping ? 0.6 : 1,
+        noFrost: ghost,
+      });
     },
   };
 

@@ -6,6 +6,7 @@
  *     hp: 360, r: 44, speed: 50, contactDamage: 2, flying: false,
  *     behavior: 'monolith',          // Schluessel in BOTA.BOSS_BEHAVIORS
  *     params: {}, sprite: 'boss_monolith', color: '#8a8f98', minFloor: 1, weight: 1,
+ *     maxFloor: 7,                   // optional: letzte Etage, auf der er auftaucht (spaeter abgeloest)
  *     themes: { branches: 3 },       // optional: Gewichtsfaktor je Etagen-Thema (0 = dort nie)
  *     themeOnly: ['branches'],       // optional: nur auf Etagen mit diesen Themen
  *   };
@@ -53,7 +54,7 @@
     subtitle: 'while (true) { suffer(); }',
     hp: 300, r: 24, speed: 165, contactDamage: 2, flying: true,
     behavior: 'infinite_loop', sprite: 'boss_infinite_loop', color: '#3fb8c9',
-    minFloor: 2, weight: 3,
+    minFloor: 2, maxFloor: 7, weight: 3,   // ab Etage 8 abgeloest durch The Nested Infinite Loop
     desc: 'A worm made of ∞. The head hunts you; the body never ends.',
   };
 
@@ -89,6 +90,18 @@
     desc: 'A tangle of roots around one huge merge commit. Every branch it absorbs makes the rest angrier.',
   };
 
+  // Spaete Abloesung der Infinite Loop (ab Etage 8, gleiches Gewicht): drei ineinanderliegende Wuermer mit einem
+  // gemeinsamen HP-Balken. Nur der jeweils aeussere lebende Ring ist "echt" (feuert, trifft, nimmt Schaden);
+  // er zerfaellt bei 50 % (gross) bzw. 16,67 % (mittel), der kleine bei 0 %. hp = gemeinsamer Pool.
+  B.BOSSES.nested_loop = {
+    name: 'The Nested Infinite Loop',
+    subtitle: 'while True { while True { println!("WHYYYYYYYY?") } }',
+    hp: 450, r: 30, speed: 30, contactDamage: 0, flying: true,
+    behavior: 'nested_loop', sprite: 'boss_nested_loop', color: '#3fb8c9',
+    minFloor: 8, weight: 3,
+    desc: 'Three loops inside each other. Breaking out of one only gets you into the next.',
+  };
+
   /**
    * Waehlt einen Boss fuer die Etage (deterministisch ueber den Etagen-RNG).
    * Auf Etage 1 nur die beiden "zugaenglicheren" Bosse (Monolith 60 %, Stakeholder 40 %);
@@ -122,9 +135,14 @@
     return (def.weight || 1) * B.themeWeight(def, theme);
   };
 
-  /** Bosse, die auf Tiefe d mit Thema th auftauchen duerfen (minFloor erreicht, Etagen-Faktor > 0) */
+  /** Darf der Boss auf Tiefe d mit Thema th auftauchen? (minFloor erreicht, maxFloor nicht ueberschritten, Faktor > 0) */
+  B.bossEligible = function (def, d, th) {
+    return (def.minFloor || 1) <= d && (def.maxFloor === undefined || d <= def.maxFloor) && B.bossWeightAt(def, th) > 0;
+  };
+
+  /** Bosse, die auf Tiefe d mit Thema th auftauchen duerfen */
   function bossPool(d, th) {
-    return Object.keys(B.BOSSES).filter((id) => (B.BOSSES[id].minFloor || 1) <= d && B.bossWeightAt(B.BOSSES[id], th) > 0);
+    return Object.keys(B.BOSSES).filter((id) => B.bossEligible(B.BOSSES[id], d, th));
   }
 
   B.rollBoss = function (rng, depth, theme) {

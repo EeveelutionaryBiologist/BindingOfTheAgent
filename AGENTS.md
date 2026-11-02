@@ -105,6 +105,10 @@ Live state is under `BOTA.game` (`.player`, `.room`, `.floor`, `.depth`, `.state
   shields its head, it coils on a ring, rattles ≥ 0.6 s before lunging (2 damage) without the chain tearing, and its
   body falls apart with the head; the **Rootkit** can't be hurt while buried, surfaces on free sand near the player
   after its telegraph with a ring of 8 shots, and a bomb flushes it out without the ring;
+- the **Nested Infinite Loop** replaces the Infinite Loop from floor 8 (never before, and the Loop never after); it has
+  rings of 14 / 9 / 5 parts, only the outermost living ring fires and can be hit, the rings break at 50 % and
+  16.67 % (one `bossPhase` each), its shots stay at 165–260 px/s, its parts stay inside the room, and it dies once
+  with no parts left over;
 - the **Octopus Merge** is only rolled on Forgotten Branches (at its weight share there on a first visit); it has 8 arms of
   5 segments that pass 60 % of their damage to the knot and stay inside the room; every sweep, slam, tip shot and
   stream has its telegraph first; an arm merges every 12 % of HP (at least one stays), phase 2 starts once at 50 %
@@ -486,7 +490,7 @@ Rootkit. On that floor Deprecation Warnings also weigh ×2.5 and the Hallucinati
 with a strong outline and fire non-sand colours (brick red), because the sand is the one mid-bright floor.
 The Spinlock places its body segments in `afterMove`, after its head has moved, so the chain never lags a frame.
 
-Minions (`spawn: false`): `leaklet`, `microservice`, `loop_segment`, `detached_head_tag` (Detached HEAD's head),
+Minions (`spawn: false`): `leaklet`, `microservice`, `loop_segment`, `nested_loop_part`, `detached_head_tag` (Detached HEAD's head),
 `octo_arm` (Octopus Merge arm segment), `spinlock_segment` (Spinlock body; invulnerable, shields the head).
 
 Room spawning (`rollRoomEnemies`) works on a **budget**:
@@ -510,14 +514,20 @@ Content without these fields rolls exactly as before (same RNG draws), so **exis
 an enemy or boss a theme field**; say so in that commit. In use by the Forgotten Branches and Sandbox Borders
 families (below).
 
-**Bosses** (base HP): `monolith` 360, `stakeholder` 250, `friday_deploy` 240 (floor 4+), `infinite_loop` 300,
-`rogue_swarm` 4 × 80, `reviewer` 340 (floor 4+), `octopus_merge` 330 (Forgotten Branches only, weight 12: about 52 % on
+**Bosses** (base HP): `monolith` 360, `stakeholder` 250, `friday_deploy` 240 (floor 4+), `infinite_loop` 300
+(floors 2–7), `nested_loop` 450 (floor 8+, replaces the Infinite Loop at the same weight), `rogue_swarm` 4 × 80, `reviewer` 340 (floor 4+), `octopus_merge` 330 (Forgotten Branches only, weight 12: about 52 % on
 floor 3, about 41 % on floors 14, 25, …). Friday Deploy and the Reviewer moved from floors 2 and 3 to floor 4 on
 2026-11-02, which gives floor 3 to the Octopus Merge and floor 2 to Monolith, Stakeholder, Loop and Swarm.
 - **Octopus Merge** works like the Infinite Loop: the knot is the boss, its 8 arms are 5 `octo_arm` segments each
   (`proxy`, 60 %). The knot positions them every tick and draws the arms itself; only the tip (a commit dot) draws
   as a sprite. Arm contact is checked along the drawn line, not per segment. Speed-ups from merges (`state.sm`)
   shorten pauses and swings, never telegraphs.
+- **Nested Infinite Loop:** the boss entity is an invisible, intangible controller at the centre that only holds the
+  shared HP pool (so the HUD shows one bar). The three rings are `nested_loop_part` enemies with `proxy` to it,
+  placed every tick in `afterMove`. Only the outermost living ring is tangible, fires and hurts on contact; the
+  inner rings spin along as ghosts. Rings break at 50 % and 16.67 % (parts pop, shots cleared, banner, 1.6 s
+  pause). Shots are colour-coded per ring (cyan, violet, coral). Bosses can now end at a depth via `maxFloor`
+  (`B.bossEligible` checks min/max floor and theme).
 
 Each has 2 phases and
 telegraphed attacks; enemy bullets travel at 165–260 px/s.
@@ -559,7 +569,7 @@ plus per-floor extras `THEME_QUIPS` / `THEME_EPITAPHS` keyed by theme `key` (cur
 4. Check fairness: enemy shots at 165–260 px/s (the player moves at 240), contact damage of 1 half heart (2 for charges/bosses).
 
 **Add a boss:** add a `B.BOSSES.id` entry with `name`, `subtitle` (shown on the intro card), `hp`, `r`, `behavior`, `sprite`
-and `color` (optionally `themes` / `themeOnly`, §4), plus a `B.BOSS_BEHAVIORS.id` entry in `boss.js`. Give it ≥ 2 attacks and a phase change at a HP threshold
+and `color` (optionally `themes` / `themeOnly`, §4, and `maxFloor` to retire it on deeper floors), plus a `B.BOSS_BEHAVIORS.id` entry in `boss.js`. Give it ≥ 2 attacks and a phase change at a HP threshold
 (emit `bossPhase`, show a `game.banner`), and place it with `BossHelpers.placeAwayFromPlayer`.
 
 **Add a layout:** use `L(id, ['normal'], weight, [7 rows × 13 chars], bias?)` in `layouts.js`. The characters are
@@ -669,13 +679,7 @@ work again, the same file-ownership split works well.
   - **Bosses:**
     - ~~Octopus Merge~~: done 2026-11-02 (§4).
     - **"Human in the Loop"** (meta joke): still just a name. Needs a concept first.
-    - **Nested Infinite Loop** (idea from 2026-11-02, a souped-up variant of The Infinite Loop, e.g. as a later-floor
-      replacement or rare alternative): three worms (small, medium, large) coiled around each other like the
-      Spinlock's ring, sharing one health bar. They move together; the outer ring spins and shoots slow patterns,
-      the middle one is a little faster, the small inner one really fast. The large one dies at 50 % of the shared
-      HP, the medium one at 16.67 %, the small one at 0 %. Intro subtitle along the lines of
-      `while True { while True { println!("WHYYYYYYYY?") } }`. Code: three segment chains like the Infinite Loop,
-      a shared HP pool like the Rogue Agent Swarm's `bossGroup`, ring placement like the Spinlock.
+    - ~~Nested Infinite Loop~~: done 2026-11-02 (§4), as the Infinite Loop's replacement from floor 8.
   - **More Sandbox Borders enemies** (brainstorm 2026-11-02, not built yet): **Dry Run** (a translucent ghost copy
     performs every attack first, then the real one repeats it exactly — a built-in telegraph), **Stack Trace**
     (scorpion whose segmented tail stings at range after a target line), **Rolling Release** (tumbleweed that bounces

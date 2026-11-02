@@ -1668,11 +1668,20 @@
       if (!o) return;
       cherryLink(e, o);
       // Zu weit weg (anderer Spawnpunkt)? Neben den Partner setzen, damit der Stiel nicht reissen muss.
-      if (Math.hypot(e.x - o.x, e.y - o.y) > (e.params.leash || 140) * 0.6) {
-        const a = game.rng.angle();
-        const pos = game.nearestFreePos(o.x + Math.cos(a) * 60, o.y + Math.sin(a) * 60, room);
-        e.x = pos.x;
-        e.y = pos.y;
+      // nearestFreePos sucht kachelweise vom Zielpunkt aus: zeigt der Winkel in einen Felsblock, kann die naechste
+      // freie Kachel weit hinter der Leine liegen (gab im Rauchtest gelegentlich ein Paar ueber der Leine). Darum
+      // mehrere Winkel probieren und nur Plaetze innerhalb der Leine nehmen; notfalls auf den Partner selbst
+      // (die Abstossung schiebt beide gleich auseinander). Der erste Versuch zieht dieselbe Zufallszahl wie frueher.
+      const leash = e.params.leash || 140;
+      if (Math.hypot(e.x - o.x, e.y - o.y) > leash * 0.6) {
+        let pos = null;
+        for (let tries = 0; tries < 8 && !pos; tries++) {
+          const a = game.rng.angle();
+          const q = game.nearestFreePos(o.x + Math.cos(a) * 60, o.y + Math.sin(a) * 60, room);
+          if (Math.hypot(q.x - o.x, q.y - o.y) <= leash * 0.8) pos = q;
+        }
+        e.x = pos ? pos.x : o.x;
+        e.y = pos ? pos.y : o.y;
       }
     },
 

@@ -41,6 +41,8 @@
  *   - Sandbox-Borders-Gegner: Deprecation Warning x2.5 und Hallucination x2 dort; Spinlock (Glieder schirmen ab, Ring,
  *     Rassel >= 0.6 s, Vorschnellen mit 2 Schaden, Kette reisst nicht, Glieder zerfallen); Rootkit (vergraben
  *     unverwundbar, taucht auf freiem Sand nahe dem Spieler auf, Telegraph, 8er-Ring, Bombe scheucht heraus)
+ *   - Nested Infinite Loop: ab Etage 8 statt der Infinite Loop; nur der aeussere lebende Ring feuert und ist
+ *     greifbar; Ringe zerfallen bei 50 % / 16,67 %; Schuesse 165–260 px/s; Teile bleiben im Raum; ein Boss-Tod
  *   - Spezialraeume, Pause- und Todesbildschirm rendern
  * Screenshots landen in tools/out/ (nicht einchecken).
  *
@@ -180,7 +182,7 @@ const URL = 'file://' + path.join(ROOT, 'index.html').replace(/\\/g, '/') + '?se
       const hist = [];
       for (let d = 1; d <= 12; d++) {
         const id = BOTA.rollBossVaried(new BOTA.RNG(BOTA.hashString('boss' + r + ':' + d)), d, hist);
-        if (!BOTA.BOSSES[id] || (BOTA.BOSSES[id].minFloor || 1) > d || BOTA.themeWeight(BOTA.BOSSES[id], BOTA.themeKeyAt(d)) <= 0) out.push('Boss ' + id + ' auf Etage ' + d);
+        if (!BOTA.BOSSES[id] || !BOTA.bossEligible(BOTA.BOSSES[id], d, BOTA.themeKeyAt(d))) out.push('Boss ' + id + ' auf Etage ' + d);
         if (hist.length && hist[hist.length - 1] === id) { out.push('Boss zweimal hintereinander: ' + id); break; }
         hist.push(id);
       }
@@ -1052,7 +1054,7 @@ const URL = 'file://' + path.join(ROOT, 'index.html').replace(/\\/g, '/') + '?se
       for (let i = 0; i < 400; i++) if (BOTA.rollBossVaried(new BOTA.RNG(BOTA.hashString('octo' + d + ':' + i)), d, []) === 'octopus_merge') n++;
       if (BOTA.themeKeyAt(d) !== 'branches') { if (n) out.push('Octopus Merge auf Etage ' + d); continue; }
       const th = BOTA.themeKeyAt(d);
-      const ids = Object.keys(BOTA.BOSSES).filter((id) => (BOTA.BOSSES[id].minFloor || 1) <= d);
+      const ids = Object.keys(BOTA.BOSSES).filter((id) => BOTA.bossEligible(BOTA.BOSSES[id], d, th));
       const total = ids.reduce((sum, id) => sum + BOTA.bossWeightAt(BOTA.BOSSES[id], th), 0);
       const want = BOTA.bossWeightAt(DEF, th) / total;
       if (Math.abs(n / 400 - want) > 0.08) out.push('Octopus Merge: Anteil ' + (n / 400).toFixed(2) + ' statt ~' + want.toFixed(2) + ' auf Etage ' + d);
@@ -1385,6 +1387,100 @@ const URL = 'file://' + path.join(ROOT, 'index.html').replace(/\\/g, '/') + '?se
     return out;
   });
   problems.push(...desertProblems);
+
+  // --- Nested Infinite Loop: ab Etage 8 statt der Infinite Loop; nur der aeussere lebende Ring feuert und ist
+  //     greifbar; zerfaellt bei 50 % / 16,67 %; Schuesse mit Telegraph und in 165–260 px/s; bleibt im Raum ---
+  const nestProblems = await page.evaluate(() => {
+    const out = [];
+    const g = BOTA.game, AI = BOTA.AI, DT = 1 / 60, I = BOTA.C.INNER;
+    // 1) Abloesung: Infinite Loop bis Etage 7, Nested Loop ab 8 (und nie beide)
+    for (let d = 1; d <= 22; d++) {
+      for (let i = 0; i < 120; i++) {
+        const id = BOTA.rollBossVaried(new BOTA.RNG(BOTA.hashString('nest' + d + ':' + i)), d, []);
+        if (id === 'infinite_loop' && d >= 8) { out.push('Infinite Loop auf Etage ' + d); break; }
+        if (id === 'nested_loop' && d < 8) { out.push('Nested Loop auf Etage ' + d); break; }
+      }
+    }
+    BOTA.debug.gotoRoom('start'); BOTA.debug.god(true);
+    for (let i = 0; i < 4; i++) BOTA.debug.killAll();
+    g.room.projectiles.length = 0;
+    const p = g.player; p.x = 480; p.y = 500;
+    const stepAll = (n, each) => {
+      for (let i = 0; i < n; i++) {
+        for (const en of g.room.enemies.slice()) { if (!en.dead) { en.frozen = 0; en.update(DT, g); } }
+        g.room.enemies = g.room.enemies.filter((en) => !en.dead);
+        if (g.room.projectiles.length > 150) g.room.projectiles.length = 0;
+        if (each) each();
+      }
+    };
+    const shots = [];
+    const origShoot = AI.shoot;
+    AI.shoot = function (game, e, angle, speed) {
+      if (e && e.id === 'nested_loop_part') {
+        const ring = e.state.ringObj;
+        shots.push({ k: ring.k, speed, ghost: !!e.state.ghost, glow: ring.tell > 0 || ring.spiral === 'fire' || ring.headTell <= 0 });
+      }
+      return origShoot.apply(this, arguments);
+    };
+    const ev = [];
+    const offs = ['bossPhase', 'enemyDeath'].map((n) => BOTA.bus.on(n, (x) => ev.push(n + (x.boss === true ? ':boss' : ''))));
+    try {
+      const N = BOTA.debug.spawnBoss('nested_loop');
+      N.spawnDelay = 0;
+      const S = N.state;
+      for (const r of S.rings) for (const pt of r.parts) pt.spawnDelay = 0;
+      if (S.rings.map((r) => r.parts.length).join(',') !== '14,9,5') out.push('Nested Loop: Ringe ' + S.rings.map((r) => r.parts.length).join(','));
+      if (!N.intangible || N.contactDamage !== 0) out.push('Nested Loop: Mittelpunkt ist greifbar');
+      stepAll(1);
+      // nur Ring 0 greifbar; Treffer auf Ring 1 wirkungslos, auf Ring 0 zaehlt er
+      const hp0 = N.hp;
+      S.rings[1].parts[2].hurt(10, g, {});
+      if (N.hp !== hp0) out.push('Nested Loop: innerer Ring nimmt Schaden');
+      S.rings[0].parts[3].hurt(10, g, {});
+      if (!(N.hp < hp0)) out.push('Nested Loop: aeusserer Ring nimmt keinen Schaden');
+      const phase = (k, ticks) => {
+        shots.length = 0;
+        let outside = 0;
+        stepAll(ticks, () => {
+          for (const r of S.rings) for (const pt of r.parts) if (!pt.dead && !r.broken && (pt.x < I.x0 - 2 || pt.x > I.x1 + 2 || pt.y < I.y0 - 2 || pt.y > I.y1 + 2)) outside++;
+        });
+        if (!shots.length) out.push('Nested Loop: Ring ' + k + ' feuert nie');
+        if (shots.some((x) => x.k !== k)) out.push('Nested Loop: in Phase ' + (k + 1) + ' feuert Ring ' + shots.find((x) => x.k !== k).k);
+        if (shots.some((x) => x.ghost)) out.push('Nested Loop: ein Geister-Ring feuert');
+        if (shots.some((x) => x.speed < 165 || x.speed > 260)) out.push('Nested Loop: Schussgeschwindigkeit ausserhalb 165–260');
+        if (outside) out.push('Nested Loop: ' + outside + 'x Ringteil ausserhalb des Innenraums (Phase ' + (k + 1) + ')');
+        const tangible = S.rings.map((r) => r.parts.some((pt) => !pt.dead && !pt.intangible));
+        if (tangible.some((t, i) => t !== (i === k))) out.push('Nested Loop: greifbare Ringe in Phase ' + (k + 1) + ': ' + tangible.join(','));
+      };
+      phase(0, 600);
+      // 50 %: Ring 0 zerfaellt
+      N.hp = N.maxHp * 0.49;
+      stepAll(1);
+      if (S.active !== 1 || !S.rings[0].broken || ev.filter((x) => x === 'bossPhase').length !== 1) out.push('Nested Loop: kein Phasenwechsel bei 50 %');
+      stepAll(120);
+      if (S.rings[0].parts.some((pt) => !pt.dead)) out.push('Nested Loop: Ring 0 zerfaellt nicht');
+      phase(1, 600);
+      // 16,67 %: Ring 1 zerfaellt
+      N.hp = N.maxHp * 0.16;
+      stepAll(121);
+      if (S.active !== 2 || S.rings[1].parts.some((pt) => !pt.dead) || ev.filter((x) => x === 'bossPhase').length !== 2) out.push('Nested Loop: kein Phasenwechsel bei 16,67 %');
+      phase(2, 600);
+      // Tod: genau ein Boss-Tod, danach keine Teile mehr
+      ev.length = 0;
+      N.hurt(1e6, g, {});
+      N.takeHit(1e6, g, {}, N);
+      stepAll(90);
+      if (ev.filter((x) => x === 'enemyDeath:boss').length !== 1) out.push('Nested Loop: ' + ev.filter((x) => x === 'enemyDeath:boss').length + ' Boss-Tode');
+      if (g.room.enemies.some((en) => en.id === 'nested_loop_part')) out.push('Nested Loop: Ringteile ueberleben den Boss');
+    } finally {
+      AI.shoot = origShoot;
+      for (const off of offs) off();
+      for (let i = 0; i < 4; i++) BOTA.debug.killAll();
+      g.room.projectiles.length = 0;
+    }
+    return out;
+  });
+  problems.push(...nestProblems);
 
   // Mehrfach toedlicher Schaden, weil Items wie "Retry with Backoff" den ersten Tod abfangen
   await page.evaluate(() => {
