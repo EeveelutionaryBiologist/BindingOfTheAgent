@@ -568,7 +568,65 @@ work again, the same file-ownership split works well.
       and every floor can still fill a room.
     - Optionally the same for bosses (e.g. a future Octopus Merge preferred on Forgotten Branches) via the same field
       in `bosses.js` and `B.rollBossVaried`.
-  - Floor-specific enemies for Forgotten Branches: Detached HEAD (head shoots, body walks), Stale Branch (speeds up
-    the longer it lives), Cherry-Pick (pair; hit one, the other gets angry), Orphan Commit (flees, drops credits).
-  - Stash rooms: small bonus rooms behind a bush wall that has to be shot open.
-  - Bosses: Octopus Merge (tentacle branches that merge one by one), "Human in the Loop" (meta joke).
+  - **Forgotten Branches enemies (themed via the mechanism above, ideally `themeOnly: ['branches']` or a high
+    multiplier there).** Shared visual language, so they read as one family on that floor:
+    - **Look:** organic and woody, like the floor and its bush props. Bark browns (`#5a3d22`, `#a3602c`), leaf greens
+      (`#4f7a30`, `#6f9a3c`, `#86ad4a`) and the dark green outline `#16240f` (`prop_bush`), not the usual black.
+      Scale 4, 2 frames, 10–14 px art like the other enemies. Git puns go into the shapes (commit dots, branch
+      lines, tags), not into on-sprite text (too small to read).
+    - **Contrast:** the floor is green, so nothing dangerous may be green. Enemy shots and telegraphs use warm
+      colours (amber `#ffcf4d`, coral `#ff7a5c`, cherry `#d64545`); green is only for harmless or friendly things.
+    - **Sound and effects:** leafy rustles and wood knocks instead of metal clicks. Small falling-leaf particles on
+      hits fit (`FX.burst` with leaf colours via a bus listener; effects only listen).
+    - **Detached HEAD** (pair: head about 6 HP, body about 12 HP, floor 3+):
+      - *Look:* two parts joined by a thin **dashed tether** (the detached pointer, drawn in `drawUnder` like the
+        Graphics Glitch's landing preview). The **head** is a floating wooden tag in the shape of an arrow label,
+        with one big eye; it bobs. The **body** is a stubby walking stump on twig legs with an empty glowing socket
+        on top, where the head belongs.
+      - *Behaviour:* the body walks slowly toward the player (`pathToward`); the head orbits it at about 80–140 px
+        and fires one slow aimed amber shot every ~2.2 s. Warning: its eye glows for 0.4 s first.
+        Kill the body first and the tether snaps ("HEAD detached!"): the head panics, flies erratically
+        and shoots more often, but has little HP. Kill the head first and the body wanders aimlessly
+        ("where is my HEAD?") and only does contact damage.
+      - *Code:* two enemies linked via `state.partner` (not `proxy`: they have separate HP); spawn the second in
+        the first one's `init`, as the Rogue Agent Swarm does with `game.spawnEnemy`. Count it as one spawn
+        (`pack`-like) in the room budget.
+    - **Stale Branch** (about 12 HP, floor 3+):
+      - *Look:* a twig creature carrying a few leaves. As it ages, the leaves go **green → yellow → brown → bare**
+        (switch `e.spriteName` between 3–4 variants), and dead leaves drop off as particles. A small counter floats
+        above it, e.g. "-12", for "commits behind" (`AI.say` or a `drawOver` with the pixel font), going up every
+        2–3 s.
+      - *Behaviour:* starts slow (~60 px/s) and gets faster with age, up to ~150 px/s after 20 s. Once bare, it
+        shudders for 0.5 s (warning), then lunges along a line at the player every few seconds. Killing it early
+        is easy, waiting is punished.
+    - **Cherry-Pick** (pair via `pack: 2`, about 7 HP each, floor 3+):
+      - *Look:* two cherries joined by a green stem that is drawn as a stretchy line between them (max ~140 px).
+        They hop in small arcs: a squash before the jump, a separate shadow, a squash on landing.
+      - *Behaviour:* they hop around the player. Hitting one makes the **other** angry for 3 s: darker red,
+        narrowed eyes, faster hops straight at you, and it spits a pit (one slow aimed shot, warning: puffed
+        cheeks). If one dies, the other stays angry for good.
+    - **Orphan Commit** (about 6 HP, contact damage 0, `ignoreForClear`, rare bonus spawn like the Hallucination):
+      - *Look:* a small white commit dot with a leaf hat and big sad eyes, trailing a faint dashed line (its lost
+        history). A soft sparkle now and then hints that it's a reward, not a threat.
+      - *Behaviour:* never attacks and flees from the player (reverse flow field, prefers corners). Catching it
+        drops 2–3 credits. If you don't within ~12 s, it gets garbage-collected: fades out with a puff.
+      - *Note:* `ignoreForClear` so it doesn't hold the doors shut; same care as the Hallucination when it outlives
+        the room clear.
+  - **Stash rooms** (`git stash`): a small optional room whose doorway is closed by a **hedge wall** of bush props
+    (`prop_bush`, a whole row) instead of a door, which you shoot open. Inside: a cosy storage look (a few crates,
+    one labelled with a little tag), 2–3 pickups and sometimes a chest. Minimap icon: a small box. Mostly on
+    Forgotten Branches, rarely elsewhere. Note that props deliberately never block doors today (`assignProps`), so
+    this needs its own placement code, and the walkability check must treat the stash entrance as a door.
+  - **Bosses:**
+    - **Octopus Merge** (Forgotten Branches, via the boss side of the theme mechanism):
+      - *Look:* a **tangle of roots and branches** around a big knot in the middle (the merge commit). 6–8 woody
+        tentacles each end in a commit dot. It must read as plant matter, **not** as a cartoon octopus: no face
+        with cat ears or anything resembling a well-known code-hosting company's octopus-cat mascot. Use the
+        floor's bark and leaf palette and the dark green outline.
+      - *Fight:* tentacles sweep and slam (each with a target line first), and the commit dots at their tips fire
+        amber shots. Every ~12 % of HP lost, one tentacle **merges** into the body: it retracts with a "Merged!"
+        pop and the remaining ones get faster. Phase 2 at 50 %: "CONFLICT" — red `<<<<<<<` and `>>>>>>>` markers
+        appear around the room and the knot spits shots in two opposing streams.
+      - *Code:* the Infinite Loop already shows segments as separate enemies with `proxy` to a shared head;
+        tentacles can follow that pattern.
+    - **"Human in the Loop"** (meta joke): still just a name. Needs a concept first.
