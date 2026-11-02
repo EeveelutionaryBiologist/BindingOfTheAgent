@@ -236,6 +236,28 @@
     desc: 'Hand-picked from another branch. Comes as a pair; hurt one and the other takes it personally.',
   };
 
+  // --- Forgotten Branches: Orphan Commit ---
+  // Harmloser Bonus-Gegner: ein verwaister Commit, den kein Branch mehr erreicht. Taucht wie die Hallucination
+  // ausserhalb des Raum-Budgets auf (bonusChance, weight 0), greift nie an (contactDamage 0) und flieht vor dem
+  // Spieler, bevorzugt in Ecken. Wer ihn faengt (beruehrt) oder abschiesst, bekommt 2–3 Credits. Nach `life`
+  // Sekunden holt ihn der Garbage Collector: er verblasst (Warnung ab `fadeAt`) und verschwindet ohne Beute.
+  // ignoreForClear: haelt die Tueren nicht zu. Er wird auch nach dem Clearing nie wieder "scharf" (anders als
+  // die Hallucination), daher kann er den Raum nicht nachtraeglich sperren. Verhalten 'orphan' in entities/enemy.js.
+  E.orphan_commit = {
+    name: 'Orphan Commit', hp: 6, r: 13, speed: 150, contactDamage: 0,
+    behavior: 'orphan', params: {
+      life: 12,           // Sekunden bis zur Garbage Collection (laeuft nur, solange das Verhalten laeuft)
+      fadeAt: 3,          // ab so vielen Restsekunden blinkt/verblasst er (Warnung)
+      panicDist: 130,     // naeher als das: rennt 25 % schneller (oder zittert, wenn er in der Ecke sitzt)
+      creditsMin: 2, creditsMax: 3,
+    },
+    sprite: 'enemy_orphan_commit', color: '#e8efe6',
+    minFloor: 3, weight: 0, bonusChance: 0.12, cost: 0, maxPerRoom: 1, tags: [],
+    themeOnly: ['branches'], family: 'branches',
+    desc: 'Unreachable from any branch. Catch it before the garbage collector does.',
+  };
+
+  // ---------------------------------------------------------------------------
   // ---------------------------------------------------------------------------
   // Minions (spawn: false) — entstehen nur durch andere Gegner oder Bosse
   // ---------------------------------------------------------------------------

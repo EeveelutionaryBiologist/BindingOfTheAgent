@@ -477,6 +477,19 @@
     FX.leaves(e.game, e.x, e.y, e.count || 1, e.colors, e.big ? { speedMin: 30, speedMax: 120, lifeMin: 1.1, lifeMax: 1.8 } : { speedMin: 10, speedMax: 40 });
   });
 
+  // Orphan Commit gefangen: goldenes Funkeln und ein kurzer Text (die Credits fliegen ohnehin heraus)
+  on('orphanCaught', (e) => {
+    FX.sparkles(e.game, e.x, e.y - 6, 10, 26, '#ffe27a', { rise: 24 });
+    FX.text(e.game, e.x, e.y - 30, 'recovered!', '#ffe27a');
+  });
+
+  // Gegner verschwindet ohne Tod (Orphan Commit: Garbage Collection): Rauchwoelkchen, blasser Ring, Text
+  on('enemyVanish', (e) => {
+    FX.smoke(e.game, e.x, e.y, 4, 12, e.color || '#c9ced6');
+    FX.ring(e.game, e.x, e.y, 30, e.color || '#c9ced6', 0.35, 3);
+    if (e.text) FX.text(e.game, e.x, e.y - 26, e.text, e.color || '#c9ced6');
+  });
+
   // Gegner getroffen: Funken (weiss + Gegnerfarbe) und Mini-Blitz — Familien haben eigene Effekte
   on('enemyHit', (e) => {
     const fam = FAMILY_FX[familyOf(e)];

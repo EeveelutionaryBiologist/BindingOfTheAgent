@@ -1060,4 +1060,37 @@
       ],
     ],
   });
+
+  // ===========================================================================
+  // Forgotten Branches: Orphan Commit
+  // ===========================================================================
+  // Ein kleiner weisser Commit-Punkt mit Blatt-Huetchen und grossen traurigen Augen. Er ist harmlos (eine
+  // Belohnung), deshalb darf das Huetchen gruen sein. Kontur der Familie (#16240f).
+  //   Frame 0: traurig, Frame 1: mit Traene (das Verhalten wechselt langsam zwischen beiden)
+  // Zeichen: k Kontur, w Weiss, s Schatten, d/g/G Blatt dunkel/mittel/hell, h Glanzpunkt im Auge,
+  // p Wangenroete, t Traene. Die Augen haben bewusst einen Glanzpunkt und keine "Zahnreihe" als Mund:
+  // dunkle Augenhoehlen plus gestrichelter Mund lasen sich in der ersten Fassung als Totenkopf.
+  const ORPHAN_PAL = {
+    k: B.BRANCH_LEAVES.outline, w: '#f3f6ef', s: '#c3cdbd',
+    d: B.BRANCH_LEAVES.green[0], g: B.BRANCH_LEAVES.green[1], G: B.BRANCH_LEAVES.green[2],
+    h: W, p: '#f2a7a0', t: '#9ec5ff',
+  };
+  const ORPHAN_A = [
+    '.....kk...',
+    '....kGGk..',
+    '...kgGgk..',
+    '...kdgk...',
+    '..kkkdkk..',
+    '.kwwwwwwk.',
+    'kwwwwwwwwk',
+    'kwhkwwhkwk',
+    'kwkkwwkkwk',
+    'kpwwkkwwpk',
+    '.kswwwwsk.',
+    '..kkkkkk..',
+  ];
+  const ORPHAN_B = ORPHAN_A.slice();
+  ORPHAN_B[9] = 'kptwkkwwpk';
+  ORPHAN_B[10] = '.kstwwwsk.';
+  B.defineSprite('enemy_orphan_commit', { palette: ORPHAN_PAL, scale: 4, frames: [ORPHAN_A, ORPHAN_B] });
 })(window.BOTA);

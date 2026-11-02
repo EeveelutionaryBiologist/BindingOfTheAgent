@@ -156,6 +156,13 @@
       voice({ f: 95, f2: 140, dur: 0.42, type: 'sawtooth', vol: 0.035, vib: 18, vibDepth: 6, lin: true });
       noise({ dur: 0.4, vol: 0.03, filter: 'bandpass', f: 600, q: 4 });
     },
+    // Orphan Commit gefangen: kleines, freundliches Arpeggio nach oben
+    rescue() { arp([72, 76, 79, 84], 0.05, 'triangle', 0.07); },
+    // Garbage Collection: weiches Wegsaugen (Ton faellt, Rauschen wird leiser)
+    gcSweep() {
+      voice({ f: 520, f2: 140, dur: 0.32, type: 'sine', vol: 0.07 });
+      noise({ dur: 0.3, vol: 0.04, filter: 'bandpass', f: 1800, f2: 400, q: 1.5 });
+    },
     // Zerstoerbare Objekte: kurzes "Tock" beim Treffer, Krachen + Splittern beim Zerbrechen
     propHit() { voice({ f: 320, f2: 180, dur: 0.05, type: 'triangle', vol: 0.07 }); },
     propBreak() {
@@ -473,6 +480,8 @@
   });
   on('enemyShed', (e) => { if (e.big) p('rustle'); });  // Stale Branch verliert sein Laub
   on('enemyWindup', (e) => { const n = famSound(e, 'windup'); if (n) p(n); });
+  on('orphanCaught', () => p('rescue'));
+  on('enemyVanish', () => p('gcSweep'));
   on('playerHurt', () => p('hurt'));
   on('playerDeath', () => { p('playerDeath'); music.stop(0.6); });
   on('pickup', (e) => p(PICKUP_SOUND[e.type] || 'pickup'));

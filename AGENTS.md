@@ -95,6 +95,9 @@ Live state is under `BOTA.game` (`.player`, `.room`, `.floor`, `.depth`, `.state
     contact damage only; the room clears only when both are dead, and `killAll` leaves nothing behind;
   - **Cherry-Pick** rolls come in pairs that link up; a hit angers the *partner* for about 3 s (it spits a pit),
     a widowed cherry stays angry, the stem never stretches past its leash, and a solo spawn grows a partner;
+  - **Orphan Commit** is a rare bonus only on its floor (at most 1 per room, close to its `bonusChance`), never
+    holds the doors, flees into a corner, drops 2–3 credits when caught (even while frozen) or shot, and is
+    garbage-collected after its warning without loot or a kill;
 - the door transition, special rooms, pause screen and death screen work.
 
 Screenshots go to `tools/out/` (scratch; don't commit or ship). One-time setup without admin rights:
@@ -376,6 +379,7 @@ Payloads usually include `game, x, y` and often `color`.
 | `enemyHit`, `enemyDeath` (`boss`, `segment`) | enemy | audio, effects |
 | `enemyReveal`, `enemyRevive` | enemy behaviours | audio, effects |
 | `enemyShed` (`colors, count, big`), `enemyWindup` | Stale Branch | audio (`rustle`, `creak`), effects (falling leaves) |
+| `orphanCaught` (`count`), `enemyVanish` (`color, text`) | Orphan Commit | audio (`rescue`, `gcSweep`), effects (sparkles / puff and text) |
 | `hudGlitch` (`kind`) | game (`glitchHud`) | audio |
 | `pipeAppear`, `pipeWarp`, `pipeArrive` (`to`) | game | audio, effects |
 | `propHit`, `propBreak` (`kind, color`) | game | audio, effects |
@@ -392,7 +396,7 @@ Rule: audio and effects **only listen**. Game logic never calls them directly, e
 are game state.
 
 ### 3.12 Audio (`core/audio.js`) and effects (`entities/effects.js`)
-- **Audio:** 39 synthesized SFX in total. Every sound has a name; `audio.names()` lists them.
+- **Audio:** 41 synthesized SFX in total. Every sound has a name; `audio.names()` lists them.
   - Bus routing: voices → sfx/music bus → master → compressor.
   - Per-name rate limits (`RATE`) and a 40-voice cap keep it from getting noisy.
   - There is a procedural chiptune loop per floor plus a boss variant. Mute is persisted in storage; there's no
@@ -445,9 +449,12 @@ Item conventions:
 | stale_branch | stale | 3, Forgotten Branches only | 12 |
 | detached_head | detached_body (+ head `detached_tag`) | 3, Forgotten Branches only | 12 + 6 |
 | cherry_pick | cherry | 3, Forgotten Branches only | 7 (pair of 2) |
+| orphan_commit | orphan | 3, Forgotten Branches only | 6 (bonus spawn, harmless) |
 
-The last three are the **Forgotten Branches family** (`themeOnly: ['branches']`, `family: 'branches'`, weight 6 each).
-On floor 3 they make up about 24 % of enemies, and about 58 % of combat rooms have at least one (measured 2026-11-02).
+The last four are the **Forgotten Branches family** (`themeOnly: ['branches']`, `family: 'branches'`). The first
+three have weight 6 each: on floor 3 they make up about 24 % of enemies, and about 58 % of combat rooms have at least
+one (measured 2026-11-02). The Orphan Commit is a bonus spawn like the Hallucination (`bonusChance` 0.12, about 14 %
+of combat rooms on floor 3); it is the one enemy that drops loot (2–3 credits) and it never attacks.
 
 Minions (`spawn: false`): `leaklet`, `microservice`, `loop_segment`, `detached_head_tag` (Detached HEAD's head).
 
@@ -480,7 +487,8 @@ telegraphed attacks; enemy bullets travel at 165–260 px/s.
 a random drop; see §3.6 step 8).
 - **Drop economy:** apart from the shop and chests, pickups only come from the room-clear roll (35 % + 3 % per luck)
   and broken rocks (8 %). Enemies drop nothing. That's roughly 0.2 Approvals and 1–3 credits per floor from random
-  drops, plus the guaranteed Approval from depth 2. Loose loot in combat rooms (§3.6 step 7) adds about
+  drops, plus the guaranteed Approval from depth 2. Exception: a caught Orphan Commit drops 2–3 credits (Forgotten
+  Branches only). Loose loot in combat rooms (§3.6 step 7) adds about
   1–2.5 credits, 0.3–0.8 half hearts and 0.15–0.45 Approvals per floor (floors 1–6).
 
 **Layouts:** 30 in total (27 tagged `normal`, plus special ones; `empty` carries both tags). `validateLayout(l)`
@@ -606,15 +614,8 @@ work again, the same file-ownership split works well.
       colours (amber `#ffcf4d`, coral `#ff7a5c`, cherry `#d64545`); green is only for harmless or friendly things.
     - **Sound and effects:** leafy rustles and wood knocks instead of metal clicks. Small falling-leaf particles on
       hits fit (`FX.burst` with leaf colours via a bus listener; effects only listen).
-    - ~~Detached HEAD~~, ~~Stale Branch~~, ~~Cherry-Pick~~: done 2026-11-02 (§4). The rules above still apply to
-      new members; reuse `B.BRANCH_LEAVES` and set `family: 'branches'`.
-    - **Orphan Commit** (about 6 HP, contact damage 0, `ignoreForClear`, rare bonus spawn like the Hallucination):
-      - *Look:* a small white commit dot with a leaf hat and big sad eyes, trailing a faint dashed line (its lost
-        history). A soft sparkle now and then hints that it's a reward, not a threat.
-      - *Behaviour:* never attacks and flees from the player (reverse flow field, prefers corners). Catching it
-        drops 2–3 credits. If you don't within ~12 s, it gets garbage-collected: fades out with a puff.
-      - *Note:* `ignoreForClear` so it doesn't hold the doors shut; same care as the Hallucination when it outlives
-        the room clear.
+    - ~~Detached HEAD~~, ~~Stale Branch~~, ~~Cherry-Pick~~, ~~Orphan Commit~~: done 2026-11-02 (§4). The rules
+      above still apply to new members; reuse `B.BRANCH_LEAVES` and set `family: 'branches'`.
   - **Stash rooms** (`git stash`): a small optional room whose doorway is closed by a **hedge wall** of bush props
     (`prop_bush`, a whole row) instead of a door, which you shoot open. Inside: a cosy storage look (a few crates,
     one labelled with a little tag), 2–3 pickups and sometimes a chest. Minimap icon: a small box. Mostly on

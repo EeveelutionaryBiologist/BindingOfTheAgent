@@ -30,12 +30,14 @@
  *
  * Verhalten in dieser Datei: wander, chase, fly_chase, split, blink, charge, turret, orbit, shooter,
  * revive, grow, mimic, zigzag, glitch, stale (Stale Branch), detached_body + detached_tag (Detached HEAD),
- * cherry (Cherry-Pick). stale, detached_* und cherry gehoeren zur Forgotten-Branches-Familie.
+ * cherry (Cherry-Pick), orphan (Orphan Commit). stale, detached_*, cherry und orphan gehoeren zur
+ * Forgotten-Branches-Familie.
  * Boss-Verhalten (und das Wurm-Segment) stehen in entities/boss.js.
  *
  * Zusaetzliche Bus-Events (nur informativ, z. B. fuer Sound/Effekte): 'enemyRevive' (Zombie steht auf),
  * 'enemyReveal' (Hallucination enttarnt sich), 'enemyShed' (Stale Branch verliert Laub: { colors, count, big }),
- * 'enemyWindup' (Stale Branch zittert vor dem Sprung); aus boss.js: 'bossPhase', 'bossStomp', 'bossBounce'.
+ * 'enemyWindup' (Stale Branch zittert vor dem Sprung), 'orphanCaught' (Orphan Commit gefangen: { count }),
+ * 'enemyVanish' (Gegner verschwindet ohne Tod, z. B. Garbage Collection: { color, text }); aus boss.js: 'bossPhase', 'bossStomp', 'bossBounce'.
  * 'enemyDeath' kann zusaetzlich { segment: true } tragen (platzende Wurm-Segmente, ohne Kill-Zaehlung).
  *
  * SICHERHEIT: reine Spiellogik, kein DOM-Zugriff (ausser Canvas-Zeichnen), kein eval/innerHTML,
@@ -1862,6 +1864,159 @@
     ctx.fill();
     ctx.restore();
   }
+
+  // ===========================================================================
+  // Forgotten Branches: Orphan Commit ('orphan')
+  // ===========================================================================
+  //
+  // Flucht "bergauf" auf dem Flow-Field: room.flow enthaelt die Schrittzahl jeder Kachel zum Spieler (BFS, vom
+  // Spiel alle 0.15 s aktualisiert). Der Commit laeuft zur Nachbarkachel mit der hoechsten Wertung
+  // (Schritte + 0.6 * Luftlinie in Kacheln) und bleibt in einem lokalen Maximum stehen — das sind Ecken und
+  // Sackgassen hinter Felsen. Dort sitzt er zitternd fest, bis der Spieler ihn faengt (so ist er fangbar,
+  // obwohl er fast so schnell ist). Ohne Flow-Field (z. B. direkt nach dem Betreten) zaehlt nur die Luftlinie.
+  //
+  // Fangen = Beruehrung (afterMove, laeuft auch eingefroren) oder Abschuss; beides geht ueber die normale
+  // Todes-Logik (Kill zaehlt, Laub-Effekte der Familie) und onDeath wirft die Credits aus (game.rng: Anzahl und
+  // Flugrichtung, damit Seeds reproduzierbar bleiben). Garbage Collection dagegen setzt nur e.dead (kein Kill,
+  // keine Beute) und meldet 'enemyVanish' fuer Rauch und Text.
+
+  const ORPHAN_NB = [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [1, -1], [-1, 1], [-1, -1]];
+
+  /** Fluchtrichtung (Einheitsvektor) oder null, wenn keine Nachbarkachel besser ist (Ecke erreicht) */
+  function orphanFleeDir(e, game) {
+    const room = game.room, p = game.player, flow = room.flow;
+    const here = room.worldToTile(e.x, e.y);
+    const score = (c, r) => {
+      const f = flow ? flow[r * B.C.COLS + c] : 0;
+      if (f < 0) return -Infinity;                       // vom Spieler aus unerreichbar (oder fest)
+      const pt = room.tileCenter(c, r);
+      return f + 0.6 * Math.hypot(pt.x - p.x, pt.y - p.y) / B.C.TILE;
+    };
+    let best = null, bestS = score(here.c, here.r);
+    for (const [dc, dr] of ORPHAN_NB) {
+      const c = here.c + dc, r = here.r + dr;
+      if (room.isSolid(c, r, 'walk', false)) continue;
+      // Diagonalen nur, wenn beide Orthogonalen frei sind (keine Ecken schneiden, wie room.flowDir)
+      if (dc && dr && (room.isSolid(here.c + dc, here.r, 'walk', false) || room.isSolid(here.c, here.r + dr, 'walk', false))) continue;
+      const sc = score(c, r);
+      if (sc > bestS + 0.01) { best = [c, r]; bestS = sc; }
+    }
+    if (!best) return null;
+    const pt = room.tileCenter(best[0], best[1]);
+    return B.M.norm(pt.x - e.x, pt.y - e.y);
+  }
+
+  /** Garbage Collection: still entfernen (kein die() -> kein Kill, keine Credits, kein Todes-Event) */
+  function orphanVanish(e, game) {
+    if (e.dead) return;           // nur einmal (der Raum entfernt tote Gegner erst am Ende seines Updates)
+    e.dead = true;
+    B.bus.emit('enemyVanish', { game, enemy: e, x: e.x, y: e.y, color: '#c9ced6', text: 'garbage-collected' });
+  }
+
+  B.BEHAVIORS.orphan = {
+    init(e) {
+      const s = e.state;
+      e.ignoreForClear = true;      // haelt die Tueren nie zu
+      e.contactDamage = 0;          // greift nie an
+      s.life = e.params.life || 12;
+      s.warned = false;
+      s.trail = [];                 // letzte Positionen [x0, y0, x1, y1, ...] fuer die gestrichelte Spur
+      s.trailT = 0;
+    },
+    update(e, dt, game) {
+      const s = e.state, P = e.params, p = game.player;
+      if (e.dead) return;
+      s.life -= dt;
+      if (s.life <= 0) { orphanVanish(e, game); return; }
+      if (!s.warned && s.life <= (P.fadeAt || 3)) {
+        s.warned = true;
+        AI.say(e, 'gc pending...', 1.6, '#c9ced6');
+      }
+      const near = AI.dist(e, p) < (P.panicDist || 130);
+      const dir = orphanFleeDir(e, game);
+      const sp = e.speed * (near ? 1.25 : 1);
+      if (dir) {
+        e.vx = dir.x * sp;
+        e.vy = dir.y * sp;
+      } else {
+        AI.stop(e);                 // in der Ecke: bleibt sitzen (das Zittern ist nur optisch, siehe draw)
+      }
+      s.cornered = !dir && near;
+    },
+    afterMove(e, dt, game) {
+      const s = e.state, p = game.player;
+      // Spur mitschreiben (nur fuer die Optik; feste Abtastung, kein Zufall)
+      s.trailT -= dt;
+      if (s.trailT <= 0) {
+        s.trailT = 0.06;
+        s.trail.push(e.x, e.y + 6);
+        if (s.trail.length > 28) s.trail.splice(0, 2);
+      }
+      // Fangen durch Beruehrung — auch wenn er eingefroren ist, nicht aber waehrend des Einblendens
+      if (!e.dead && e.spawnDelay <= 0 && p && !p.dead && AI.dist(e, p) < e.r + p.r) e.die(game);
+    },
+    onDeath(e, game) {
+      const P = e.params;
+      const n = game.rng.int(P.creditsMin || 2, P.creditsMax || 3);
+      for (let i = 0; i < n; i++) {
+        const a = game.rng.angle();
+        game.spawnPickup('credit', e.x, e.y, { vx: Math.cos(a) * 170, vy: Math.sin(a) * 170 });
+      }
+      B.bus.emit('orphanCaught', { game, enemy: e, x: e.x, y: e.y, count: n });
+    },
+    draw(e, ctx) {
+      const s = e.state, P = e.params;
+      const fadeAt = P.fadeAt || 3;
+      // Garbage-Collection-Warnung: wird blasser und blinkt
+      let a = 1;
+      if (s.life < fadeAt) {
+        const k = Math.max(0, s.life / fadeAt);
+        a = (0.35 + 0.65 * k) * (Math.floor(e.t * 8) % 2 ? 1 : 0.55);
+      }
+      // Verlorene Historie: blasse gestrichelte Linie hinter ihm her
+      const tr = s.trail;
+      if (tr.length >= 4) {
+        ctx.save();
+        ctx.globalAlpha = 0.4 * a * e.alpha;
+        ctx.strokeStyle = '#e8efe6';
+        ctx.lineWidth = 2;
+        ctx.setLineDash([5, 7]);
+        ctx.beginPath();
+        ctx.moveTo(tr[0], tr[1]);
+        for (let i = 2; i < tr.length; i += 2) ctx.lineTo(tr[i], tr[i + 1]);
+        ctx.lineTo(e.x, e.y + 6);
+        ctx.stroke();
+        ctx.restore();
+      }
+      // Kleines Huepfen beim Laufen, Zittern in der Ecke; Frame 1 = Traene (wechselt langsam)
+      const moving = Math.abs(e.vx) + Math.abs(e.vy) > 5;
+      const dy = moving ? -Math.abs(Math.sin(e.t * 12)) * 3 : 0;
+      const dx = s.cornered ? Math.sin(e.t * 70) * 1.5 : 0;
+      AI.drawBody(e, ctx, { dx, dy, alpha: a, frame: Math.floor(e.t * 1.5) % 2 });
+      // Funkeln alle 2.4 s: Hinweis, dass er eine Belohnung ist (warmes Gold, kein Gruen)
+      const ph = e.t % 2.4;
+      if (ph < 0.45 && e.spawnDelay <= 0) {
+        const k = Math.sin((ph / 0.45) * Math.PI);
+        const sx = e.x + 13, sy = e.y - 15 + dy, r = 7 * k;
+        ctx.save();
+        ctx.globalAlpha = 0.9 * a * e.alpha;
+        ctx.fillStyle = '#ffe27a';
+        ctx.beginPath();
+        ctx.moveTo(sx, sy - r);
+        ctx.lineTo(sx + r * 0.28, sy - r * 0.28);
+        ctx.lineTo(sx + r, sy);
+        ctx.lineTo(sx + r * 0.28, sy + r * 0.28);
+        ctx.lineTo(sx, sy + r);
+        ctx.lineTo(sx - r * 0.28, sy + r * 0.28);
+        ctx.lineTo(sx - r, sy);
+        ctx.lineTo(sx - r * 0.28, sy - r * 0.28);
+        ctx.closePath();
+        ctx.fill();
+        ctx.restore();
+      }
+      AI.drawSay(e, ctx);
+    },
+  };
 
   B.AI = AI;
   B.Enemy = Enemy;

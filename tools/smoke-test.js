@@ -30,6 +30,9 @@
  *   - Cherry-Pick: Raum-Wuerfe liefern Kirschen paarweise, beim Bevoelkern gegenseitig verbunden; ein Treffer macht
  *     den PARTNER ~3 s wuetend (er spuckt einen Kern), stirbt einer, bleibt der andere wuetend; der Stiel dehnt
  *     sich nie ueber die Leine (auch nicht bei Rueckstoss); ein Einzel-Spawn bekommt einen Partner
+ *   - Orphan Commit: seltener Bonus nur auf Forgotten Branches (max. 1 pro Raum), flieht in Ecken, blockiert nie
+ *     das Clearing; Fangen (auch eingefroren) oder Abschuss -> 2–3 Credits; Garbage Collection mit Warnung, ohne
+ *     Beute und ohne Kill
  *   - Spezialraeume, Pause- und Todesbildschirm rendern
  * Screenshots landen in tools/out/ (nicht einchecken).
  *
@@ -952,6 +955,82 @@ const URL = 'file://' + path.join(ROOT, 'index.html').replace(/\\/g, '/') + '?se
     g.room.projectiles.length = 0;
     return out;
   }));
+
+  // --- Orphan Commit: seltener Bonus nur auf Forgotten Branches, flieht, Fangen/Abschuss -> 2–3 Credits,
+  //     Garbage Collection nach 12 s ohne Beute und ohne Kill; blockiert nie die Tueren ---
+  const orphanProblems = await page.evaluate(() => {
+    const out = [];
+    const g = BOTA.game, E = BOTA.ENEMIES;
+    // 1) Raum-Wuerfe: hoechstens einer pro Raum, nur auf Forgotten Branches, dort grob mit der Bonus-Chance
+    const keys = BOTA.FLOOR_THEMES.map((t) => t.key);
+    for (let d = 1; d <= 2 * keys.length; d++) {
+      let rooms = 0, withOrphan = 0;
+      for (let i = 0; i < 600; i++) {
+        const l = BOTA.rollRoomEnemies(new BOTA.RNG(BOTA.hashString('orphan' + d + ':' + i)), d);
+        const n = l.filter((id) => id === 'orphan_commit').length;
+        if (n > 1) { out.push('Orphan Commit: ' + n + ' in einem Raum (Etage ' + d + ')'); break; }
+        rooms++; withOrphan += n;
+      }
+      const share = withOrphan / rooms;
+      if (BOTA.themeKeyAt(d) !== 'branches') { if (share > 0) out.push('Orphan Commit auf Etage ' + d); continue; }
+      const want = Math.min(0.25, E.orphan_commit.bonusChance + 0.01 * (d - 1));
+      if (Math.abs(share - want) > 0.05) out.push('Orphan Commit: Anteil ' + share.toFixed(3) + ' statt ~' + want.toFixed(2) + ' auf Etage ' + d);
+    }
+
+    BOTA.debug.gotoRoom('start'); BOTA.debug.god(true);
+    for (let i = 0; i < 4; i++) BOTA.debug.killAll();
+    const p = g.player;
+    const DT = 1 / 60;
+    const step = (e, n) => { for (let i = 0; i < n; i++) { e.frozen = 0; e.update(DT, g); } };
+    const credits = () => g.room.pickups.filter((pk) => pk.type === 'credit' && !pk.dead).length;
+    const events = [];
+    const log = (name) => (ev) => events.push(name + ':' + (ev.count || ''));
+    const offC = BOTA.bus.on('orphanCaught', log('caught')), offV = BOTA.bus.on('enemyVanish', log('vanish'));
+    const spawn = (x, y) => { const o = BOTA.debug.spawn('orphan_commit', x, y); o.spawnDelay = 0; return o; };
+    try {
+      // 2) Harmlos und haelt die Tueren nicht zu
+      p.x = 480; p.y = 320;
+      const a = spawn(560, 320);
+      if (!a.ignoreForClear || a.contactDamage !== 0) out.push('Orphan Commit: blockiert das Clearing oder macht Schaden');
+      if (g.room.hasLivingEnemies()) out.push('Orphan Commit: Raum gilt mit ihm als nicht geraeumt');
+      // 3) Flieht: nach 2 s deutlich weiter weg, in einer Ecke (lokales Maximum des Flow-Fields)
+      g.room.updateFlow(p.x, p.y);
+      const d0 = Math.hypot(a.x - p.x, a.y - p.y);
+      step(a, 120);
+      const d1 = Math.hypot(a.x - p.x, a.y - p.y);
+      if (d1 < d0 + 150) out.push('Orphan Commit: flieht nicht (' + Math.round(d0) + ' -> ' + Math.round(d1) + ' px)');
+      // 4) Fangen durch Beruehrung: stirbt, 2–3 Credits, Spieler unverletzt; klappt auch eingefroren
+      const hp0 = p.health, c0 = credits();
+      a.frozen = 5; p.x = a.x; p.y = a.y;
+      a.update(DT, g);
+      const got = credits() - c0;
+      if (!a.dead) out.push('Orphan Commit: Beruehrung faengt ihn nicht (auch eingefroren)');
+      if (got < 2 || got > 3) out.push('Orphan Commit: ' + got + ' Credits beim Fangen');
+      if (p.health !== hp0) out.push('Orphan Commit: Fangen hat den Spieler verletzt');
+      // 5) Abschuss zaehlt ebenfalls als Fang
+      p.x = 150; p.y = 450;
+      const b = spawn(700, 250);
+      const c1 = credits();
+      b.hurt(999, g, null);
+      if (!b.dead || credits() - c1 < 2) out.push('Orphan Commit: Abschuss wirft keine Credits aus');
+      // 6) Garbage Collection: verschwindet nach Ablauf, ohne Beute und ohne Kill; Warnung vorher
+      const c = spawn(700, 250);
+      const c2 = credits(), kills = g.runStats.kills;
+      step(c, Math.round((E.orphan_commit.params.life - E.orphan_commit.params.fadeAt + 0.2) / DT));
+      if (c.dead || c.sayText !== 'gc pending...') out.push('Orphan Commit: keine GC-Warnung vor dem Verschwinden');
+      step(c, Math.round((E.orphan_commit.params.fadeAt + 0.2) / DT));
+      if (!c.dead) out.push('Orphan Commit: wird nicht eingesammelt');
+      if (credits() !== c2 || g.runStats.kills !== kills) out.push('Orphan Commit: Garbage Collection gibt Beute oder zaehlt als Kill');
+      // Events in dieser Reihenfolge: zwei Faenge (mit Credit-Anzahl), dann eine Garbage Collection
+      const kinds = events.map((x) => x.split(':')[0]).join(',');
+      if (kinds !== 'caught,caught,vanish' || events[0] !== 'caught:' + got) out.push('Orphan Commit: Events ' + events.join(','));
+    } finally {
+      offC(); offV();
+      for (const pk of g.room.pickups) if (pk.type === 'credit') pk.dead = true;
+    }
+    return out;
+  });
+  problems.push(...orphanProblems);
 
   // Mehrfach toedlicher Schaden, weil Items wie "Retry with Backoff" den ersten Tod abfangen
   await page.evaluate(() => {
