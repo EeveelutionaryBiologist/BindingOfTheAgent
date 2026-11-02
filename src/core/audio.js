@@ -162,6 +162,11 @@
       arp([60, 67], 0.07, 'square', 0.05);
       noise({ dur: 0.18, vol: 0.05, filter: 'bandpass', f: 2600, f2: 1200, q: 1 });
     },
+    // Kaktus gestochen: kurzes, hohes "Pieks" (der Treffer-Sound des Spielers kommt ohnehin dazu)
+    prick() {
+      voice({ f: 1900, f2: 1300, dur: 0.05, type: 'square', vol: 0.05 });
+      noise({ dur: 0.06, vol: 0.05, filter: 'highpass', f: 4000 });
+    },
     // Orphan Commit gefangen: kleines, freundliches Arpeggio nach oben
     rescue() { arp([72, 76, 79, 84], 0.05, 'triangle', 0.07); },
     // Garbage Collection: weiches Wegsaugen (Ton faellt, Rauschen wird leiser)
@@ -506,6 +511,7 @@
   on('bombPlaced', () => p('fuse'));
   on('chestOpen', () => p('chest'));
   on('rockBreak', () => p('rock'));
+  on('cactusPrick', () => p('prick'));
   on('projectileEnd', (e) => { if (e.impact && e.team === 'player') p('splat'); });
   on('bossIntro', (e) => { p('bossIntro'); if (ctx) music.start((e.game && e.game.depth) || music.depth || 1, true); });
   on('descend', () => { p('descend'); music.stop(0.5); });

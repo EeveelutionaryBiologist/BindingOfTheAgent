@@ -156,6 +156,7 @@
         case T.ROCK:
         case T.BLOCK:
         case T.PROP:
+        case T.CACTUS:
           return mode === 'walk' || mode === 'shot';
         case T.PIT:
           return mode === 'walk';

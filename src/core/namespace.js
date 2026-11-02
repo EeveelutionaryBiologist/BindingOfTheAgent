@@ -55,6 +55,7 @@ window.BOTA = window.BOTA || {};
     SPIKES: 5,  // verletzt den Spieler
     DOOR: 6,    // Tuerkachel in der Wand (Zustand haengt an room.doors)
     PROP: 7,    // zerstoerbares Objekt (Kiste, Busch, ...): wie ROCK, aber Spielerschuesse machen es kaputt
+    CACTUS: 8,  // Kaktus (Sandbox Borders): solide wie ROCK, sticht bei Beruehrung, Explosionen sprengen ihn
   };
 
   // ---------------------------------------------------------------------------

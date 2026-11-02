@@ -17,8 +17,8 @@ For comparison, the player has 3 hearts at the start and moves at 240 px/s; enem
 ## Enemies
 
 HP is the floor-1 value. "First floor" is the earliest floor where an enemy can appear in normal rooms.
-Some enemies belong to one floor theme and only appear there; floor themes repeat every 10 floors, so
-"Forgotten Branches" means floors 3, 13, 23 and so on.
+Some enemies belong to one floor theme and only appear there; floor themes repeat every 11 floors, so
+"Forgotten Branches" means floors 3, 14, 25 and so on.
 
 | | Name | First floor | HP | Behaviour | Flavour text |
 |---|---|---|---|---|---|
@@ -68,7 +68,7 @@ One boss per floor, in the room farthest from the start. **Floor 1:** The Monoli
 **Floor 2:** Monolith, Infinite Loop and Rogue Agent Swarm 27 % each, Stakeholder 18 %. **Floor 3** (Forgotten
 Branches): its own boss, the Octopus Merge, at about 52 %; Monolith, Infinite Loop and Rogue Agent Swarm 13 % each,
 Stakeholder 9 %. **Floor 4 and deeper:** Friday Deploy and the Antagonistic Reviewer join: 18 % each, Stakeholder 12 %.
-On later Forgotten Branches floors (13, 23, …) the Octopus Merge comes back at about 41 %, the other six 10 % each and
+On later Forgotten Branches floors (14, 25, …) the Octopus Merge comes back at about 41 %, the other six 10 % each and
 the Stakeholder 7 %. These are the base odds.
 Within a run, the boss of the previous floor never comes again right away, and every boss you've already met counts
 only 1/(1 + times met) as much, so a run sees more different bosses. Every attack has a

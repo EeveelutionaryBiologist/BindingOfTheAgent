@@ -492,11 +492,11 @@
             if (B.M.dist(x, y, pc.x, pc.y) < radius + TILE * 0.25) this.breakProp(room, c, r);
             continue;
           }
-          if (tile !== T.ROCK) continue;
+          if (tile !== T.ROCK && tile !== T.CACTUS) continue;
           const tc = room.tileCenter(c, r);
           if (B.M.dist(x, y, tc.x, tc.y) < radius + TILE * 0.25) {
             room.setTile(c, r, T.FLOOR);
-            B.bus.emit('rockBreak', { game: this, x: tc.x, y: tc.y });
+            B.bus.emit('rockBreak', { game: this, x: tc.x, y: tc.y, kind: tile === T.CACTUS ? 'cactus' : 'rock' });
             if (this.rng.chance(0.08)) this.spawnPickup(B.rollRandomPickup(this.rng, p.stats.luck), tc.x, tc.y);
           }
         }
@@ -657,6 +657,7 @@
       if (!p.flying) {
         const tile = this.room.worldToTile(p.x, p.y + p.r * 0.5);
         if (this.room.tileAt(tile.c, tile.r) === T.SPIKES) p.hurt(1, 'a spike (it was in the layout)', this);
+        this.checkCactus(p);
       }
 
       // Raum geschafft?
@@ -667,6 +668,30 @@
     }
 
     /** Verschlossene Tueren mit Approval oeffnen; durch offene Tueren in den Nachbarraum wechseln */
+    /**
+     * Kakteen (Sandbox Borders): Sie sind solide, der Spieler wird also an ihrem Rand aufgehalten. Beruehrt sein
+     * Kreis eine Kaktus-Kachel (Abstand Kreismitte -> Kachel-Rechteck < Radius + 3 px), gibt es ein halbes Herz
+     * und einen Rueckstoss von der Kachel weg. Die Unverwundbarkeit nach dem Treffer verhindert Dauerschaden.
+     * Fliegende Spieler sind ueber den Kakteen (wie ueber Felsen) und werden nicht gestochen.
+     */
+    checkCactus(p) {
+      const room = this.room;
+      const tile = room.worldToTile(p.x, p.y);
+      for (let r = tile.r - 1; r <= tile.r + 1; r++) {
+        for (let c = tile.c - 1; c <= tile.c + 1; c++) {
+          if (room.tileAt(c, r) !== T.CACTUS) continue;
+          const nx = B.M.clamp(p.x, c * TILE, (c + 1) * TILE), ny = B.M.clamp(p.y, r * TILE, (r + 1) * TILE);
+          if (Math.hypot(p.x - nx, p.y - ny) >= p.r + 3) continue;
+          if (p.hurt(1, 'a cactus', this)) {
+            const tc = room.tileCenter(c, r);
+            p.knockback(p.x - tc.x, p.y - tc.y, 420);
+            B.bus.emit('cactusPrick', { game: this, x: nx, y: ny });
+          }
+          return;
+        }
+      }
+    }
+
     checkDoors() {
       const p = this.player;
       const room = this.room;

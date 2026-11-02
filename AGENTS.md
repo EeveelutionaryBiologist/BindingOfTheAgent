@@ -82,6 +82,9 @@ Live state is under `BOTA.game` (`.player`, `.room`, `.floor`, `.depth`, `.state
 - pipes appear in about 10 % of combat rooms after clearing (never by a door), never lead to the boss room, the
   secret room or the current room, and can't ping-pong during their cooldown;
 - floor names and themes have the same length, floor 3 is Forgotten Branches, and its maps have ≥ 7 dead ends;
+- floor 6 is Sandbox Borders; cacti appear only there, only where the layout had a rock, never in front of a door,
+  at about the theme's `cacti` share; a cactus pricks once (then i-frames) with knockback, is solid like a rock,
+  and explosions break it;
 - `themes` / `themeOnly` on enemies and bosses only name existing theme keys with factors ≥ 0, every floor of two full
   theme cycles fills its rooms with allowed enemies and has an allowed boss, and temporary test entries confirm
   that exclusion, weight factors, bonus chances and the no-repeat boss rule all respect the floor theme;
@@ -159,7 +162,7 @@ depend on load order.
 
 | Global | File | What |
 |---|---|---|
-| `C`, `DIRS`, `OPPOSITE`, `TILES` | namespace | constants, directions, tile enum (FLOOR, WALL, ROCK, BLOCK, PIT, SPIKES, DOOR, PROP) |
+| `C`, `DIRS`, `OPPOSITE`, `TILES` | namespace | constants, directions, tile enum (FLOOR, WALL, ROCK, BLOCK, PIT, SPIKES, DOOR, PROP, CACTUS) |
 | `bus` | namespace | event bus `on/off/emit`; listener exceptions are caught and logged |
 | `storage`, `params` | namespace | validated localStorage (`muted, bestFloor, runs, deaths`); validated URL params |
 | `ITEMS, ENEMIES, BOSSES, BEHAVIORS, BOSS_BEHAVIORS, PICKUP_TYPES, LAYOUTS, TEXT` | namespace (filled by data/entities) | content registries |
@@ -168,7 +171,7 @@ depend on load order.
 | `input` | input | `down(code)`, `pressed(code)` (edge since the last sim step), `moveVector()`, `shootDir()`, `_simulate()` |
 | `defineSprite, drawSprite, hasSprite, spriteSize, spriteFrameCount` | sprites | ASCII sprite registry; unknown names draw a magenta placeholder |
 | `audio` | audio | `unlock, play(name), toggleMute, tone, names(), music.start/stop` |
-| `FONT, COLORS, FLOOR_THEMES, themeFor(depth)` | palette | colours and 10 floor themes (`gen` is read by the map generator) |
+| `FONT, COLORS, FLOOR_THEMES, themeFor(depth)` | palette | colours and 11 floor themes (`gen`, `props`, `cacti` are read by the map generator; `tiles` swaps tile sprites) |
 | `floorInfo(depth)`, `TEXT.*` | text | floor names/subtitles (cycling with roman numerals) and all snark lists; `TEXT.pick(list)` |
 | `Room`, `Floor` | world | room model and floor generator |
 | `Entity, Projectile, Bomb, Player, Enemy, Boss, AI, BossHelpers` | entities | gameplay classes and AI helpers |
@@ -200,7 +203,7 @@ Global keys handled in every state: `M` (mute) and `F2` (debug). Holding `R` for
 `game.player · game.room · game.floor · game.depth · game.rng · game.followers · game.seed · game.runStats`
 - `spawnProjectile(opts)`, `spawnEnemy(id, x, y, room?)`, `spawnBoss(id, x, y, room?)`
 - `spawnPickup(type, x, y, opts?, room?)`, `spawnPedestal(itemId, x, y, {price}?, room?)`
-- `explode(x, y, radius, damage, source)`: damages enemies and the player (2 halves), breaks rocks (8 % loot), reveals
+- `explode(x, y, radius, damage, source)`: damages enemies and the player (2 halves), breaks rocks and cacti (8 % loot), reveals
   hidden doors, flings pickups, shakes the screen, emits `explosion`
 - `shake(intensity, seconds)` · `banner(title, subtitle)` · `freezeEnemies(seconds)` · `rollItem(pool)` ·
   `nearestFreePos(x, y, room?)` · `nextFloor()` · `teleport(room)` · `pipeWarp(pipe)` · `glitchHud(seconds)` (scrambles one HUD area,
@@ -241,6 +244,10 @@ Global keys handled in every state: `M` (mute) and `F2` (debug). Holding `R` for
    Player shots call `game.hitProp` (in `projectile.js`), spectral shots too (once per prop while passing through),
    explosions call `game.breakProp`; enemy shots don't damage them. Breaking drops a random pickup with `B.PROP_LOOT_CHANCE` (10 %). Props are drawn per frame (`drawProps` in
    `renderer.js`), not baked into the background.
+11. `assignCacti` (own stream `':cacti'`) turns each rock in a normal room into a `CACTUS` tile with the theme's
+   `cacti` share (Sandbox Borders: 0.5), never in the 3 × 3 area in front of a door. Cacti are as solid as rocks, so
+   walkability is unchanged. `game.checkCactus` (from `updatePlay`, not while flying) pricks the player for half a
+   heart with knockback when their circle touches a cactus tile; `explode` breaks cacti like rocks.
 
 **Boss choice:** each room build still pre-rolls `bossId` with `B.rollBoss` (so the floor RNG is unchanged), but
 `game.enterFloor` then calls `assignFloorBoss`, which replaces it with `B.rollBossVaried(rng, depth, game.bossHistory)`.
@@ -262,7 +269,7 @@ The previous floor's boss is excluded, and bosses already met count `weight · t
   |---|---|---|---|---|
   | WALL | solid | solid | solid | solid |
   | DOOR | solid unless `isPlayer` and the door is open | same | solid | solid |
-  | ROCK / BLOCK / PROP | solid | — | solid | — |
+  | ROCK / BLOCK / PROP / CACTUS | solid | — | solid | — |
   | PIT | solid | — | — | — |
   | SPIKES / FLOOR | — | — | — | — |
 
@@ -371,7 +378,8 @@ The previous floor's boss is excluded, and bosses already met count `weight · t
   offscreen canvases, plus a white "flash" variant.
 - **Naming:**
   - `player_{down,up,left,right}` (4 walk frames), `player_hurt`, `player_itemget`, `player_dead`
-  - `tile_{rock(3 frames),block,pit,spikes}`, `hud_*`, `map_{boss,treasure,shop,secret}`, `pipe` (2 frames, generated),
+  - `tile_{rock(3 frames),block,pit,spikes}`, `tile_cactus` and `tile_sandstone` (3 frames each), `tile_border`
+    (3 frames: barrier, fence across, fence down), `hud_*`, `map_{boss,treasure,shop,secret}`, `pipe` (2 frames, generated),
     `prop_{crate,bush,package,carton}` (frame 1 = damaged)
   - `item_<id>`, `pickup_<type>`, `pedestal`, `trapdoor`, `bomb`, `familiar_duck`, `orbital_test`
   - `enemy_<id>`, `boss_<id>`
@@ -394,7 +402,8 @@ Payloads usually include `game, x, y` and often `color`.
 | `playerHurt`, `playerDeath` | player, game | audio, effects, HUD |
 | `pickup` (`type`), `itemGet` (`id, def`), `purchase`, `chestOpen` | pickup, player | audio, effects, HUD |
 | `denied` (`reason`: credits/locked/bomb/charge) | various | audio, effects |
-| `roomEnter` (`first`), `roomClear`, `doorsOpen`, `doorsClose`, `unlock`, `secretFound`, `rockBreak` | game, room | audio, effects |
+| `roomEnter` (`first`), `roomClear`, `doorsOpen`, `doorsClose`, `unlock`, `secretFound`, `rockBreak` (`kind`: rock/cactus) | game, room | audio, effects |
+| `cactusPrick` | game (`checkCactus`) | audio (`prick`), effects (spines) |
 | `explosion` (`radius`), `bombPlaced`, `projectileEnd` (`team, impact`) | game, projectile, player | audio, effects |
 | `activeUsed`, `activeCharged` | player | audio, HUD |
 | `runStart`, `floorEnter` (`depth`), `descend` | game | audio (music), screens |
@@ -403,7 +412,7 @@ Rule: audio and effects **only listen**. Game logic never calls them directly, e
 are game state.
 
 ### 3.12 Audio (`core/audio.js`) and effects (`entities/effects.js`)
-- **Audio:** 42 synthesized SFX in total. Every sound has a name; `audio.names()` lists them.
+- **Audio:** 43 synthesized SFX in total. Every sound has a name; `audio.names()` lists them.
   - Bus routing: voices → sfx/music bus → master → compressor.
   - Per-name rate limits (`RATE`) and a 40-voice cap keep it from getting noisy.
   - There is a procedural chiptune loop per floor plus a boss variant. Mute is persisted in storage; there's no
@@ -481,14 +490,14 @@ both keyed by the theme `key` from `B.FLOOR_THEMES` (`B.themeKeyAt(depth)`):
 `B.themeWeight(def, theme)` computes the factor (0 = excluded, otherwise the `themes` value or 1). It applies after
 `weightPerFloor` / `minWeight` / `maxWeight`, it scales `bonusChance` too (still capped at 25 % per room), and an
 excluded enemy is skipped entirely, including its bonus roll. Bosses use the same helper through `B.bossWeightAt`,
-in both `rollBoss` and `rollBossVaried`. Because themes repeat every 10 floors, a `branches` enemy also appears on
-floors 13, 23, … The roll functions take an optional `theme` argument (default: the depth's theme) for tests.
+in both `rollBoss` and `rollBossVaried`. Because themes repeat every 11 floors, a `branches` enemy also appears on
+floors 14, 25, … The roll functions take an optional `theme` argument (default: the depth's theme) for tests.
 Content without these fields rolls exactly as before (same RNG draws), so **existing seeds only change once you give
 an enemy or boss a theme field**; say so in that commit. In use by the Forgotten Branches family (below).
 
 **Bosses** (base HP): `monolith` 360, `stakeholder` 250, `friday_deploy` 240 (floor 4+), `infinite_loop` 300,
 `rogue_swarm` 4 × 80, `reviewer` 340 (floor 4+), `octopus_merge` 330 (Forgotten Branches only, weight 12: about 52 % on
-floor 3, about 41 % on floors 13, 23, …). Friday Deploy and the Reviewer moved from floors 2 and 3 to floor 4 on
+floor 3, about 41 % on floors 14, 25, …). Friday Deploy and the Reviewer moved from floors 2 and 3 to floor 4 on
 2026-11-02, which gives floor 3 to the Octopus Merge and floor 2 to Monolith, Stakeholder, Loop and Swarm.
 - **Octopus Merge** works like the Infinite Loop: the knot is the boss, its 8 arms are 5 `octo_arm` segments each
   (`proxy`, 60 %). The knot positions them every tick and draws the arms itself; only the tip (a commit dot) draws
@@ -510,8 +519,8 @@ a random drop; see §3.6 step 8).
 checks the format and that all 4 door tiles are clear and mutually reachable. `{strict: true}` adds three house rules:
 every floor tile must be reachable, there must be no spikes next to doors, and special rooms need a clear centre.
 
-**Text** (`B.TEXT`): `FLOORS` (10), `EPITAPHS` (25), `TAGLINES`, `SHOP_LINES`, `CLEAR_QUIPS`, `DENIED`, `PICKUP`, `EVENTS`, `RANKS`,
-plus per-floor extras `THEME_QUIPS` / `THEME_EPITAPHS` keyed by theme `key` (currently only `branches`).
+**Text** (`B.TEXT`): `FLOORS` (11), `EPITAPHS` (25), `TAGLINES`, `SHOP_LINES`, `CLEAR_QUIPS`, `DENIED`, `PICKUP`, `EVENTS`, `RANKS`,
+plus per-floor extras `THEME_QUIPS` / `THEME_EPITAPHS` keyed by theme `key` (currently `branches` and `sandbox`).
 
 ---
 
@@ -545,10 +554,13 @@ and `color` (optionally `themes` / `themeOnly`, §4), plus a `B.BOSS_BEHAVIORS.i
 hook it with `on('event', () => p('name'))`. Rate-limit it in `RATE` if it can fire every frame.
 
 **Add a floor:** add an entry at the same position in `B.TEXT.FLOORS` (name + subtitle) and `B.FLOOR_THEMES` (colours,
-`pattern`, `decor`, optional `wallDecor`/`ambient`/`gen`, music), keeping the two lists the same length (the smoke test
+`pattern`, `decor`, optional `wallDecor`/`ambient`/`gen`/`tiles`/`cacti`, music), keeping the two lists the same length (the smoke test
 checks). Depths cycle through the list modulo its length, with roman-numeral suffixes on later passes. New `pattern` /
 `decor` / `wallDecor` / `ambient` values need a case in `renderer.js`. Inserting in the middle shifts the names of all
-later floors (Forgotten Branches went in at position 3 on 2026-11-01); enemy and boss unlocks follow depth, not names.
+later floors (Forgotten Branches went in at position 3 on 2026-11-01, Sandbox Borders at position 6 on 2026-11-02);
+enemy and boss unlocks follow depth, not names, but themed content moves with its theme (Forgotten Branches came back
+on floor 13 before Sandbox Borders, now on 14). `theme.tiles` swaps the sprites of rocks, blocks or spikes for one
+floor (`blockJoin: true` picks fence frames by neighbouring blocks).
 Afterwards run `node tools/export-floors.js` and add the floor to `documents/floors.md` (its "Colour coverage" section
 lists which hues are still free).
 

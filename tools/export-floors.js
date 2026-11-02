@@ -7,7 +7,7 @@
  *   - documents/images/floor_<key>.jpg          Bildschirmfoto eines typischen Kampfraums (bereits geraeumt,
  *                                                also ohne Gegner; der Spieler steht zur Groessen-Orientierung
  *                                                in der Mitte). Gewaehlt wird deterministisch der Raum mit den
- *                                                meisten Merkmalen (zerstoerbare Objekte, Stacheln, Felsen).
+ *                                                meisten Merkmalen (zerstoerbare Objekte, Stacheln, Felsen, Kakteen).
  *   - documents/images/floor_<key>_swatch.png   48×48 "Mini-Raum": Wand, Boden-Schachbrett, Tuer und Akzentfarbe
  *                                                des Themas (fuer die Uebersichtstabelle).
  * Nach Aenderungen an Themen, Mustern oder Deko einfach erneut ausfuehren — die Markdown-Datei wird NICHT
@@ -65,15 +65,16 @@ const SAFE_KEY = /^[a-z0-9_]{1,32}$/; // Themen-Schluessel sind kurz und snake_c
       for (const c of g.floor.cells.values()) {
         if (c.type !== 'normal') continue;
         const room = c.room;
-        let spikes = 0, rocks = 0;
+        let spikes = 0, rocks = 0, cacti = 0;
         for (let r = 1; r < BOTA.C.ROWS - 1; r++) {
           for (let cc = 1; cc < BOTA.C.COLS - 1; cc++) {
             const t = room.tileAt(cc, r);
             if (t === T.SPIKES) spikes++;
             if (t === T.ROCK || t === T.BLOCK) rocks++;
+            if (t === T.CACTUS) cacti++;
           }
         }
-        const score = room.props.size * 2 + (spikes ? 3 : 0) + (rocks ? 1 : 0);
+        const score = room.props.size * 2 + (spikes ? 3 : 0) + (rocks ? 1 : 0) + Math.min(cacti, 4) * 2;
         if (score > bestScore) { bestScore = score; best = room; }
       }
       if (best) {

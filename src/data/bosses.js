@@ -77,7 +77,7 @@
   };
 
   // Etagen-Boss von Forgotten Branches (themeOnly). Gewicht 12: auf Etage 3 gegen 11 fuer die vier anderen dort
-  // moeglichen Bosse (~52 %), auf Etage 13, 23, ... gegen 17 fuer alle sechs (~41 %) — jeweils beim ersten Besuch;
+  // moeglichen Bosse (~52 %), auf Etage 14, 25, ... gegen 17 fuer alle sechs (~41 %) — jeweils beim ersten Besuch;
   // die Abwechslungs-Regeln in rollBossVaried gelten wie fuer alle. hp gilt fuer den Knoten;
   // Treffer auf die Arme zaehlen zu 60 % (proxyMult in entities/boss.js).
   B.BOSSES.octopus_merge = {
@@ -96,7 +96,7 @@
    * (seit 2026-11-02; vorher ab 2 bzw. 3 — so hat die Octopus Merge auf Etage 3 mehr Platz)
    * (Gewichte 3, Stakeholder 2 — er ist etwas seltener, weil man ihn auf Etage 1 schon oft gesehen hat).
    * Etage 2: je 27 %, Stakeholder 18 %; Etage 3 (Forgotten Branches): Octopus Merge 52 %, sonst je 13 %, Stakeholder 9 %;
-   * ab Etage 4: je 18 %, Stakeholder 12 % (Etage 13, 23, ...: Octopus Merge 41 %, sonst je 10 %, Stakeholder 7 %).
+   * ab Etage 4: je 18 %, Stakeholder 12 % (Etage 14, 25, ...: Octopus Merge 41 %, sonst je 10 %, Stakeholder 7 %).
    */
   /**
    * Boss-Abwechslung ueber einen Run (game.assignFloorBoss ruft das beim Betreten jeder Etage auf):

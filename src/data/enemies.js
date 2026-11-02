@@ -34,7 +34,7 @@
  *   };
  *
  * Etagen-Themen: Gespawnt wird nach Tiefe UND nach dem Thema der Etage (B.themeFor(depth).key). Die Themen
- * wiederholen sich alle FLOOR_THEMES.length Etagen, ein "branches"-Gegner kommt also auf Etage 3, 13, 23, ...
+ * wiederholen sich alle FLOOR_THEMES.length Etagen, ein "branches"-Gegner kommt also (bei 11 Themen) auf Etage 3, 14, 25, ...
  * wieder. Der Faktor wirkt auf das fertige Tiefen-Gewicht (nach minWeight/maxWeight) und auf bonusChance.
  * Gegner ohne themes/themeOnly verhalten sich exakt wie vorher (Faktor 1, keine zusaetzlichen RNG-Zuege),
  * bestehende Seeds bleiben also gleich, solange kein Gegner die Felder nutzt.

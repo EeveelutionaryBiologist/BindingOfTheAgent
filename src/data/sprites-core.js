@@ -337,9 +337,7 @@
     M: '#4f6b36', // Moos dunkel
     s: 'rgba(0,0,0,0.35)', // Bodenschatten
   };
-  B.defineSprite('tile_rock', {
-    palette: ROCK_PAL, scale: 4,
-    frames: [
+  const ROCK_FRAMES = [
       // Variante 1: grosser runder Brocken
       [
         '................',
@@ -397,7 +395,15 @@
         '................',
         '................',
       ],
-    ],
+  ];
+  B.defineSprite('tile_rock', { palette: ROCK_PAL, scale: 4, frames: ROCK_FRAMES });
+  // Sandstein (Sandbox Borders, theme.tiles.rock): dieselben Formen, warme Sandtoene, Moos wird zu Schatten
+  B.defineSprite('tile_sandstone', {
+    palette: Object.assign({}, ROCK_PAL, {
+      K: '#3a2814', H: '#f4dfb4', b: '#d8b884', a: '#b8935e', e: '#946f42', f: '#6e4f2c', m: '#a8834f', M: '#8a6a3e',
+    }),
+    scale: 4,
+    frames: ROCK_FRAMES,
   });
 
   // Block: unzerstoerbarer Stahlblock ("Legacy-Monolith im Kleinformat") mit Nieten und Fase.
@@ -512,6 +518,125 @@
   // ===========================================================================
 
   /** Zeilen aus einer Funktion (x, y) -> Zeichen */
+  /**
+   * Kontur automatisch ergaenzen: jedes leere Pixel ('.') neben (4er-Nachbarschaft) einem gefuellten Pixel wird zu
+   * `ch`. Spart bei Formen aus Rechtecken (Kaktus, Sandburg) das Abzaehlen von Hand.
+   */
+  function autoOutline(rows, ch) {
+    const H = rows.length, W = rows[0].length;
+    const filled = (x, y) => x >= 0 && y >= 0 && x < W && y < H && rows[y][x] !== '.' && rows[y][x] !== 's';
+    return rows.map((row, y) => row.split('').map((px, x) => (
+      px === '.' && (filled(x - 1, y) || filled(x + 1, y) || filled(x, y - 1) || filled(x, y + 1)) ? ch : px
+    )).join(''));
+  }
+
+  /**
+   * Formen aus Rechtecken [x0, y0, x1, y1] (inklusive) auf ein 16x16-Raster malen. Spalte x0 = Licht ('L'),
+   * x1 = Schatten ('D'), dazwischen Grundton ('M'); die oberen Ecken breiter Formen bleiben leer (abgerundet).
+   */
+  function shapeRows(shapes) {
+    const g = Array.from({ length: 16 }, () => Array(16).fill('.'));
+    for (const [x0, y0, x1, y1] of shapes) {
+      for (let y = y0; y <= y1; y++) {
+        for (let x = x0; x <= x1; x++) {
+          if (y === y0 && x1 - x0 >= 2 && (x === x0 || x === x1)) continue;
+          g[y][x] = x === x0 ? 'L' : x === x1 ? 'D' : 'M';
+        }
+      }
+    }
+    return g.map((r) => r.join(''));
+  }
+
+  // Kaktus (Sandbox Borders, Kacheltyp CACTUS): drei Varianten wie beim Fels. Solide und stechend, deshalb
+  // kraeftiges Gruen mit hellen Stacheln — hebt sich klar vom Sand ab. Stacheln ('p') sitzen rhythmisch auf der
+  // Kontur, Bodenschatten ('s') unter der Form. Zeichen: k Kontur, L/M/D Gruen hell/mittel/dunkel, p Stachel,
+  // f Bluete, F Bluetenmitte, s Schatten
+  const CACTUS_PAL = {
+    k: '#17240f', L: '#8fbf5a', M: '#5f9238', D: '#3d6626', p: '#f6efd8', f: '#ff86a8', F: '#ffd34d',
+    s: 'rgba(0,0,0,0.3)',
+  };
+  function cactusRows(shapes, stamps) {
+    const bottom = Math.max(...shapes.map((sh) => sh[3]));
+    let rows = autoOutline(shapeRows(shapes), 'k');
+    // Bodenschatten: unter der unteren Kontur, eine Zeile tiefer (etwas breiter)
+    rows = rows.map((row, y) => (y === bottom + 2 ? row.split('').map((px, x) => (
+      rows[bottom + 1][x] === 'k' || rows[bottom + 1][x + 1] === 'k' ? 's' : px)).join('') : row));
+    // Stacheln: jedes dritte Konturpixel an den Seiten (nicht am Boden)
+    rows = rows.map((row, y) => row.split('').map((px, x) => (px === 'k' && y < bottom && (x * 5 + y * 3) % 4 === 0 ? 'p' : px)).join(''));
+    return stamp(rows, stamps || []);
+  }
+  B.defineSprite('tile_cactus', {
+    palette: CACTUS_PAL, scale: 4,
+    frames: [
+      // Saeulenkaktus mit zwei Armen
+      cactusRows([[6, 1, 9, 13], [2, 4, 4, 8], [2, 8, 6, 9], [11, 3, 13, 6], [9, 6, 13, 7]]),
+      // Fasskaktus mit Bluete
+      cactusRows([[4, 6, 11, 13], [5, 5, 10, 13]], [[4, 7, 'f'], [4, 8, 'F'], [4, 9, 'f'], [3, 8, 'f']]),
+      // Feigenkaktus: drei Scheiben, rosa Fruechte
+      cactusRows([[2, 8, 7, 13], [7, 4, 11, 10], [10, 9, 14, 13]], [[3, 8, 'f'], [3, 10, 'f'], [7, 12, 'f']]),
+    ],
+  });
+
+  // Grenzzaun (Sandbox Borders, theme.tiles.block mit blockJoin): unzerstoerbar wie der Stahlblock.
+  //   Frame 0: einzelne Absperrung (rot-weiss gestreifte Betonbarriere)
+  //   Frame 1: Maschendrahtzaun waagerecht (Pfosten links/rechts, Draht ueber die volle Breite -> laeuft durch)
+  //   Frame 2: Maschendrahtzaun senkrecht
+  // Zeichen: k Kontur, w Weiss, r Rot, R Rot dunkel, g Beton, G Beton dunkel, P Pfosten, Q Pfosten dunkel,
+  // m Maschendraht, b Stacheldraht, s Schatten
+  const BORDER_PAL = {
+    k: '#1f1a17', w: '#f2ece0', r: '#d64545', R: '#9c2f2f', g: '#c9c1b2', G: '#968d7e',
+    P: '#9aa0a8', Q: '#5c626a', m: 'rgba(210,214,220,0.75)', b: '#c9ced6', s: 'rgba(0,0,0,0.3)',
+  };
+  const BORDER_BARRIER = gridRows(16, 16, (x, y) => {
+    if (y < 4 || y > 14) return '.';
+    if (y === 14) return x >= 1 && x <= 14 ? 's' : '.';
+    if (y === 4 || y === 13 || x === 0 || x === 15) return (y === 4 && (x === 0 || x === 15)) ? '.' : 'k';
+    if (y >= 11) return y === 12 ? 'G' : 'g';                          // Betonfuss
+    return Math.floor((x + y) / 3) % 2 ? (y === 10 ? 'R' : 'r') : 'w';  // diagonale Warnstreifen
+  });
+  const BORDER_FENCE_H = gridRows(16, 16, (x, y) => {
+    if (y === 15) return '.';
+    if ((x === 2 || x === 13) && y >= 3 && y <= 13) return y === 13 ? 's' : 'P';  // Pfosten
+    if ((x === 3 || x === 14) && y >= 3 && y <= 12) return 'Q';
+    if (y === 3) return x % 3 === 0 ? 'k' : 'b';                                   // Stacheldraht oben
+    if (y === 5 || y === 11) return 'G';                                           // Querstangen
+    if (y > 5 && y < 11) return (x + y) % 3 === 0 || (x - y + 30) % 3 === 0 ? 'm' : '.';  // Maschendraht
+    if (y === 12) return 's';
+    return '.';
+  });
+  const BORDER_FENCE_V = gridRows(16, 16, (x, y) => {
+    if ((y === 2 || y === 13) && x >= 5 && x <= 10) return x === 10 ? 'Q' : 'P';  // Pfosten (von oben gesehen)
+    if (x === 5 || x === 10) return 'G';                                           // Laengsstangen
+    if (x === 7) return y % 3 === 0 ? 'k' : 'b';                                   // Stacheldraht in der Mitte
+    if (x > 5 && x < 10) return (x + y) % 3 === 0 || (x - y + 30) % 3 === 0 ? 'm' : '.';
+    if (x === 11) return 's';
+    return '.';
+  });
+  B.defineSprite('tile_border', { palette: BORDER_PAL, scale: 4, frames: [BORDER_BARRIER, BORDER_FENCE_H, BORDER_FENCE_V] });
+
+  // Sandburg (Sandbox Borders, zerstoerbares Objekt): zwei Tuerme mit Zinnen, Burgfried mit Faehnchen, Tor.
+  // Frame 1 (beschaedigt): der rechte Turm ist eingestuerzt, Sand rieselt. Zeichen: k Kontur, L/M/D Sand
+  // hell/mittel/dunkel, T Tor/Fenster, r Fahne, s Schatten
+  const SANDCASTLE_PAL = {
+    k: '#4a3420', L: '#f2dcae', M: '#e0bf85', D: '#b8955a', T: '#6e5232', r: '#d64545', s: 'rgba(0,0,0,0.28)',
+  };
+  function sandcastleRows(broken) {
+    const shapes = [[1, 6, 5, 13], [6, 4, 9, 13], [1, 10, 14, 13]];
+    if (!broken) shapes.push([10, 6, 14, 13]);
+    let rows = shapeRows(shapes);
+    // Zinnen: Luecken in der obersten Reihe der Tuerme
+    const notch = [[1, 6], [3, 6], [5, 6], [6, 4], [9, 4]].concat(broken ? [] : [[10, 6], [12, 6], [14, 6]]);
+    rows = stamp(rows, notch.map(([x, y]) => [y, x, '.']));
+    if (broken) rows = stamp(rows, [[9, 10, 'D'], [9, 11, 'M'], [9, 12, 'D'], [8, 11, 'D'], [9, 13, 'M'], [8, 13, 'D']]);  // Schutthaufen
+    rows = autoOutline(rows, 'k');
+    // Tor, Fenster, Fahne am Burgfried, Bodenschatten
+    rows = stamp(rows, [[11, 7, 'T'], [11, 8, 'T'], [12, 7, 'T'], [12, 8, 'T'], [8, 3, 'T'], [7, 7, 'T'],
+      [1, 8, 'k'], [2, 8, 'k'], [0, 8, 'k'], [1, 9, 'r'], [1, 10, 'r'], [2, 9, 'r']]);
+    if (!broken) rows = stamp(rows, [[8, 12, 'T']]);
+    return rows.map((row, y) => (y === 15 ? row.split('').map((px, x) => (x >= 1 && x <= 14 ? 's' : px)).join('') : row));
+  }
+  B.defineSprite('prop_sandcastle', { palette: SANDCASTLE_PAL, scale: 4, frames: [sandcastleRows(false), sandcastleRows(true)] });
+
   function gridRows(w, h, fn) {
     const rows = [];
     for (let y = 0; y < h; y++) {

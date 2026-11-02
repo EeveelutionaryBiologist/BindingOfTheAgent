@@ -108,6 +108,34 @@
       this.assignReadme(ordered);
       this.assignPipes(ordered);
       this.assignProps(ordered);
+      this.assignCacti(ordered);
+    }
+
+    /**
+     * Kakteen (Kacheltyp CACTUS, Thema-Feld cacti = Anteil): In normalen Raeumen wird jeder Fels mit dieser
+     * Chance zum Kaktus. Kakteen sind genauso solide wie Felsen, daher bleibt die Begehbarkeit jedes Raums exakt
+     * gleich (kein fullyWalkable noetig). Nie im 3x3-Bereich vor einer Tuer: dort laeuft man beim Betreten
+     * zwangslaeufig vorbei und soll nicht gleich gestochen werden. Eigener RNG-Strom (':cacti'); fuer jeden Fels
+     * wird genau eine Zahl gezogen, damit das Ergebnis pro Raum stabil ist.
+     */
+    assignCacti(ordered) {
+      const theme = B.themeFor ? B.themeFor(this.depth) : null;
+      const share = theme && theme.cacti;
+      if (!share) return;
+      const rng = new B.RNG(B.hashString(String(this.seed) + ':cacti'));
+      for (const cell of ordered) {
+        if (cell.type !== 'normal') continue;
+        const room = cell.room;
+        const fronts = Object.keys(room.doors).map((dir) => DOOR_FRONT[dir]);
+        for (let r = 1; r < ROWS - 1; r++) {
+          for (let c = 1; c < COLS - 1; c++) {
+            if (room.tileAt(c, r) !== TT.ROCK) continue;
+            const hit = rng.chance(share);
+            if (!hit || fronts.some(([fc, fr]) => Math.abs(fc - c) <= 1 && Math.abs(fr - r) <= 1)) continue;
+            room.setTile(c, r, TT.CACTUS);
+          }
+        }
+      }
     }
 
     /**

@@ -36,6 +36,8 @@
  *   - Octopus Merge: nur auf Forgotten Branches; 8 Arme a 5 Segmente (proxy 60 %), bleiben im Raum; jeder Schwung,
  *     Schlag, Spitzen-Schuss und Strom mit Telegraph; Merges je 12 % HP (mind. ein Arm), Phase 2 bei 50 % mit
  *     gegenlaeufigen Stroemen; Kontakt entlang des Arms; genau ein Boss-Tod, danach keine Segmente mehr
+ *   - Sandbox Borders (Etage 6): Kakteen nur dort, nur aus Felsen, nie vor Tueren, Anteil wie theme.cacti; Kaktus
+ *     sticht einmal (dann Unverwundbarkeit) mit Rueckstoss, ist solide, Explosionen sprengen ihn; Sprites vorhanden
  *   - Spezialraeume, Pause- und Todesbildschirm rendern
  * Screenshots landen in tools/out/ (nicht einchecken).
  *
@@ -107,7 +109,7 @@ const URL = 'file://' + path.join(ROOT, 'index.html').replace(/\\/g, '/') + '?se
     for (const [id, def] of Object.entries(BOTA.BOSSES)) if (!BOTA.hasSprite(def.sprite)) out.push('Boss ohne Sprite: ' + id);
     // Layouts (strikte Hausregeln)
     for (const l of BOTA.LAYOUTS) { const r = BOTA.validateLayout(l, { strict: true }); if (!r.ok) out.push('Layout ' + l.id + ': ' + r.error); }
-    // Etagen-Themen und -Namen gleich lang; Forgotten Branches ist Etage 3 (und 13, 23, ...)
+    // Etagen-Themen und -Namen gleich lang; Forgotten Branches ist Etage 3 (und 14, 25, ...), Sandbox Borders Etage 6
     if (BOTA.TEXT.FLOORS.length !== BOTA.FLOOR_THEMES.length) out.push('FLOORS (' + BOTA.TEXT.FLOORS.length + ') und FLOOR_THEMES (' + BOTA.FLOOR_THEMES.length + ') ungleich lang');
     if (BOTA.themeFor(3).key !== 'branches' || BOTA.floorInfo(3).name !== 'Forgotten Branches') out.push('Etage 3 ist nicht Forgotten Branches');
     // Verzweigtere Karten auf Forgotten Branches: mindestens gen.minDeadEnds Sackgassen
@@ -121,7 +123,7 @@ const URL = 'file://' + path.join(ROOT, 'index.html').replace(/\\/g, '/') + '?se
     // Etagen-Fuzzing
     let combatRooms = 0, combatWithLoot = 0, readmeFloors = 0, pipeRooms = 0;
     for (let i = 0; i < 300; i++) {
-      const f = new BOTA.Floor(1 + (i % 10), 'fuzz' + i);
+      const f = new BOTA.Floor(1 + (i % BOTA.FLOOR_THEMES.length), 'fuzz' + i);
       const types = [...f.cells.values()].map((c) => c.type);
       for (const t of ['start', 'boss', 'treasure', 'shop']) if (!types.includes(t)) out.push('fuzz' + i + ' ohne ' + t);
       // Ab Tiefe 2 genau ein Kampfraum mit garantiertem Approval
@@ -1175,6 +1177,97 @@ const URL = 'file://' + path.join(ROOT, 'index.html').replace(/\\/g, '/') + '?se
     return out;
   });
   problems.push(...octoProblems);
+
+  // --- Sandbox Borders: Etage 6; Kakteen nur dort, nur aus Felsen, nie vor Tueren, ~Anteil theme.cacti;
+  //     Kaktus sticht (einmal, dann Unverwundbarkeit) und stoesst zurueck; Explosion sprengt ihn; Sprites da ---
+  const sandProblems = await page.evaluate(() => {
+    const out = [];
+    const g = BOTA.game, T = BOTA.TILES;
+    const N = BOTA.FLOOR_THEMES.length;
+    if (BOTA.themeKeyAt(6) !== 'sandbox' || BOTA.floorInfo(6).name !== 'Sandbox Borders') out.push('Etage 6 ist nicht Sandbox Borders');
+    for (const [name, frames] of [['tile_cactus', 3], ['tile_sandstone', 3], ['tile_border', 3], ['prop_sandcastle', 2]]) {
+      if (!BOTA.hasSprite(name) || BOTA.spriteFrameCount(name) !== frames) out.push('Sprite ' + name + ' fehlt oder hat nicht ' + frames + ' Frames');
+    }
+    // 1) Kartengenerierung ueber zwei Themen-Durchlaeufe
+    const FRONT = { up: [7, 1], down: [7, 7], left: [1, 4], right: [13, 4] };
+    let rocks = 0, cacti = 0;
+    for (let d = 1; d <= 2 * N; d++) {
+      const sandbox = BOTA.themeKeyAt(d) === 'sandbox';
+      for (let i = 0; i < (sandbox ? 40 : 6); i++) {
+        const f = new BOTA.Floor(d, 'sand' + d + ':' + i);
+        for (const cell of f.cells.values()) {
+          const rm = cell.room;
+          const fronts = Object.keys(rm.doors).map((dir) => FRONT[dir]);
+          for (let r = 1; r < 8; r++) {
+            for (let c = 1; c < 14; c++) {
+              const t = rm.tileAt(c, r);
+              const fromRock = rm.layout && (rm.layout.rows[r - 1] || '')[c - 1] === 'r';
+              if (t !== T.CACTUS) { if (sandbox && cell.type === 'normal' && t === T.ROCK) rocks++; continue; }
+              cacti++;
+              if (!sandbox) { out.push('Kaktus auf Etage ' + d); break; }
+              if (cell.type !== 'normal') out.push('Kaktus in ' + cell.type + ' (Etage ' + d + ')');
+              if (!fromRock) out.push('Kaktus nicht aus einem Fels entstanden (' + c + ',' + r + ')');
+              if (fronts.some(([fc, fr]) => Math.abs(fc - c) <= 1 && Math.abs(fr - r) <= 1)) out.push('Kaktus vor einer Tuer (' + c + ',' + r + ')');
+            }
+          }
+        }
+        if (out.length > 5) break;
+      }
+    }
+    // Anteil: von allen Felsen (ohne die vor Tueren) ist ungefaehr theme.cacti zum Kaktus geworden
+    const want = BOTA.themeFor(6).cacti;
+    const share = cacti / Math.max(1, cacti + rocks);
+    if (!cacti || share < want - 0.15 || share > want + 0.05) out.push('Kaktus-Anteil ' + share.toFixed(2) + ' (Ziel ~' + want + ')');
+
+    // 2) Stechen, Unverwundbarkeit, Rueckstoss, Sprengen — in einem leeren Raum mit einer gesetzten Kaktus-Kachel
+    BOTA.debug.gotoRoom('start'); BOTA.debug.god(true);
+    for (let i = 0; i < 4; i++) BOTA.debug.killAll();
+    const p = g.player, room = g.room;
+    const prev = room.tileAt(5, 4);
+    room.setTile(5, 4, T.CACTUS);
+    const hurts = [], events = [];
+    const origHurt = p.hurt;
+    p.hurt = function (amount, src) { hurts.push(src); return origHurt.apply(this, arguments); };
+    const offs = ['cactusPrick', 'rockBreak'].map((n) => BOTA.bus.on(n, (e) => events.push(n + ':' + (e.kind || ''))));
+    try {
+      // Spieler direkt rechts neben der Kachel (Kreis beruehrt den Rand); ohne God-Mode, mit voller Gesundheit
+      BOTA.debug.god(false); p.health = p.maxHealth;
+      p.x = 6 * 64 + p.r + 1; p.y = 4 * 64 + 32; p.invuln = 0; p.kbx = p.kby = 0;
+      g.checkCactus(p);
+      if (hurts[0] !== 'a cactus' || !events.includes('cactusPrick:')) out.push('Kaktus sticht nicht: ' + hurts.join(','));
+      if (!(p.kbx > 0)) out.push('Kaktus stoesst nicht vom Kaktus weg (kbx ' + p.kbx + ')');
+      const n = events.filter((x) => x === 'cactusPrick:').length;
+      g.checkCactus(p);   // direkt danach: Unverwundbarkeit -> kein zweiter Stich
+      if (events.filter((x) => x === 'cactusPrick:').length !== n) out.push('Kaktus sticht trotz Unverwundbarkeit erneut');
+      // Mit Abstand: kein Stich
+      p.invuln = 0; hurts.length = 0;
+      p.x = 6 * 64 + p.r + 12;
+      g.checkCactus(p);
+      if (hurts.length) out.push('Kaktus sticht auf Abstand');
+      // Explosion sprengt den Kaktus (rockBreak mit kind 'cactus')
+      p.x = 480; p.y = 450; p.invuln = 5;
+      g.explode(5 * 64 + 32, 4 * 64 + 32, 60, 0, 'the smoke test');
+      if (room.tileAt(5, 4) !== T.FLOOR || !events.includes('rockBreak:cactus')) out.push('Explosion sprengt den Kaktus nicht');
+      // Solide wie ein Fels (fuer Laeufer und Schuesse), Flieger kommen drueber
+      room.setTile(5, 4, T.CACTUS);
+      if (!room.isSolid(5, 4, 'walk', true) || !room.isSolid(5, 4, 'shot', false) || room.isSolid(5, 4, 'fly', false)) out.push('Kaktus hat falsche Kollision');
+    } finally {
+      p.hurt = origHurt;
+      for (const off of offs) off();
+      room.setTile(5, 4, prev);
+      p.invuln = 0; p.health = p.maxHealth;
+      BOTA.debug.god(true);
+    }
+    return out;
+  });
+  problems.push(...sandProblems);
+  await page.evaluate(() => {
+    const g = BOTA.game; g.enterFloor(6); g.setState('play');
+    const c = [...g.floor.cells.values()].find((x) => x.type === 'normal' && x.room.props.size);
+    c.room.populated = true; c.room.cleared = true; g.teleport(c.room);
+  });
+  await page.waitForTimeout(400);
+  await shot('14-sandbox-borders');
 
   // Mehrfach toedlicher Schaden, weil Items wie "Retry with Backoff" den ersten Tod abfangen
   await page.evaluate(() => {

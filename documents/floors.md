@@ -5,8 +5,8 @@ All floor themes in the game, what each one looks and sounds like, and what (if 
 
 ## How floors work
 
-**Cycle.** There are 10 floor themes. Floor *n* uses theme *(n − 1) mod 10*, so the list repeats forever: floor 11 is
-The Backlog again, floor 13 is Forgotten Branches again, and so on. Repeated floors get a roman numeral on the floor
+**Cycle.** There are 11 floor themes. Floor *n* uses theme *(n − 1) mod 11*, so the list repeats forever: floor 12 is
+The Backlog again, floor 14 is Forgotten Branches again, and so on. Repeated floors get a roman numeral on the floor
 card ("The Backlog II").
 
 **Depth vs. theme.** Difficulty follows the **depth** (floor number), never the theme: enemy unlocks, room budgets, HP
@@ -20,10 +20,13 @@ theme-specific extras (marked *Gameplay* below).
   **ambient** layer.
 - **Breakable objects:** which kinds appear, in how many combat rooms, and how many per room.
 - **Music:** root note, scale, tempo and lead instrument of the procedural chiptune loop.
-- *Gameplay (optional):* map shape (`gen`), themed enemies and bosses (`themes` / `themeOnly`), extra quips and epitaphs.
+- **Tile sprites (optional):** a theme can swap the look of rocks, blocks or spikes (`tiles`); Sandbox Borders uses
+  this for sandstone boulders and border fences.
+- *Gameplay (optional):* map shape (`gen`), cacti (`cacti`), themed enemies and bosses (`themes` / `themeOnly`),
+  extra quips and epitaphs.
 
-Things that look **the same on every floor**: rocks, blocks, pits and spikes (`tile_*` sprites), doors and the
-special rooms (treasure, shop, boss, secret).
+Things that look **the same on every floor**: pits and spikes, doors and the special rooms (treasure, shop, boss,
+secret); rocks and blocks too, except on Sandbox Borders.
 
 ---
 
@@ -36,26 +39,28 @@ special rooms (treasure, shop, boss, secret).
 | ![Forgotten Branches](images/floor_branches_swatch.png) | 3 | **Forgotten Branches** `branches` | Moss, soil and grass | Roots drawn like a `git log --graph` | Bushes | G dorian, 98 bpm, triangle, bird calls | Ivy, fireflies, branchier maps, own enemy family and boss |
 | ![Dependency Hell](images/floor_dephell_swatch.png) | 4 | **Dependency Hell** `dephell` | Square tiles | Glowing cracks and embers | Packages, cartons | B phrygian, 128 bpm, sawtooth | — |
 | ![Production](images/floor_production_swatch.png) | 5 | **Production** `production` | Checker plate with rivets | Hazard stripes at doors, cables | Packages, cartons | A harmonic minor, 138 bpm, square | — |
-| ![The Training Data](images/floor_training_swatch.png) | 6 | **The Training Data** `training` | Graph paper | Scattered characters (`0 1 {} lol tl;dr nan`) | Cartons, crates | E major, 116 bpm, triangle | — |
-| ![The Latent Space](images/floor_latent_swatch.png) | 7 | **The Latent Space** `latent` | Dot grid | Stars and a constellation | Bushes, packages | C lydian, 96 bpm, sine | — |
-| ![Undefined Behavior](images/floor_undefined_swatch.png) | 8 | **Undefined Behavior** `undefined` | Square tiles | Shifted colour stripes (glitches) | All four kinds | B♭ locrian, 144 bpm, square | — |
-| ![/dev/null](images/floor_devnull_swatch.png) | 9 | **/dev/null** `devnull` | Dot grid | Almost nothing: a few lost bits | Crates, packages | G minor, 80 bpm, triangle | — |
-| ![The Context Limit](images/floor_context_swatch.png) | 10 | **The Context Limit** `context` | Square tiles | Fading fragments of earlier context | All four kinds | C♯ mixolydian, 108 bpm, square | — |
+| ![Sandbox Borders](images/floor_sandbox_swatch.png) | 6 | **Sandbox Borders** `sandbox` | Rippled sand | Bleached bones, pebbles, dry grass | Sandcastles | D phrygian, 100 bpm, triangle | Cacti (solid, prick), border fences, sandstone, tumbleweeds |
+| ![The Training Data](images/floor_training_swatch.png) | 7 | **The Training Data** `training` | Graph paper | Scattered characters (`0 1 {} lol tl;dr nan`) | Cartons, crates | E major, 116 bpm, triangle | — |
+| ![The Latent Space](images/floor_latent_swatch.png) | 8 | **The Latent Space** `latent` | Dot grid | Stars and a constellation | Bushes, packages | C lydian, 96 bpm, sine | — |
+| ![Undefined Behavior](images/floor_undefined_swatch.png) | 9 | **Undefined Behavior** `undefined` | Square tiles | Shifted colour stripes (glitches) | All four kinds | B♭ locrian, 144 bpm, square | — |
+| ![/dev/null](images/floor_devnull_swatch.png) | 10 | **/dev/null** `devnull` | Dot grid | Almost nothing: a few lost bits | Crates, packages | G minor, 80 bpm, triangle | — |
+| ![The Context Limit](images/floor_context_swatch.png) | 11 | **The Context Limit** `context` | Square tiles | Fading fragments of earlier context | All four kinds | C♯ mixolydian, 108 bpm, square | — |
 
 The swatch is a tiny room in the theme's colours: wall, floor checkerboard, door (top) and accent (centre dot).
 
 ### Colour coverage
 
-All floors are **dark**: the floors sit at low brightness so that sprites, pickups and enemy shots stand out. By hue:
+Almost all floors are **dark**: the floors sit at low brightness so that sprites, pickups and enemy shots stand out.
+Sandbox Borders is the one mid-bright floor; its sand is muted on purpose so yellow and amber shots stay readable. By hue:
 
 - **Browns / warm:** The Backlog (brown), Dependency Hell (rust with orange embers), Production (grey with red walls).
+- **Sand / yellow:** Sandbox Borders (dusky sand, sun-yellow accent).
 - **Greens:** Forgotten Branches (forest green), The Training Data (muted green).
 - **Blues / violets:** Legacy Codebase (blue-grey), The Latent Space (indigo), The Context Limit (pale fog blue).
 - **Other:** Undefined Behavior (magenta-purple), /dev/null (near black).
 
-**Gaps:** nothing yellow or sandy, nothing cyan or teal, and nothing bright. A yellow or sand floor would be the first
-mid-bright one. Several enemies fire yellow or amber shots, so check contrast with screenshots before settling on
-such a palette.
+**Gaps:** nothing cyan or teal, and nothing truly bright (white, snow, light stone). Several enemies fire yellow or
+amber shots, so check contrast with screenshots before settling on a bright palette.
 
 ---
 
@@ -97,7 +102,7 @@ such a palette.
 - **Gameplay, maps:** branchier, with at least 7 dead ends per floor instead of 3 (`gen.minDeadEnds`).
 - **Gameplay, enemies:** an own family found only here: Stale Branch, Detached HEAD, Cherry-Pick and the Orphan
   Commit (see the enemies list). They share a woody look, leaf effects and wood-knock sounds.
-- **Gameplay, boss:** the Octopus Merge, about 52 % on floor 3 and 41 % on floors 13, 23, … on a first visit.
+- **Gameplay, boss:** the Octopus Merge, about 52 % on floor 3 and 41 % on floors 14, 25, … on a first visit.
 - **Extra text:** room-clear quips ("Branch deleted", "Stale for 847 days", "Rebased onto nothing", …) and epitaphs
   ("Died on a branch nobody remembers.", …) mixed into the general lists.
 
@@ -123,7 +128,25 @@ such a palette.
 - **Breakables:** packages and cartons in 70 % of combat rooms, up to 4 per room.
 - **Music:** A harmonic minor, 138 bpm, square lead.
 
-### 6. The Training Data
+### 6. Sandbox Borders
+
+*Nobody mentioned the cacti. Or the lack of water.*
+
+![Sandbox Borders](images/floor_sandbox.jpg)
+
+- **Look:** the edge of the sandbox: dusky, rippled sand (muted, so yellow and amber shots stay readable),
+  sandstone walls, bleached bones in the sand (horned skulls, ribcages, single bones), pebbles and dry grass. Now and
+  then a tumbleweed rolls across the room. Accent: sun yellow `#f2b84b`.
+- **Obstacles:** rocks become sandstone boulders, and indestructible blocks become the border itself: chain-link
+  fences with barbed wire where blocks line up, striped concrete barriers where they stand alone.
+- **Gameplay, cacti:** half of the rocks in combat rooms are cacti instead. They are solid like rocks but prick you
+  on contact (half a heart and a push back); bombs blow them up. Never right in front of a door.
+- **Breakables:** sandcastles in 75 % of combat rooms, up to 4 per room; when damaged, a tower collapses.
+- **Music:** D phrygian, 100 bpm, triangle lead.
+- **Extra text:** room-clear quips ("Permission denied", "Sandbox violation logged", "No water found", …) and
+  epitaphs ("Escaped the sandbox. Not the cactus.", …).
+
+### 7. The Training Data
 
 *It's mostly forum arguments.*
 
@@ -134,7 +157,7 @@ such a palette.
 - **Breakables:** cartons and crates in 70 % of combat rooms, up to 4 per room.
 - **Music:** E major, 116 bpm, triangle lead.
 
-### 7. The Latent Space
+### 8. The Latent Space
 
 *Here be embeddings.*
 
@@ -145,7 +168,7 @@ such a palette.
 - **Breakables:** bushes and packages in 75 % of combat rooms, up to 4 per room.
 - **Music:** C lydian, 96 bpm, sine lead.
 
-### 8. Undefined Behavior
+### 9. Undefined Behavior
 
 *Anything can happen. Mostly bad things.*
 
@@ -156,7 +179,7 @@ such a palette.
 - **Breakables:** all four kinds (crates, bushes, packages, cartons) in 80 % of combat rooms, up to 5 per room.
 - **Music:** B♭ locrian, 144 bpm, square lead (the fastest loop).
 
-### 9. /dev/null
+### 10. /dev/null
 
 *Everything you send here is gone. Including you.*
 
@@ -167,7 +190,7 @@ such a palette.
 - **Breakables:** crates and packages in 75 % of combat rooms, up to 5 per room.
 - **Music:** G minor, 80 bpm, triangle lead (the slowest loop).
 
-### 10. The Context Limit
+### 11. The Context Limit
 
 *You've been here before. You don't remember.*
 

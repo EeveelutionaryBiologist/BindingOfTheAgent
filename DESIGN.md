@@ -413,8 +413,8 @@ All milestones done. What shipped, compared with this doc:
 - **Enemies and bosses:** 17 spawnable enemies plus 5 minions (4 of the enemies are the Forgotten Branches family, added 2026-11-02). Each of the 7 bosses has two phases and telegraphed attacks; the Octopus Merge (2026-11-02) is the floor boss of Forgotten Branches.
 - **Layouts:** 30 (27 combat, the rest for special rooms), all validated.
 - **Presentation:**
-  - 10 floor themes and an animated avatar with 4 directions plus hurt and item poses.
-  - 42 synthesized SFX and a procedural chiptune loop per floor, with a boss variant.
+  - 11 floor themes (Sandbox Borders, a desert with cacti and border fences, added 2026-11-02) and an animated avatar with 4 directions plus hurt and item poses.
+  - 43 synthesized SFX and a procedural chiptune loop per floor, with a boss variant.
   - Pixel-font HUD and screens, including the "post-mortem" death report.
 - **QA:** headless-browser tests found zero console errors and held 60 fps with all items, 30 enemies and about 150 bullets.
   They also covered 300+ fuzzed floors, every enemy and boss, and multi-floor runs.

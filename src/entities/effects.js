@@ -663,8 +663,21 @@
 
   // Fels zerbricht
   on('rockBreak', (e) => {
+    if (e.kind === 'cactus') {
+      // Kaktus gesprengt: gruene Stuecke, helle Stacheln, Sandstaub
+      FX.debris(e.game, e.x, e.y, 8, ['#8fbf5a', '#5f9238', '#3d6626', '#17240f'], 7);
+      FX.burst(e.game, e.x, e.y, '#f6efd8', 8, 220, { streak: true, lifeMin: 0.15, lifeMax: 0.3, sizeMin: 2, sizeMax: 3 });
+      FX.smoke(e.game, e.x, e.y, 3, 12, '#c9a46a');
+      return;
+    }
     FX.debris(e.game, e.x, e.y, 9, ['#8c8278', '#b0a699', '#6a6158', '#4c453f'], 8);
     FX.smoke(e.game, e.x, e.y, 3, 12, '#7a7068');
+  });
+
+  // Kaktus gestochen (Sandbox Borders): ein paar helle Stacheln spritzen an der Beruehrungsstelle weg
+  on('cactusPrick', (e) => {
+    FX.burst(e.game, e.x, e.y, '#f6efd8', 6, 200, { streak: true, lifeMin: 0.1, lifeMax: 0.22, sizeMin: 2, sizeMax: 3 });
+    FX.burst(e.game, e.x, e.y, '#5f9238', 3, 120, { lifeMin: 0.15, lifeMax: 0.3, sizeMin: 3, sizeMax: 4 });
   });
 
   on('bombPlaced', (e) => FX.smoke(e.game, e.x, e.y + 10, 2, 6, '#6b625a'));

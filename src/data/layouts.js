@@ -415,6 +415,7 @@
     bush:    { name: 'Bush', hp: 6, color: '#5f8f3a' },
     package: { name: 'Package', hp: 8, color: '#c49a5c' },
     carton:  { name: 'Overflowing carton', hp: 7, color: '#d6c7a6' },
+    sandcastle: { name: 'Sandcastle', hp: 6, color: '#d9b878' },   // Sandbox Borders: zerfaellt zu Sand
   };
   B.PROP_LOOT_CHANCE = 0.1; // Chance auf einen Zufalls-Pickup beim Zerbrechen
 })(window.BOTA);

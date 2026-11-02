@@ -15,6 +15,7 @@
     { name: 'Forgotten Branches', sub: 'It is probably for the best that these never got merged.' },
     { name: 'Dependency Hell', sub: 'node_modules now has its own gravitational field.' },
     { name: 'Production', sub: "Don't touch anything. Especially on a Friday." },
+    { name: 'Sandbox Borders', sub: 'Nobody mentioned the cacti. Or the lack of water.' },
     { name: 'The Training Data', sub: "It's mostly forum arguments." },
     { name: 'The Latent Space', sub: 'Here be embeddings.' },
     { name: 'Undefined Behavior', sub: 'Anything can happen. Mostly bad things.' },
@@ -26,12 +27,18 @@
   // gemischt (Raum-Spruch: effects.js; Grabinschrift: game.onPlayerDeath).
   B.TEXT.THEME_QUIPS = {
     branches: ['Branch deleted', 'Stale for 847 days', 'Rebased onto nothing', 'Abandoned PR', '312 commits behind'],
+    sandbox: ['Permission denied', 'Sandbox violation logged', 'No water found', 'Escaped successfully?', 'Out of bounds'],
   };
   B.TEXT.THEME_EPITAPHS = {
     branches: [
       'Died on a branch nobody remembers.',
       'Last commit: "wip". 3 years ago.',
       'Your changes were never merged. Neither were you.',
+    ],
+    sandbox: [
+      'Escaped the sandbox. Not the cactus.',
+      'Died of thirst, one tile from the border.',
+      'Sandbox violation. Process terminated.',
     ],
   };
 

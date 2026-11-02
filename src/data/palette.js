@@ -8,11 +8,17 @@
  *   wall / wallLight / wallDark / wallTop   Wandflaeche, Licht-Kante, Fugen, Mauerkrone
  *   door               Rahmenfarbe normaler Tueren
  *   accent             Akzentfarbe (Etagenkarte, Minimap-Rahmen, Deko)
- *   pattern            Bodenmuster: 'planks' | 'stone' | 'moss' | 'tiles' | 'plate' | 'grid' | 'void'
+ *   pattern            Bodenmuster: 'planks' | 'stone' | 'moss' | 'tiles' | 'plate' | 'grid' | 'void' | 'sand'
  *   decor              Deko-Stil:   'notes' | 'cobweb' | 'leaves' | 'embers' | 'hazard' | 'glyphs' | 'stars' | 'glitch'
- *                                   | 'null' | 'fog'
+ *                                   | 'null' | 'fog' | 'bones'
  *   wallDecor          optional: 'ivy' (Efeu an den Waenden)
- *   ambient            optional: 'fireflies' (animierte Lichtpunkte, pro Frame gezeichnet)
+ *   ambient            optional: 'fireflies' (animierte Lichtpunkte) | 'tumbleweed' (rollender Steppenlaeufer);
+ *                      beides pro Frame gezeichnet
+ *   tiles              optional: andere Sprites fuer Kacheltypen, z. B. { rock: 'tile_sandstone', block: 'tile_border' };
+ *                      blockJoin: true = Block-Sprite hat 3 Frames (Einzelstueck / waagerecht / senkrecht) und der
+ *                      Renderer waehlt den Frame nach den Nachbar-Bloecken (Zaeune laufen durch)
+ *   cacti              optional, Kartengenerierung: Anteil der Felsen in normalen Raeumen, die zu Kakteen werden
+ *                      (Kacheltyp CACTUS, solide und stechend; world/dungeon.js assignCacti)
  *   gen                optional, Kartengenerierung: { minDeadEnds } = Mindestzahl Sackgassen (Standard 3)
  *   props              zerstoerbare Objekte: { kinds: [Arten aus B.PROP_KINDS], chance (Anteil normaler Raeume
  *                      mit Objekten), max (hoechstens so viele pro Raum) }; tiefere Etagen mischen wilder
@@ -22,8 +28,8 @@
  *                      root = MIDI-Grundton, mode = Tonleiter-Name, bpm = Tempo, lead = Oszillator-Typ,
  *                      chirps = gelegentliche Vogelrufe (optional)
  *
- * Alle Werte sind reine Darstellung — mit zwei Ausnahmen: gen und props werden von world/dungeon.js gelesen
- * (verzweigtere Karten bzw. zerstoerbare Objekte). Die Themen-Liste muss gleich lang sein wie
+ * Alle Werte sind reine Darstellung — mit drei Ausnahmen: gen, props und cacti werden von world/dungeon.js gelesen
+ * (verzweigtere Karten, zerstoerbare Objekte, Kakteen). Die Themen-Liste muss gleich lang sein wie
  * B.TEXT.FLOORS (der Rauchtest prueft das).
  */
 'use strict';
@@ -77,7 +83,7 @@
       music: { root: 45, mode: 'minor', bpm: 92, lead: 'triangle' },
     },
     { // 3 Forgotten Branches — Waldboden mit Moos, Laub und Zweigen, Efeu an den Waenden, Gluehwuermchen.
-      // Eigener Gruenton (Wald), deutlich von The Training Data (Karopapier, Etage 6) unterscheidbar.
+      // Eigener Gruenton (Wald), deutlich von The Training Data (Karopapier, Etage 7) unterscheidbar.
       // gen.minDeadEnds: verzweigtere Karten ("Branches"), siehe Floor.generate.
       key: 'branches',
       props: { kinds: ['bush'], chance: 0.8, max: 4 },
@@ -109,7 +115,21 @@
       light: 'rgba(255,90,80,0.05)', vignette: '16,0,0',
       music: { root: 45, mode: 'harmonic', bpm: 138, lead: 'square' },
     },
-    { // 6 The Training Data — Gruenstich, Karopapier, verstreute Zeichen
+    { // 6 Sandbox Borders — gedaempfter Sand (mittelhell, damit gelbe/bernsteinfarbene Gegnerschuesse lesbar
+      // bleiben), Sandstein-Waende, Knochen; Kakteen statt eines Teils der Felsen, Grenzzaeune statt Metallbloecken,
+      // Sandburgen als zerstoerbare Objekte, ab und zu rollt ein Steppenlaeufer durch. Eingefuegt 2026-11-02.
+      key: 'sandbox',
+      props: { kinds: ['sandcastle'], chance: 0.75, max: 4 },
+      cacti: 0.5,
+      tiles: { rock: 'tile_sandstone', block: 'tile_border', blockJoin: true },
+      floor: '#6e5a3c', floorAlt: '#715d3e', grout: 'rgba(60,40,15,0.07)',
+      wall: '#4a3622', wallLight: '#8a6a44', wallDark: '#24180c', wallTop: '#5c442b',
+      door: '#7a5632', accent: '#f2b84b',
+      pattern: 'sand', decor: 'bones', ambient: 'tumbleweed',
+      light: 'rgba(255,215,140,0.08)', vignette: '34,20,6',
+      music: { root: 50, mode: 'phrygian', bpm: 100, lead: 'triangle' },
+    },
+    { // 7 The Training Data — Gruenstich, Karopapier, verstreute Zeichen
       key: 'training',
       props: { kinds: ['carton', 'crate'], chance: 0.7, max: 4 },
       floor: '#29322b', floorAlt: '#2d3730', grout: 'rgba(0,0,0,0.2)',
@@ -119,7 +139,7 @@
       light: 'rgba(170,255,140,0.05)', vignette: '2,8,3',
       music: { root: 52, mode: 'major', bpm: 116, lead: 'triangle' },
     },
-    { // 7 The Latent Space — Indigo mit Sternen (Einbettungen)
+    { // 8 The Latent Space — Indigo mit Sternen (Einbettungen)
       key: 'latent',
       props: { kinds: ['bush', 'package'], chance: 0.75, max: 4 },
       floor: '#25223a', floorAlt: '#29263f', grout: 'rgba(0,0,0,0.2)',
@@ -129,7 +149,7 @@
       light: 'rgba(180,150,255,0.07)', vignette: '6,3,16',
       music: { root: 48, mode: 'lydian', bpm: 96, lead: 'sine' },
     },
-    { // 8 Undefined Behavior — Glitch-Magenta/Tuerkis
+    { // 9 Undefined Behavior — Glitch-Magenta/Tuerkis
       key: 'undefined',
       props: { kinds: ['crate', 'bush', 'package', 'carton'], chance: 0.8, max: 5 },
       floor: '#2a2430', floorAlt: '#2f2836', grout: 'rgba(0,0,0,0.25)',
@@ -139,7 +159,7 @@
       light: 'rgba(255,80,180,0.05)', vignette: '10,0,12',
       music: { root: 46, mode: 'locrian', bpm: 144, lead: 'square' },
     },
-    { // 9 /dev/null — fast Schwarz, monochrom, Rauschen
+    { // 10 /dev/null — fast Schwarz, monochrom, Rauschen
       key: 'devnull',
       props: { kinds: ['crate', 'package'], chance: 0.75, max: 5 },
       floor: '#1b1b1e', floorAlt: '#1f1f22', grout: 'rgba(255,255,255,0.025)',
@@ -149,7 +169,7 @@
       light: 'rgba(255,255,255,0.03)', vignette: '0,0,0',
       music: { root: 43, mode: 'minor', bpm: 80, lead: 'triangle' },
     },
-    { // 10 The Context Limit — bleiches Nebelblau, verblassender Text, Deja-vu
+    { // 11 The Context Limit — bleiches Nebelblau, verblassender Text, Deja-vu
       key: 'context',
       props: { kinds: ['crate', 'bush', 'package', 'carton'], chance: 0.8, max: 5 },
       floor: '#2d3542', floorAlt: '#323b49', grout: 'rgba(0,0,0,0.2)',

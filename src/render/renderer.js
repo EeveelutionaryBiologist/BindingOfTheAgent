@@ -197,6 +197,36 @@
         g.fillRect(x + 4, y + TILE - 8, 2, 2); g.fillRect(x + TILE - 8, y + TILE - 8, 2, 2);
         break;
       }
+      case 'sand': {
+        // Sand (Sandbox Borders): weiche Wellenrippen (waagerechte, leicht versetzte Striche, in Weltkoordinaten
+        // durchlaufend), dazu helle und dunkle Koernchen; die Schachbrett-Toene sind fast gleich (kaum Kacheln)
+        // Rippen als Wellenlinien: Stuecke von 8 px, deren Hoehe einer Sinuswelle in Weltkoordinaten folgt
+        // (gerade Linien lasen sich wie Holzdielen)
+        for (let i = 0; i < 3; i++) {
+          const ry = y + 10 + i * 20 + Math.floor(tileNoise(c, r + i, 31) * 3) * 2;
+          for (let sx = 0; sx < TILE; sx += 8) {
+            const wx = c * TILE + sx;
+            const dy = Math.round(Math.sin(wx / 26 + r * 1.7 + i * 2.1) * 2) * 2;
+            if (tileNoise(c * 8 + sx / 8, r * 3 + i, 32) < 0.15) continue;   // kleine Luecken
+            g.fillStyle = 'rgba(40,24,8,0.13)';
+            g.fillRect(x + sx, ry + dy, 8, 2);
+            g.fillStyle = 'rgba(255,235,190,0.07)';
+            g.fillRect(x + sx, ry + dy - 2, 8, 2);
+          }
+        }
+        for (let i = 0; i < 7; i++) {
+          const n = tileNoise(c * 5 + i, r * 3, 34);
+          g.fillStyle = n > 0.55 ? 'rgba(255,240,200,0.14)' : 'rgba(50,30,10,0.16)';
+          g.fillRect(x + Math.floor(tileNoise(c, i, r + 35) * 15) * 4, y + Math.floor(tileNoise(i, r, c + 36) * 15) * 4, 4, 4);
+        }
+        // gelegentlicher dunkler Duenenschatten
+        if (tileNoise(c, r, 37) > 0.82) {
+          g.fillStyle = 'rgba(40,24,8,0.08)';
+          g.fillRect(x + 8, y + 36, 48, 12);
+          g.fillRect(x + 16, y + 32, 32, 4);
+        }
+        break;
+      }
       case 'grid': {
         // Karopapier: feine Linien alle 16 px, kraeftigere alle 64 px
         g.fillStyle = 'rgba(160,220,140,0.045)';
@@ -492,6 +522,65 @@
         }
         break;
       }
+      case 'bones': {
+        // Sandbox Borders: ausgebleichte Knochen im Sand — ein Tierschaedel mit Hoernern, ein Brustkorb, einzelne
+        // Knochen; dazu Kiesel und trockene Grasbueschel. Gedaempft (Hintergrund, keine Pickups vortaeuschen).
+        const BONE = '#e8dcc0', BONE_D = '#b8a88a';
+        const bone = (bx, by, len, ang) => {
+          g.save(); g.translate(bx, by); g.rotate(ang);
+          g.fillStyle = BONE_D; g.fillRect(-len / 2, -1, len, 4);
+          g.fillStyle = BONE; g.fillRect(-len / 2, -2, len, 3);
+          for (const ex of [-len / 2, len / 2]) { g.beginPath(); g.arc(ex, -3, 3, 0, Math.PI * 2); g.arc(ex, 2, 3, 0, Math.PI * 2); g.fill(); }
+          g.restore();
+        };
+        g.globalAlpha = 0.6;
+        // Schaedel (hoechstens einer pro Raum)
+        if (rnd() < 0.7) {
+          const p = decoPos(room, rnd, 22);
+          if (p) {
+            g.save(); g.translate(p.x, p.y);
+            g.fillStyle = BONE;
+            g.fillRect(-8, -6, 16, 12); g.fillRect(-6, 6, 12, 6);                 // Schaedeldach, Schnauze
+            g.fillRect(-16, -10, 8, 4); g.fillRect(-20, -14, 4, 6);              // linkes Horn
+            g.fillRect(8, -10, 8, 4); g.fillRect(16, -14, 4, 6);                 // rechtes Horn
+            g.fillStyle = '#3a2814';
+            g.fillRect(-6, -2, 4, 4); g.fillRect(2, -2, 4, 4);                   // Augenhoehlen
+            g.fillRect(-3, 8, 2, 2); g.fillRect(1, 8, 2, 2);                     // Nasenloecher
+            g.restore();
+          }
+        }
+        // Brustkorb
+        if (rnd() < 0.5) {
+          const p = decoPos(room, rnd, 24);
+          if (p) {
+            g.fillStyle = BONE;
+            g.fillRect(p.x - 2, p.y - 14, 4, 28);                                // Wirbelsaeule
+            for (let i = 0; i < 4; i++) {
+              const ry = p.y - 10 + i * 7;
+              g.fillRect(p.x - 14 + i, ry, 12 - i, 3); g.fillRect(p.x + 2, ry, 12 - i, 3);
+              g.fillRect(p.x - 15 + i, ry + 3, 3, 4); g.fillRect(p.x + 12 - i, ry + 3, 3, 4);
+            }
+          }
+        }
+        for (let i = 0, n = 1 + Math.floor(rnd() * 3); i < n; i++) {
+          const p = decoPos(room, rnd, 16);
+          if (p) bone(p.x, p.y, 14 + rnd() * 8, rnd() * Math.PI);
+        }
+        // Kiesel und trockene Grasbueschel
+        g.globalAlpha = 0.5;
+        for (let i = 0; i < 6; i++) {
+          const p = decoPos(room, rnd, 8);
+          if (!p) continue;
+          if (rnd() < 0.5) {
+            g.fillStyle = '#4e3b24'; g.fillRect(p.x, p.y, 6, 4);
+            g.fillStyle = '#a58a62'; g.fillRect(p.x, p.y - 1, 5, 3);
+          } else {
+            g.fillStyle = '#a89058';
+            g.fillRect(p.x, p.y - 8, 2, 8); g.fillRect(p.x - 4, p.y - 6, 2, 6); g.fillRect(p.x + 4, p.y - 5, 2, 5);
+          }
+        }
+        break;
+      }
       case 'fog': {
         // Verblassende Erinnerungen an frueheren Kontext
         const lines = ['[...]', '(truncated)', 'as I said earlier', 'previously:', '<summary>', '...where was I?', '[context compacted]'];
@@ -674,13 +763,26 @@
     const x = c * TILE, y = r * TILE, cx = x + TILE / 2, cy = y + TILE / 2;
     if (t === T.PIT) { drawPit(g, room, c, r); return; }
     if (t === T.PROP) return; // zerstoerbare Objekte werden pro Frame gezeichnet (drawProps: Wackeln, Risse)
-    const spriteName = { [T.ROCK]: 'tile_rock', [T.BLOCK]: 'tile_block', [T.SPIKES]: 'tile_spikes' }[t];
+    // Thema kann einzelne Kachel-Sprites ersetzen (theme.tiles, z. B. Sandstein und Grenzzaun auf Sandbox Borders)
+    const over = theme.tiles || {};
+    const spriteName = {
+      [T.ROCK]: over.rock || 'tile_rock', [T.BLOCK]: over.block || 'tile_block', [T.SPIKES]: over.spikes || 'tile_spikes',
+      [T.CACTUS]: 'tile_cactus',
+    }[t];
     if (spriteName && B.hasSprite(spriteName)) {
-      // Variante deterministisch pro Kachel und Raum
-      const n = Math.max(1, B.spriteFrameCount(spriteName));
-      const salt = room.cell ? room.cell.x * 5 + room.cell.y * 11 : 0;
-      B.drawSprite(g, spriteName, cx, cy, { frame: Math.floor(tileNoise(c, r, salt) * n) });
-      if (t === T.BLOCK) {
+      let frame;
+      if (t === T.BLOCK && over.block && over.blockJoin) {
+        // Zaun-Verbindung: waagerechter Nachbar-Block -> Frame 1, sonst senkrechter -> Frame 2, sonst Einzelstueck
+        const isB = (cc, rr) => room.tileAt(cc, rr) === T.BLOCK;
+        frame = isB(c - 1, r) || isB(c + 1, r) ? 1 : isB(c, r - 1) || isB(c, r + 1) ? 2 : 0;
+      } else {
+        // Variante deterministisch pro Kachel und Raum
+        const n = Math.max(1, B.spriteFrameCount(spriteName));
+        const salt = room.cell ? room.cell.x * 5 + room.cell.y * 11 : 0;
+        frame = Math.floor(tileNoise(c, r, salt) * n);
+      }
+      B.drawSprite(g, spriteName, cx, cy, { frame });
+      if (t === T.BLOCK && !over.block) {
         // Block fuellt die ganze Kachel -> Toenung in Wandfarbe des Themas passt ihn an die Etage an
         g.save();
         g.globalAlpha = 0.32;
@@ -691,7 +793,7 @@
       return;
     }
     // Prozeduraler Notfall-Fallback (falls Sprites fehlen)
-    g.fillStyle = t === T.ROCK ? '#8a8178' : t === T.BLOCK ? '#4b5560' : '#b8b2aa';
+    g.fillStyle = t === T.ROCK ? '#8a8178' : t === T.BLOCK ? '#4b5560' : t === T.CACTUS ? '#5f9238' : '#b8b2aa';
     g.fillRect(x + 8, y + 8, TILE - 16, TILE - 16);
   }
 
@@ -1100,6 +1202,48 @@
     for (const p of room.projectiles) p.draw(ctx, game);
     for (const fx of room.effects) fx.draw(ctx, game);
     if (theme.ambient === 'fireflies') drawFireflies(ctx, room);
+    if (theme.ambient === 'tumbleweed') drawTumbleweed(ctx, room);
+  }
+
+  /**
+   * Steppenlaeufer (Sandbox Borders): rollt alle ~11 s einmal quer durch den Raum, huepft dabei leicht und dreht
+   * sich. Nur Optik (keine Kollision); Zeit aus performance.now(), Hoehe und Richtung deterministisch pro Raum und
+   * Durchgang. Gezeichnet als Knaeuel aus Strichen in trockenem Gelbbraun.
+   */
+  function drawTumbleweed(ctx, room) {
+    const PERIOD = 11, CROSS = 5;                 // alle 11 s, Ueberquerung dauert 5 s
+    const t = performance.now() / 1000;
+    const salt = room.cell ? room.cell.x * 17 + room.cell.y * 29 : 0;
+    const k = Math.floor((t + salt) / PERIOD);    // Nummer des Durchgangs
+    const u = ((t + salt) % PERIOD) / CROSS;      // 0..1 waehrend der Ueberquerung
+    if (u > 1) return;
+    const dir = tileNoise(k, salt, 61) < 0.5 ? 1 : -1;
+    const x = dir > 0 ? -30 + u * (ROOM_W + 60) : ROOM_W + 30 - u * (ROOM_W + 60);
+    const baseY = TILE + 40 + tileNoise(salt, k, 62) * (ROOM_H - 2 * TILE - 80);
+    const hop = Math.abs(Math.sin(u * Math.PI * 7)) * 10;
+    const rot = u * 14 * dir;
+    ctx.save();
+    ctx.globalAlpha = 0.85;
+    ctx.fillStyle = 'rgba(0,0,0,0.22)';
+    ctx.beginPath(); ctx.ellipse(x, baseY + 18, 17 - hop * 0.3, 5, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.translate(x, baseY - hop);
+    ctx.rotate(rot);
+    ctx.lineCap = 'round';
+    // dunkle Unterlage (Kontur), dann helle Halme obendrauf — so hebt sich das Knaeuel vom Sand ab
+    for (const [col, w] of [['#4a3418', 4], ['#c9a466', 2]]) {
+      ctx.strokeStyle = col;
+      ctx.lineWidth = w;
+      for (let i = 0; i < 9; i++) {
+        ctx.beginPath();
+        ctx.ellipse(0, 0, 17, 7 + (i % 3) * 3, i * 0.7, 0, Math.PI * 1.7);
+        ctx.stroke();
+      }
+    }
+    ctx.strokeStyle = '#8a6a3a';
+    ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(0, 0, 10, 0.5, 4.2); ctx.stroke();
+    ctx.beginPath(); ctx.arc(0, 0, 5, 2.5, 6.0); ctx.stroke();
+    ctx.restore();
   }
 
   /**
