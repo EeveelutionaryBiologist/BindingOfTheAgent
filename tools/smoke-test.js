@@ -12,6 +12,9 @@
  *     landen nie in Hindernissen
  *   - Antagonistic Reviewer: Laser und Stempel treffen genau dort, wo sie sollen; jede Nitpick-Reihe hat eine Luecke
  *   - Rogue Agent Swarm: 4 Mitglieder mit einem Balken, Geist-Phase, 10 % Heilung, Solo-Phase, genau ein Boss-Tod
+ *   - Detached HEAD: Koerper bringt genau einen verknuepften Kopf mit (getrennte HP), Kopf kreist und schiesst mit
+ *     Vorwarnung; Koerper zuerst tot -> Kopf in Panik und schiesst oefter; Kopf zuerst tot -> Koerper irrt nur
+ *     umher; Raum erst nach beiden geraeumt; killAll laesst nichts zurueck
  *   - Etagen-Bosse: nie zweimal hintereinander derselbe (300 simulierte Runs + echte Etagenfolge)
  *   - README.md: ~30 % der Etagen, nur in normalen Raeumen, deckt die Karte auf, aber nicht den Geheimraum
  *   - Etagen: FLOORS und FLOOR_THEMES gleich lang; Etage 3 = Forgotten Branches mit verzweigteren Karten
@@ -762,6 +765,109 @@ const URL = 'file://' + path.join(ROOT, 'index.html').replace(/\\/g, '/') + '?se
   await page.waitForTimeout(250);
   await shot('13-stale-branch');
   await page.evaluate(() => { for (let i = 0; i < 4; i++) BOTA.debug.killAll(); });
+
+  // --- Detached HEAD: Paar spawnt gemeinsam, Koerper zuerst -> Kopf in Panik, Kopf zuerst -> Koerper irrt ---
+  // (steht vor dem Todesbildschirm, weil der Test ein laufendes Spiel braucht)
+  const headProblems = await page.evaluate(() => {
+    const out = [];
+    const g = BOTA.game;
+    BOTA.debug.gotoRoom('start'); BOTA.debug.god(true);
+    for (let i = 0; i < 4; i++) BOTA.debug.killAll();
+    const p = g.player; p.x = 150; p.y = 450;
+    const DT = 1 / 60;
+    const living = () => g.room.enemies.filter((e) => !e.dead);
+    const enemyShots = () => g.room.projectiles.filter((pr) => pr.team === 'enemy' && !pr.dead).length;
+    const clearShots = () => { for (const pr of g.room.projectiles) if (pr.team === 'enemy') pr.dead = true; };
+    // Ein Simulationsschritt; Einfrieren aufheben (der Spieler hat hier alle Items, der Garbage Collector
+    // friert nach Kills Gegner ein — dann liefe das Verhalten nicht)
+    const step = (e) => { e.frozen = 0; e.update(DT, g); };
+    // Paar erzeugen; ohne Spawn-Verzoegerung, damit die Verhalten sofort laufen
+    const spawnPair = (x, y) => {
+      const body = BOTA.debug.spawn('detached_head', x, y);
+      const head = body && body.state.partner;
+      if (body) body.spawnDelay = 0;
+      if (head) head.spawnDelay = 0;
+      return { body, head };
+    };
+
+    // 1) Spawnt gemeinsam: genau ein Kopf pro Koerper, gegenseitig verknuepft, getrennte HP, kein proxy
+    const A = spawnPair(600, 300);
+    if (!A.head || A.head.id !== 'detached_head_tag') out.push('Detached HEAD: kein Kopf gespawnt');
+    else {
+      if (A.head.state.partner !== A.body) out.push('Detached HEAD: Kopf nicht mit dem Koerper verknuepft');
+      if (A.head.proxy || A.body.proxy) out.push('Detached HEAD: nutzt proxy statt getrennter HP');
+      if (living().length !== 2) out.push('Detached HEAD: ' + living().length + ' statt 2 Teile im Raum');
+      const d = Math.hypot(A.head.x - A.body.x, A.head.y - A.body.y);
+      if (d > 160) out.push('Detached HEAD: Kopf startet ' + Math.round(d) + ' px vom Koerper');
+      // Kreisen: nach 3 s im Abstand 80–140 px (etwas Spiel fuer Nachlauf und Wandklemmen)
+      for (let i = 0; i < 180; i++) step(A.head);
+      const d2 = Math.hypot(A.head.x - A.body.x, A.head.y - A.body.y);
+      if (d2 < 60 || d2 > 165) out.push('Detached HEAD: Kopf kreist in ' + Math.round(d2) + ' px Abstand');
+      // Schuss mit Vorwarnung: Auge gluet im letzten Moment, dann ein Bernstein-Schuss
+      clearShots();
+      A.head.state.cd = 0.3; A.head.behavior.update(A.head, DT, g);
+      if (!A.head.state.warn) out.push('Detached HEAD: keine Warnung vor dem Schuss');
+      A.head.state.cd = 0.001; A.head.behavior.update(A.head, DT, g);
+      const shots = g.room.projectiles.filter((pr) => pr.team === 'enemy' && !pr.dead);
+      if (shots.length !== 1 || shots[0].color !== '#ffcf4d') out.push('Detached HEAD: Schuss fehlt oder nicht Bernstein (' + shots.length + ')');
+      else {
+        const v = Math.hypot(shots[0].vx, shots[0].vy);
+        if (v < 165 || v > 260) out.push('Detached HEAD: Schussgeschwindigkeit ' + Math.round(v));
+      }
+      clearShots();
+    }
+
+    // 2) Koerper zuerst toeten -> Kopf in Panik ("HEAD detached!"), schiesst oefter
+    if (A.head) {
+      A.body.hurt(9999, g, null);
+      A.head.behavior.update(A.head, DT, g);
+      if (A.head.state.mode !== 'panic') out.push('Detached HEAD: Kopf nicht in Panik nach Koerper-Tod');
+      if (A.head.sayText !== 'HEAD detached!') out.push('Detached HEAD: Spruch "HEAD detached!" fehlt');
+      if (A.head.state.partner) out.push('Detached HEAD: Kopf haelt Referenz auf toten Koerper');
+      if (A.head.state.cd > 1.2 + 1e-6) out.push('Detached HEAD: Panik verkuerzt die Schusspause nicht (' + A.head.state.cd.toFixed(2) + ' s)');
+      // Schussfolge in Panik: ueber 6 s deutlich mehr Schuesse als im gekoppelten Takt (~2.2 s)
+      clearShots();
+      let fired = 0;
+      for (let i = 0; i < 360; i++) { const n = enemyShots(); A.head.behavior.update(A.head, DT, g); fired += Math.max(0, enemyShots() - n); }
+      if (fired < 4) out.push('Detached HEAD: Panik-Kopf schiesst nur ' + fired + 'x in 6 s');
+      clearShots();
+      if (!g.room.hasLivingEnemies()) out.push('Detached HEAD: Raum gilt als geraeumt, obwohl der Kopf lebt');
+      A.head.hurt(9999, g, null);
+      if (g.room.hasLivingEnemies()) out.push('Detached HEAD: Raum nicht geraeumt, obwohl beide tot sind');
+    }
+
+    // 3) Kopf zuerst toeten -> Koerper irrt umher ("where is my HEAD?"), nur Kontaktschaden, kein Schuss
+    const C = spawnPair(500, 300);
+    if (C.head) {
+      C.head.hurt(9999, g, null);
+      clearShots();
+      C.body.behavior.update(C.body, DT, g);
+      if (C.body.state.mode !== 'lost') out.push('Detached HEAD: Koerper nicht verloren nach Kopf-Tod');
+      if (C.body.sayText !== 'where is my HEAD?') out.push('Detached HEAD: Spruch "where is my HEAD?" fehlt');
+      if (C.body.spriteName !== 'enemy_detached_head_lost' || !BOTA.hasSprite(C.body.spriteName)) out.push('Detached HEAD: Sockel erlischt nicht');
+      if (!(C.body.contactDamage > 0)) out.push('Detached HEAD: Koerper ohne Kontaktschaden');
+      let maxV = 0;
+      for (let i = 0; i < 240; i++) { step(C.body); maxV = Math.max(maxV, Math.hypot(C.body.vx, C.body.vy)); }
+      if (enemyShots()) out.push('Detached HEAD: kopfloser Koerper schiesst');
+      if (maxV > C.body.params.lostSpeed + 1) out.push('Detached HEAD: kopfloser Koerper zu schnell (' + Math.round(maxV) + ')');
+      if (!living().includes(C.body)) out.push('Detached HEAD: kopfloser Koerper verschwunden');
+    }
+
+    // 4) debug.killAll laesst nichts zurueck (auch nicht bei zwei Paaren gleichzeitig)
+    spawnPair(400, 250); spawnPair(700, 400);
+    BOTA.debug.killAll();
+    if (living().length) out.push('Detached HEAD: killAll laesst ' + living().length + ' Teile zurueck');
+    for (const e of g.room.enemies) if (e.id.startsWith('detached_head') && e.state.partner) out.push('Detached HEAD: tote Teile halten Partner-Referenzen');
+
+    // 5) Nur auf Forgotten Branches und nur der Koerper wird gewuerfelt (der Kopf kommt aus dessen init)
+    const def = BOTA.ENEMIES.detached_head;
+    if (!def || def.themeOnly.join() !== 'branches' || def.family !== 'branches') out.push('Detached HEAD: Thema/Familie falsch');
+    if (BOTA.ENEMIES.detached_head_tag.spawn !== false) out.push('Detached HEAD: Kopf ist regulaer spawnbar');
+    for (let i = 0; i < 4; i++) BOTA.debug.killAll();
+    clearShots();
+    return out;
+  });
+  problems.push(...headProblems);
   // Mehrfach toedlicher Schaden, weil Items wie "Retry with Backoff" den ersten Tod abfangen
   await page.evaluate(() => {
     const g = BOTA.game; BOTA.debug.god(false);

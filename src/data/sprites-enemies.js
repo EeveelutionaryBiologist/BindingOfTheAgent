@@ -907,4 +907,78 @@
   B.defineSprite('enemy_stale_branch_bare', {
     palette: Object.assign({}, STALE_PAL, { e: '#d64545' }), scale: 4, frames: staleFrames(null),
   });
+
+  // ===========================================================================
+  // Forgotten Branches: Detached HEAD
+  // ===========================================================================
+  // Familien-Optik der Forgotten Branches: Rinde/Laub statt Metall, dunkelgruene Kontur (#16240f wie prop_bush)
+  // statt Schwarz. Gefaehrliches ist nie gruen (Boden ist gruen): Schuesse und Warnungen sind Bernstein.
+  const BR = {
+    k: '#16240f',            // Kontur (dunkelgruen)
+    b: '#5a3d22',            // Rinde dunkel
+    B: '#a3602c',            // Rinde hell
+    l: '#c98a4a',            // helles Holz (Schnittflaeche, Anhaenger)
+    L: '#e8c890',            // Holz-Glanzlicht
+  };
+
+  // Koerper — stummeliger Baumstumpf auf Zweigbeinen. Oben die Schnittflaeche mit einem leeren, warm
+  // gluehenden Sockel (dort gehoert der Kopf hin). Frame 1/2: Beine gespreizt / unter dem Koerper.
+  const HEAD_STUMP_TOP = [
+    '..kkkkkkkk..',
+    '.kLlllllllk.',
+    'klkkkkkkkklk',
+    'kkyYYYYYYykk',
+    'kBkyyyyyykBk',
+    'kBBkkkkkkBBk',
+  ];
+  const HEAD_STUMP_BARK = [
+    'kbBBbBBbBBbk',
+    'kbBbBBbBbBbk',
+    'kbBBbBbBBbbk',
+    'kbbBbBBbBbbk',
+    '.kbbbbbbbbk.',
+    '..kkkkkkkk..',
+  ];
+  const HEAD_LEGS_A = ['..kB....Bk..', '.kB......Bk.'];
+  const HEAD_LEGS_B = ['...kB..Bk...', '...kB..Bk...'];
+  const HEAD_BODY_PAL = Object.assign({ y: '#ffb84d', Y: '#ffe9a8' }, BR);
+  B.defineSprite('enemy_detached_head', {
+    palette: HEAD_BODY_PAL,
+    scale: 4,
+    frames: [HEAD_STUMP_TOP.concat(HEAD_STUMP_BARK, HEAD_LEGS_A), HEAD_STUMP_TOP.concat(HEAD_STUMP_BARK, HEAD_LEGS_B)],
+  });
+  // Ohne Kopf: Sockel erloschen (dunkles Loch statt Gluehen)
+  B.defineSprite('enemy_detached_head_lost', {
+    palette: Object.assign({}, HEAD_BODY_PAL, { y: '#2a1d10', Y: '#3a2a18' }),
+    scale: 4,
+    frames: [HEAD_STUMP_TOP.concat(HEAD_STUMP_BARK, HEAD_LEGS_A), HEAD_STUMP_TOP.concat(HEAD_STUMP_BARK, HEAD_LEGS_B)],
+  });
+
+  // Kopf — Holz-Anhaenger in Pfeilform (Spitze rechts, mit Loch fuer die Schnur) und einem grossen Auge auf der
+  // stumpfen Seite. Frame 2: Pupille zuckt zur Spitze (nervoes). Das Spiel spiegelt ihn zum Spieler hin.
+  const HEAD_TAG_A = [
+    '.kkkkkkkkk....',
+    'kLLLLLLLLLk...',
+    'klllkkkklllk..',
+    'kllkwwwwklllk.',
+    'klkwwppwwklllk',
+    'klkwwppwwklhlk',
+    'kBkwwwwwwkllBk',
+    'kBBkwwwwkBBBk.',
+    'kBBBkkkkBBBk..',
+    '.kkkkkkkkkk...',
+  ];
+  const HEAD_TAG_B = HEAD_TAG_A.map((r, i) => (i === 4 ? 'klkwwwppwklllk' : i === 5 ? 'klkwwwppwklhlk' : r));
+  const HEAD_TAG_PAL = Object.assign({ w: '#f4efe6', p: '#16240f', h: '#16240f' }, BR);
+  B.defineSprite('enemy_detached_head_tag', {
+    palette: HEAD_TAG_PAL,
+    scale: 4,
+    frames: [HEAD_TAG_A, HEAD_TAG_B],
+  });
+  // Warnung vor dem Schuss: Auge gluet bernsteinfarben (heller Rand, dunkle Pupille wird zur Glut)
+  B.defineSprite('enemy_detached_head_tag_glow', {
+    palette: Object.assign({}, HEAD_TAG_PAL, { w: '#ffcf4d', p: '#fff3c4' }),
+    scale: 4,
+    frames: [HEAD_TAG_A, HEAD_TAG_B],
+  });
 })(window.BOTA);

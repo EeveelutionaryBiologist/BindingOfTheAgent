@@ -182,6 +182,34 @@
     desc: 'This branch is 47 commits behind main. And counting.',
   };
 
+  // --- Forgotten Branches: Detached HEAD ---
+  // Ein Paar aus zwei Gegnern mit getrennten HP (kein proxy): der laufende Stumpf (Koerper, spawnt regulaer)
+  // erzeugt in seinem init den schwebenden Holz-Anhaenger (Kopf, spawn: false) und verknuepft beide ueber
+  // state.partner. Der Kopf kreist hinter dem Koerper und schiesst; stirbt der Koerper zuerst, flattert der
+  // Kopf panisch und schiesst oefter; stirbt der Kopf zuerst, irrt der Koerper ziellos umher (nur Kontaktschaden).
+  // Verhalten: 'detached_body' / 'detached_tag' in entities/enemy.js. Im Raum-Budget zaehlt das Paar als EIN
+  // Eintrag (der Kopf kommt wie Leaklets ausserhalb von maxCount dazu); cost 2 deckt beide Teile ab.
+  // family: 'branches' ist rein optisch (Blatt-/Holz-Effekte der Forgotten-Branches-Familie).
+  E.detached_head = {
+    name: 'Detached HEAD', hp: 12, r: 18, speed: 55, contactDamage: 1,
+    behavior: 'detached_body', params: { head: 'detached_head_tag', lostSpeed: 38, spawnDist: 100 },
+    sprite: 'enemy_detached_head', color: '#a3602c',
+    minFloor: 3, weight: 6, cost: 2, maxPerRoom: 2, tags: ['melee'],
+    themeOnly: ['branches'], family: 'branches',
+    desc: "You are in 'detached HEAD' state. The body did not get the memo.",
+  };
+
+  // Der Kopf des Paares: ein schwebender Holz-Anhaenger in Pfeilform mit einem grossen Auge.
+  // Gleicher Anzeigename wie der Koerper, damit "Killed by" das Paar nennt.
+  E.detached_head_tag = {
+    name: 'Detached HEAD', hp: 6, r: 14, speed: 150, contactDamage: 1, flying: true,
+    behavior: 'detached_tag',
+    params: { orbitMin: 80, orbitMax: 140, interval: 2.2, panicInterval: 1.2, warn: 0.4, shotSpeed: 170, panicSpeed: 175 },
+    sprite: 'enemy_detached_head_tag', color: '#c98a4a', noFlip: true,
+    spawn: false, cost: 0, family: 'branches',
+    desc: 'Points at a commit. Any commit. Just not yours.',
+  };
+
   // ---------------------------------------------------------------------------
   // Minions (spawn: false) — entstehen nur durch andere Gegner oder Bosse
   // ---------------------------------------------------------------------------
