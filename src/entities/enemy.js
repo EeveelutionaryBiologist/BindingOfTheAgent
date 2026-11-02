@@ -27,7 +27,7 @@
  *   e.sayText/sayT kurzer schwebender Text ueber dem Gegner (siehe AI.say)
  *
  * Verhalten in dieser Datei: wander, chase, fly_chase, split, blink, charge, turret, orbit, shooter,
- * revive, grow, mimic, zigzag, glitch. Boss-Verhalten (und das Wurm-Segment) stehen in entities/boss.js.
+ * revive, grow, mimic, zigzag, glitch, detached_body + detached_tag (Detached HEAD, Forgotten Branches). Boss-Verhalten (und das Wurm-Segment) stehen in entities/boss.js.
  *
  * Zusaetzliche Bus-Events (nur informativ, z. B. fuer Sound/Effekte): 'enemyRevive' (Zombie steht auf),
  * 'enemyReveal' (Hallucination enttarnt sich); aus boss.js: 'bossPhase', 'bossStomp', 'bossBounce'.
@@ -1112,6 +1112,239 @@
         o.speed *= 1.3;
         AI.say(o, 'won the race', 1.0, '#ffcf4d');
       }
+    },
+  };
+
+  // ===========================================================================
+  // Forgotten Branches: Detached HEAD (Paar aus Koerper 'detached_body' und Kopf 'detached_tag')
+  // ===========================================================================
+  //
+  // Verknuepfung: e.state.partner zeigt auf das jeweils andere Enemy (getrennte HP, KEIN proxy).
+  // Der Koerper erzeugt den Kopf in seinem init (wie der Rogue Agent Swarm seine Geschwister). Jeder Teil
+  // prueft in seinem update, ob der Partner tot ist, wechselt dann in den Solo-Modus und setzt state.partner
+  // auf null (keine Referenzen auf tote Gegner behalten). Nichts davon spawnt beim Tod etwas nach, daher
+  // hinterlaesst debug.killAll nichts und der Raum gilt als geraeumt, sobald beide tot sind.
+  //
+  // Leine ("Tether"): gestrichelte Linie vom leeren Sockel des Koerpers zum Kopf, gezeichnet in drawUnder des
+  // Koerpers. Reisst sie (ein Teil stirbt), zeichnet der Ueberlebende 0.5 s lang einen zurueckschnellenden
+  // Leinenrest in Richtung der letzten Partner-Position (state.snapT / snapX / snapY).
+
+  const TETHER_COLOR = '#e8c890';   // helles Holz/Bindfaden — harmlos, kein Warnton
+  const HEAD_SHOT = '#ffcf4d';      // Bernstein: gefaehrlich (auf gruenem Boden gut sichtbar)
+  const SNAP_TIME = 0.5;
+
+  /** Lebt der Partner noch? (robust gegen fehlende/tote Referenzen) */
+  function headPartner(e) {
+    const o = e.state.partner;
+    return o && !o.dead ? o : null;
+  }
+
+  /** Leinenrest nach dem Reissen: kurzer gestrichelter Strich, der zum Ueberlebenden zurueckschnellt */
+  function drawSnap(e, ctx, ox, oy) {
+    const s = e.state;
+    if (!(s.snapT > 0)) return;
+    const k = s.snapT / SNAP_TIME;                 // 1 -> 0
+    const a = Math.atan2(s.snapY - (e.y + oy), s.snapX - (e.x + ox));
+    const len = 46 * k;
+    ctx.save();
+    ctx.globalAlpha = 0.9 * k;
+    ctx.strokeStyle = TETHER_COLOR;
+    ctx.lineWidth = 3;
+    ctx.setLineDash([6, 5]);
+    ctx.beginPath();
+    ctx.moveTo(e.x + ox + Math.cos(a) * e.r * 0.6, e.y + oy + Math.sin(a) * e.r * 0.6);
+    // leicht gekraeuselt: das Ende schwingt seitlich nach
+    const wob = Math.sin(k * 20) * 8 * k;
+    ctx.lineTo(e.x + ox + Math.cos(a) * len - Math.sin(a) * wob, e.y + oy + Math.sin(a) * len + Math.cos(a) * wob);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  /** Partner verloren: Leinenrest-Animation vorbereiten und Referenz loesen */
+  function loseHeadPartner(e) {
+    const s = e.state, o = s.partner;
+    if (o) { s.snapT = SNAP_TIME; s.snapX = o.x; s.snapY = o.y; }
+    s.partner = null;
+  }
+
+  /**
+   * Koerper — ein stummeliger Baumstumpf auf Zweigbeinen mit leerem, gluehendem Sockel (dort gehoert der Kopf hin).
+   * Mit Kopf: laeuft langsam per Flow-Field auf den Spieler zu. Ohne Kopf: irrt ziellos umher
+   * ("where is my HEAD?"), Sockel erloschen, nur noch Kontaktschaden (schiessen kann er ohnehin nie).
+   * params: { head (Gegner-ID des Kopfes), lostSpeed, spawnDist }
+   */
+  B.BEHAVIORS.detached_body = {
+    init(e, game) {
+      const s = e.state, P = e.params;
+      s.mode = 'linked';
+      s.sayCd = 0;
+      // Kopf erzeugen. Er fliegt (Felsen/Gruben egal), also reicht es, den Startpunkt in den Innenraum zu klemmen.
+      // game.room ist hier schon der Raum, in den der Koerper gleich eingefuegt wird (populate/debug.spawn).
+      if (!game || !game.room || !P.head || !B.ENEMIES[P.head]) return;
+      const a = game.rng.angle();
+      const d = P.spawnDist || 100;
+      const pos = AI.clampToRoom(e.x + Math.cos(a) * d, e.y + Math.sin(a) * d, 30);
+      const head = game.spawnEnemy(P.head, pos.x, pos.y);
+      if (!head) return;
+      head.spawnDelay = e.spawnDelay;   // beide erwachen gleichzeitig
+      head.state.partner = e;
+      head.state.orbitA = a;            // dort weiterkreisen, wo er erschienen ist
+      s.partner = head;
+    },
+
+    update(e, dt, game) {
+      const s = e.state, P = e.params, p = game.player;
+      if (s.snapT > 0) s.snapT -= dt;
+      if (s.mode === 'linked' && !headPartner(e)) {
+        // Kopf ist weg: Sockel erlischt, Koerper verliert die Orientierung
+        loseHeadPartner(e);
+        s.mode = 'lost';
+        e.spriteName = 'enemy_detached_head_lost';
+        e.speed = P.lostSpeed || 38;
+        AI.say(e, 'where is my HEAD?', 1.6, '#e8dcc0');
+        s.sayCd = 5;
+      }
+      if (s.mode === 'lost') {
+        AI.wander(e, dt, game, e.speed);
+        // gelegentlich erneut fragen (reine Anzeige, fester Takt — kein RNG noetig)
+        s.sayCd -= dt;
+        if (s.sayCd <= 0) { AI.say(e, 'where is my HEAD?', 1.4, '#e8dcc0'); s.sayCd = 5; }
+        return;
+      }
+      AI.pathToward(e, game, p.x, p.y, e.speed);
+    },
+
+    onDeath(e) {
+      // Referenz loesen; der Kopf bemerkt den Tod selbst in seinem naechsten update (Leine reisst dort)
+      e.state.partner = null;
+    },
+
+    drawUnder(e, ctx) {
+      const s = e.state;
+      const head = headPartner(e);
+      if (head) {
+        // Gestrichelte Leine vom Sockel (oben auf dem Stumpf) zum Kopf; die Striche "fliessen" zum Kopf hin
+        const sx = e.x, sy = e.y - 20;
+        const hx = head.x, hy = head.y + (head.state.bob || 0);
+        const a = Math.atan2(hy - sy, hx - sx);
+        const len = Math.hypot(hx - sx, hy - sy) - head.r * 0.7;
+        if (len > 4) {
+          const appear = e.spawnDelay > 0 ? 1 - e.spawnDelay / 0.5 : 1;
+          ctx.save();
+          ctx.globalAlpha = 0.75 * Math.max(0, Math.min(1, appear));
+          ctx.lineWidth = 4;
+          ctx.strokeStyle = 'rgba(22,36,15,0.8)';   // dunkle Unterlage, damit die Linie auf Moos lesbar bleibt
+          ctx.setLineDash([7, 6]);
+          ctx.lineDashOffset = -e.t * 24;
+          ctx.beginPath();
+          ctx.moveTo(sx, sy);
+          ctx.lineTo(sx + Math.cos(a) * len, sy + Math.sin(a) * len);
+          ctx.stroke();
+          ctx.lineWidth = 2;
+          ctx.strokeStyle = TETHER_COLOR;
+          ctx.stroke();
+          ctx.restore();
+        }
+      }
+      drawSnap(e, ctx, 0, -20);
+    },
+  };
+
+  /**
+   * Kopf — schwebender Holz-Anhaenger in Pfeilform mit einem grossen Auge; die Spitze zeigt zum Spieler.
+   * Mit Koerper: kreist in 80–140 px Abstand HINTER dem Koerper (vom Spieler aus gesehen; schwingt seitlich
+   * hin und her), wippt auf und ab und feuert alle ~2.2 s einen langsamen, gezielten Bernstein-Schuss.
+   * Warnung: das Auge gluet 0.4 s vorher bernsteinfarben auf.
+   * Ohne Koerper ("HEAD detached!"): flattert ziellos und hektisch durch den Raum und schiesst alle ~1.2 s
+   * (gleiche Warnung). Wird er allein gespawnt (debug), ist er von Anfang an losgeloest.
+   * params: { orbitMin, orbitMax, interval, panicInterval, warn, shotSpeed, panicSpeed }
+   */
+  B.BEHAVIORS.detached_tag = {
+    init(e, game) {
+      const s = e.state;
+      s.mode = 'linked';                  // wird im ersten update zu 'panic', falls kein Partner gesetzt wurde
+      s.cd = game.rng.float(1.2, 2.2);    // erster Schuss gestaffelt, damit Paare nicht im Gleichtakt feuern
+      s.swing = game.rng.float(0, TAU);
+      s.orbitA = game.rng.angle();
+      s.warn = false;
+      s.bob = 0;
+      s.dir = 0;
+      s.turnT = 0;
+    },
+
+    update(e, dt, game) {
+      const s = e.state, P = e.params, p = game.player;
+      if (s.snapT > 0) s.snapT -= dt;
+      s.bob = Math.sin(e.t * 4.2) * 3;
+
+      if (s.mode === 'linked' && !headPartner(e)) {
+        // Koerper ist weg: Leine reisst, der Kopf geraet in Panik
+        loseHeadPartner(e);
+        s.mode = 'panic';
+        s.dir = game.rng.angle();
+        s.turnT = 0;
+        s.cd = Math.min(s.cd, AI.cooldown(game, P.panicInterval || 1.2));
+        AI.say(e, 'HEAD detached!', 1.4, HEAD_SHOT);
+      }
+
+      if (s.mode === 'linked') {
+        const b = s.partner;
+        // Bahnpunkt: hinter dem Koerper (vom Spieler weg), seitlich um bis zu ~75 Grad pendelnd
+        s.swing += dt * 0.9;
+        const away = Math.atan2(b.y - p.y, b.x - p.x);
+        const want = away + Math.sin(s.swing) * 1.3;
+        s.orbitA = AI.turn(s.orbitA, want, dt * 2.2);   // weich nachdrehen statt springen
+        const lo = P.orbitMin || 80, hi = P.orbitMax || 140;
+        const rad = (lo + hi) / 2 + Math.sin(e.t * 1.3) * (hi - lo) / 2;
+        const t = AI.clampToRoom(b.x + Math.cos(s.orbitA) * rad, b.y + Math.sin(s.orbitA) * rad, e.r + 6);
+        const dd = Math.hypot(t.x - e.x, t.y - e.y);
+        if (dd < 2) AI.stop(e);
+        else AI.toward(e, t.x, t.y, Math.min(e.speed, dd * 4));
+      } else {
+        // Panik: alle 0.2–0.45 s scharf abbiegen, an Waenden sofort neu waehlen
+        s.turnT -= dt;
+        if (s.turnT <= 0 || s.bumped) {
+          s.dir += game.rng.float(-1.8, 1.8) + (s.bumped ? Math.PI : 0);
+          s.turnT = game.rng.float(0.2, 0.45);
+          s.bumped = false;
+        }
+        const sp = P.panicSpeed || 175;
+        e.vx = Math.cos(s.dir) * sp;
+        e.vy = Math.sin(s.dir) * sp;
+      }
+
+      // Schiessen (beide Modi): Auge gluet in den letzten `warn` Sekunden, dann ein gezielter Schuss
+      const warn = P.warn || 0.4;
+      s.cd -= dt;
+      s.warn = s.cd <= warn;
+      if (s.cd <= 0) {
+        AI.shootAt(game, e, p, AI.shotSpeed(game, P.shotSpeed || 170), { color: HEAD_SHOT });
+        s.cd = AI.cooldown(game, s.mode === 'panic' ? (P.panicInterval || 1.2) : (P.interval || 2.2));
+        s.warn = false;
+      }
+    },
+
+    onDeath(e) {
+      e.state.partner = null;   // der Koerper bemerkt den Tod in seinem naechsten update
+    },
+
+    draw(e, ctx, game) {
+      const s = e.state;
+      const p = game && game.player;
+      const flipX = p ? p.x < e.x : false;   // Pfeilspitze zeigt immer zum Spieler (Sprite zeigt nach rechts)
+      const dy = s.bob || 0;
+      drawSnap(e, ctx, 0, dy);
+      if (s.warn && !(e.spawnDelay > 0)) {
+        // Warnung: bernsteinfarbener Schein um das Auge (das Auge sitzt auf der stumpfen Seite)
+        const k = 1 - Math.max(0, s.cd) / (e.params.warn || 0.4);
+        AI.drawGlow(ctx, e.x + (flipX ? 6 : -6), e.y + dy + 2, 12 + 8 * k, 0.4 + 0.6 * k, HEAD_SHOT);
+      }
+      AI.drawBody(e, ctx, {
+        dy,
+        flipX,
+        sprite: s.warn ? 'enemy_detached_head_tag_glow' : null,
+      });
+      AI.drawSay(e, ctx);
     },
   };
 
