@@ -7,8 +7,9 @@
  *      umgewandelt. Er kann genau die Teilmenge, die unsere Listen benutzen: Ueberschriften (#, ##, ###),
  *      Absaetze, Aufzaehlungen ("- "), Trennlinien (---), Tabellen, sowie inline Bilder, Links, **fett**,
  *      *kursiv* und `Code`. Keine externe Markdown-Bibliothek (Projektregel: keine Abhaengigkeiten).
- *   2. Bilder werden als data:-URLs eingebettet, damit das PDF eigenstaendig ist und keine lokalen
- *      Dateipfade enthaelt.
+ *   2. Bilder (PNG oder JPEG) werden als data:-URLs eingebettet, damit das PDF eigenstaendig ist und keine lokalen
+ *      Dateipfade enthaelt. Ein Bild allein in seinem Absatz (Etagen-Screenshots in floors.md) wird links umflossen;
+ *      ein ###-Abschnitt mit so einem Bild bleibt im Druck auf einer Seite zusammen.
  *   3. Headless-Chromium (Playwright) druckt die Seite als A4 quer (die Tabellen sind breit).
  *
  * Aufruf:   node tools/export-pdf.js
@@ -58,10 +59,12 @@ function slug(text) {
 
 /** Bild aus documents/ als data:-URL laden; null, wenn der Pfad unzulaessig ist oder fehlt. */
 function imageDataUrl(src, baseDir) {
-  if (!/^[A-Za-z0-9_./-]+\.png$/.test(src)) return null;
+  // Nur PNG (Sprites, Farbmuster) und JPEG (Etagen-Screenshots); der MIME-Typ folgt aus der Endung
+  const m = /^[A-Za-z0-9_./-]+\.(png|jpg)$/.exec(src);
+  if (!m) return null;
   const abs = path.resolve(baseDir, src);
   if (!abs.startsWith(DOCS + path.sep) || !fs.existsSync(abs)) return null;
-  return 'data:image/png;base64,' + fs.readFileSync(abs).toString('base64');
+  return 'data:image/' + (m[1] === 'jpg' ? 'jpeg' : 'png') + ';base64,' + fs.readFileSync(abs).toString('base64');
 }
 
 /**
@@ -134,7 +137,29 @@ function markdownToHtml(md, ctx) {
     para.push(line.trim());
   }
   flushPara(); flushList();
-  return out.join('\n');
+  return keepImageSections(out).join('\n');
+}
+
+/**
+ * Abschnitte (### Ueberschrift bis zur naechsten Ueberschrift oder Trennlinie), die ein Einzelbild enthalten,
+ * in <section class="keep"> fassen: im Druck bleiben Ueberschrift, Bild und Text dann auf einer Seite
+ * (floors.md). Abschnitte ohne Einzelbild (z. B. die Tabellen in enemies.md) bleiben unveraendert.
+ */
+function keepImageSections(html) {
+  const out = [];
+  let group = null;
+  const flush = () => {
+    if (!group) return;
+    out.push(group.some((el) => el.startsWith('<p><img')) ? '<section class="keep">' + group.join('\n') + '</section>' : group.join('\n'));
+    group = null;
+  };
+  for (const el of html) {
+    if (/^<h[1-3][ >]|^<hr>/.test(el)) flush();
+    if (el.startsWith('<h3')) { group = [el]; continue; }
+    if (group) group.push(el); else out.push(el);
+  }
+  flush();
+  return out;
 }
 
 // ---------------------------------------------------------------------------------------------------
@@ -160,6 +185,11 @@ const CSS = `
   tbody tr:nth-child(even) td { background: #faf8f5; }
   table.pics td:first-child { width: 52px; text-align: center; }
   td img { max-width: 48px; max-height: 48px; image-rendering: pixelated; display: block; margin: auto; }
+  /* Einzelbilder (Etagen-Screenshots in floors.md): links umflossen, Details rechts daneben; Ueberschriften beenden
+     das Umfliessen und bleiben bei ihrem Inhalt (keine verwaisten Ueberschriften am Seitenende) */
+  p > img { float: left; max-width: 55%; max-height: 58mm; margin: 1mm 6mm 4mm 0; image-rendering: pixelated; }
+  section.keep { break-inside: avoid; overflow: hidden; }   /* overflow: das umflossene Bild zaehlt zur Hoehe */
+  h2, h3, hr { clear: both; }
   td em { color: #6b625a; }
 `;
 

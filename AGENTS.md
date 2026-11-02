@@ -5,9 +5,9 @@ break, how to check your work, and where the rough edges are. If you need a fact
 header comments: every source file starts with a contract/overview block in German.
 
 Related docs: `README.md` (player-facing: controls, debug keys), `DESIGN.md` (game design, content tables, original
-build plan, and an "Implementation status" section at the end of §13), plus `documents/items.md` and
-`documents/enemies.md` (hand-edited lists of all items and pickups, and of all enemies and bosses, with sprites; update
-them when you add or change content).
+build plan, and an "Implementation status" section at the end of §13), plus `documents/items.md`,
+`documents/enemies.md` and `documents/floors.md` (hand-edited lists of all items and pickups, of all enemies and bosses,
+and of all floor themes with screenshots and colours; update them when you add or change content).
 
 ---
 
@@ -116,7 +116,9 @@ raise it there when updating. A "your OS is not officially supported" warning on
 Always look at the screenshots after visual changes. A clean console doesn't mean the art looks right.
 
 `node tools/export-sprites.js` (same Playwright setup) re-exports the sprites used by `documents/*.md` into
-`documents/images/`. Run it after art changes; it never edits the Markdown. `node tools/export-pdf.js` renders every
+`documents/images/`. Run it after art changes; it never edits the Markdown. `node tools/export-floors.js` does the same
+for `documents/floors.md`: one screenshot of a typical combat room per floor theme (`floor_<key>.jpg`) and a small colour
+swatch (`floor_<key>_swatch.png`). Run it after changing a theme, pattern or decor. `node tools/export-pdf.js` renders every
 `documents/*.md` to `documents/pdf/<name>.pdf` (A4 landscape, images embedded). Rerun it after editing the lists.
 
 Testing tips:
@@ -547,6 +549,8 @@ hook it with `on('event', () => p('name'))`. Rate-limit it in `RATE` if it can f
 checks). Depths cycle through the list modulo its length, with roman-numeral suffixes on later passes. New `pattern` /
 `decor` / `wallDecor` / `ambient` values need a case in `renderer.js`. Inserting in the middle shifts the names of all
 later floors (Forgotten Branches went in at position 3 on 2026-11-01); enemy and boss unlocks follow depth, not names.
+Afterwards run `node tools/export-floors.js` and add the floor to `documents/floors.md` (its "Colour coverage" section
+lists which hues are still free).
 
 **Add a new source file:** add the `<script>` tag in `index.html` at the right place in the load order (§3.1) and
 wrap the file in the IIFE pattern.
