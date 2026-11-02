@@ -98,6 +98,11 @@ Live state is under `BOTA.game` (`.player`, `.room`, `.floor`, `.depth`, `.state
   - **Orphan Commit** is a rare bonus only on its floor (at most 1 per room, close to its `bonusChance`), never
     holds the doors, flees into a corner, drops 2–3 credits when caught (even while frozen) or shot, and is
     garbage-collected after its warning without loot or a kill;
+- the **Octopus Merge** is only rolled on Forgotten Branches (about 41 % there on a first visit); it has 8 arms of
+  5 segments that pass 60 % of their damage to the knot and stay inside the room; every sweep, slam, tip shot and
+  stream has its telegraph first; an arm merges every 12 % of HP (at least one stays), phase 2 starts once at 50 %
+  with opposing streams; arms hurt on contact along their whole length; the death is a single boss death and no
+  segments survive it;
 - the door transition, special rooms, pause screen and death screen work.
 
 Screenshots go to `tools/out/` (scratch; don't commit or ship). One-time setup without admin rights:
@@ -383,7 +388,7 @@ Payloads usually include `game, x, y` and often `color`.
 | `hudGlitch` (`kind`) | game (`glitchHud`) | audio |
 | `pipeAppear`, `pipeWarp`, `pipeArrive` (`to`) | game | audio, effects |
 | `propHit`, `propBreak` (`kind, color`) | game | audio, effects |
-| `bossSpawn`, `bossIntro`, `bossPhase`, `bossStomp`, `bossBounce`, `bossBeam` | game, boss | audio (boss music), effects |
+| `bossSpawn`, `bossIntro`, `bossPhase`, `bossStomp`, `bossBounce`, `bossBeam`, `bossMerge` (`left`) | game, boss | audio (boss music, `merge`), effects ("Merged!" pop) |
 | `playerHurt`, `playerDeath` | player, game | audio, effects, HUD |
 | `pickup` (`type`), `itemGet` (`id, def`), `purchase`, `chestOpen` | pickup, player | audio, effects, HUD |
 | `denied` (`reason`: credits/locked/bomb/charge) | various | audio, effects |
@@ -396,7 +401,7 @@ Rule: audio and effects **only listen**. Game logic never calls them directly, e
 are game state.
 
 ### 3.12 Audio (`core/audio.js`) and effects (`entities/effects.js`)
-- **Audio:** 41 synthesized SFX in total. Every sound has a name; `audio.names()` lists them.
+- **Audio:** 42 synthesized SFX in total. Every sound has a name; `audio.names()` lists them.
   - Bus routing: voices → sfx/music bus → master → compressor.
   - Per-name rate limits (`RATE`) and a 40-voice cap keep it from getting noisy.
   - There is a procedural chiptune loop per floor plus a boss variant. Mute is persisted in storage; there's no
@@ -456,7 +461,8 @@ three have weight 6 each: on floor 3 they make up about 24 % of enemies, and abo
 one (measured 2026-11-02). The Orphan Commit is a bonus spawn like the Hallucination (`bonusChance` 0.12, about 14 %
 of combat rooms on floor 3); it is the one enemy that drops loot (2–3 credits) and it never attacks.
 
-Minions (`spawn: false`): `leaklet`, `microservice`, `loop_segment`, `detached_head_tag` (Detached HEAD's head).
+Minions (`spawn: false`): `leaklet`, `microservice`, `loop_segment`, `detached_head_tag` (Detached HEAD's head),
+`octo_arm` (Octopus Merge arm segment).
 
 Room spawning (`rollRoomEnemies`) works on a **budget**:
 - Each enemy has a `cost`. The budget is `min(11, 2.4 + 0.9·depth + rand(0..1.5))`, and a room starts with at most
@@ -479,7 +485,12 @@ Content without these fields rolls exactly as before (same RNG draws), so **exis
 an enemy or boss a theme field**; say so in that commit. In use by the Forgotten Branches family (below).
 
 **Bosses** (base HP): `monolith` 360, `stakeholder` 250, `friday_deploy` 240, `infinite_loop` 300, `rogue_swarm` 4 × 80,
-`reviewer` 340 (floor 3+).
+`reviewer` 340 (floor 3+), `octopus_merge` 330 (floor 3+, Forgotten Branches only, weight 12, so about 41 % there).
+- **Octopus Merge** works like the Infinite Loop: the knot is the boss, its 8 arms are 5 `octo_arm` segments each
+  (`proxy`, 60 %). The knot positions them every tick and draws the arms itself; only the tip (a commit dot) draws
+  as a sprite. Arm contact is checked along the drawn line, not per segment. Speed-ups from merges (`state.sm`)
+  shorten pauses and swings, never telegraphs.
+
 Each has 2 phases and
 telegraphed attacks; enemy bullets travel at 165–260 px/s.
 
@@ -622,15 +633,5 @@ work again, the same file-ownership split works well.
     Forgotten Branches, rarely elsewhere. Note that props deliberately never block doors today (`assignProps`), so
     this needs its own placement code, and the walkability check must treat the stash entrance as a door.
   - **Bosses:**
-    - **Octopus Merge** (Forgotten Branches, via `themes` / `themeOnly` in `bosses.js`):
-      - *Look:* a **tangle of roots and branches** around a big knot in the middle (the merge commit). 6–8 woody
-        tentacles each end in a commit dot. It must read as plant matter, **not** as a cartoon octopus: no face
-        with cat ears or anything resembling a well-known code-hosting company's octopus-cat mascot. Use the
-        floor's bark and leaf palette and the dark green outline.
-      - *Fight:* tentacles sweep and slam (each with a target line first), and the commit dots at their tips fire
-        amber shots. Every ~12 % of HP lost, one tentacle **merges** into the body: it retracts with a "Merged!"
-        pop and the remaining ones get faster. Phase 2 at 50 %: "CONFLICT" — red `<<<<<<<` and `>>>>>>>` markers
-        appear around the room and the knot spits shots in two opposing streams.
-      - *Code:* the Infinite Loop already shows segments as separate enemies with `proxy` to a shared head;
-        tentacles can follow that pattern.
+    - ~~Octopus Merge~~: done 2026-11-02 (§4).
     - **"Human in the Loop"** (meta joke): still just a name. Needs a concept first.

@@ -76,6 +76,18 @@
     desc: 'A floating face behind mirrored glasses. Slow, methodical, and never satisfied.',
   };
 
+  // Etagen-Boss von Forgotten Branches (themeOnly). Gewicht 12 gegen 17 fuer die uebrigen sechs: dort beim ersten
+  // Besuch etwa 41 % (die Abwechslungs-Regeln in rollBossVaried gelten wie fuer alle). hp gilt fuer den Knoten;
+  // Treffer auf die Arme zaehlen zu 60 % (proxyMult in entities/boss.js).
+  B.BOSSES.octopus_merge = {
+    name: 'Octopus Merge',
+    subtitle: 'Eight branches. One merge commit. Zero survivors.',
+    hp: 330, r: 38, speed: 35, contactDamage: 2, flying: true,
+    behavior: 'octopus_merge', sprite: 'boss_octopus_merge', color: '#a3602c',
+    minFloor: 3, weight: 12, themeOnly: ['branches'], family: 'branches',
+    desc: 'A tangle of roots around one huge merge commit. Every branch it absorbs makes the rest angrier.',
+  };
+
   /**
    * Waehlt einen Boss fuer die Etage (deterministisch ueber den Etagen-RNG).
    * Auf Etage 1 nur die beiden "zugaenglicheren" Bosse (Monolith 60 %, Stakeholder 40 %);

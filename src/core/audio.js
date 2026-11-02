@@ -156,6 +156,12 @@
       voice({ f: 95, f2: 140, dur: 0.42, type: 'sawtooth', vol: 0.035, vib: 18, vibDepth: 6, lin: true });
       noise({ dur: 0.4, vol: 0.03, filter: 'bandpass', f: 600, q: 4 });
     },
+    // Octopus Merge zieht einen Arm ein: Holz-"Plopp" mit kurzem Aufwaertston (zwei Branches werden eins)
+    merge() {
+      voice({ f: 160, f2: 80, dur: 0.12, type: 'triangle', vol: 0.12 });
+      arp([60, 67], 0.07, 'square', 0.05);
+      noise({ dur: 0.18, vol: 0.05, filter: 'bandpass', f: 2600, f2: 1200, q: 1 });
+    },
     // Orphan Commit gefangen: kleines, freundliches Arpeggio nach oben
     rescue() { arp([72, 76, 79, 84], 0.05, 'triangle', 0.07); },
     // Garbage Collection: weiches Wegsaugen (Ton faellt, Rauschen wird leiser)
@@ -481,6 +487,7 @@
   on('enemyShed', (e) => { if (e.big) p('rustle'); });  // Stale Branch verliert sein Laub
   on('enemyWindup', (e) => { const n = famSound(e, 'windup'); if (n) p(n); });
   on('orphanCaught', () => p('rescue'));
+  on('bossMerge', () => p('merge'));
   on('enemyVanish', () => p('gcSweep'));
   on('playerHurt', () => p('hurt'));
   on('playerDeath', () => { p('playerDeath'); music.stop(0.6); });

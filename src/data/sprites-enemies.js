@@ -1093,4 +1093,72 @@
   ORPHAN_B[9] = 'kptwkkwwpk';
   ORPHAN_B[10] = '.kstwwwsk.';
   B.defineSprite('enemy_orphan_commit', { palette: ORPHAN_PAL, scale: 4, frames: [ORPHAN_A, ORPHAN_B] });
+
+  // ===========================================================================
+  // Forgotten Branches: Octopus Merge (Boss)
+  // ===========================================================================
+  // Der Knoten: eine Wurzelknolle mit Jahresringen und acht Wurzelstummeln (dort setzen die gezeichneten Arme an),
+  // in der Mitte der Merge-Commit (cremefarbener Ring, dunkler Kern), oben ein Laubbuescherl. Bewusst KEIN
+  // Gesicht und keine Tier-Merkmale: er soll als Pflanze lesen, nicht als Comic-Krake (siehe AGENTS.md §9).
+  // Prozedural erzeugt (wie das Rohr), damit Ringe und Stummel symmetrisch und sauber werden.
+  //   Frame 0: Kern dunkel; Frame 1: Kern glueht bernsteinfarben (Telegraph der Schussstroeme)
+  // Zeichen: k Kontur, b/m/B Rinde dunkel/mittel/hell, h Lichtkante, c Commit-Ring, o Kern, a/y Glut, g/G Laub
+  const OCTO_PAL = {
+    k: B.BRANCH_LEAVES.outline, b: B.BRANCH_LEAVES.bark[0], m: '#7a4e2a', B: B.BRANCH_LEAVES.bark[1], h: '#c98a4a',
+    c: '#e8dcc0', o: '#3a2a1a', a: '#ffcf4d', y: '#fff3c4', g: B.BRANCH_LEAVES.green[1], G: B.BRANCH_LEAVES.green[2],
+  };
+  function octoKnotRows(glow) {
+    const N = 23, c = (N - 1) / 2;
+    const rows = [];
+    for (let y = 0; y < N; y++) {
+      let row = '';
+      for (let x = 0; x < N; x++) {
+        const dx = x - c, dy = y - c;
+        const d = Math.hypot(dx, dy);
+        const a = Math.atan2(dy, dx);
+        // Umriss: Kreis mit acht Wurzelstummeln und leichter Unregelmaessigkeit
+        const R = 8.3 + 2.0 * Math.pow(Math.max(0, Math.cos(8 * (a - Math.PI / 8))), 5) + 0.35 * Math.sin(5 * a + 1);
+        let ch = '.';
+        if (d <= R) {
+          if (d > R - 1.15) ch = 'k';
+          else if (d < 1.9) ch = glow ? (d < 1 ? 'y' : 'a') : 'o';
+          else if (d < 3.2) ch = 'c';
+          else if (d < 4.1) ch = 'k';
+          else {
+            // Jahresringe, leicht gewellt; Lichtkante oben links
+            const ring = Math.floor((d + 0.5 * Math.sin(3 * a)) / 1.5) % 2;
+            ch = ring ? 'm' : 'b';
+            if (d > R - 2.3) ch = dx + dy < -2 ? 'h' : (dx + dy > 3 ? 'b' : 'B');
+          }
+        }
+        row += ch;
+      }
+      rows.push(row);
+    }
+    // Laubbuescherl oben (zwei Blaetter am obersten Stummel), nur ausserhalb der Knolle stempeln
+    const leaves = [[9, 0, 'k'], [10, 0, 'k'], [8, 1, 'k'], [9, 1, 'G'], [10, 1, 'g'], [11, 1, 'k'],
+      [13, 0, 'k'], [14, 0, 'k'], [12, 1, 'k'], [13, 1, 'g'], [14, 1, 'G'], [15, 1, 'k']];
+    for (const [x, y, ch] of leaves) {
+      if (rows[y][x] === '.') rows[y] = rows[y].slice(0, x) + ch + rows[y].slice(x + 1);
+    }
+    return rows;
+  }
+  B.defineSprite('boss_octopus_merge', { palette: OCTO_PAL, scale: 4, frames: [octoKnotRows(false), octoKnotRows(true)] });
+
+  // Arm-Spitze: ein Commit-Punkt (wie im Git-Graphen) mit Holzrand; Frame 1 glueht vor dem Schuss.
+  const OCTO_TIP = [
+    '...kkkk...',
+    '..kBBBBk..',
+    '.kBccccBk.',
+    'kBcckkccBk',
+    'kBckookcbk',
+    'kBckookcbk',
+    'kBcckkccbk',
+    '.kbccccbk.',
+    '..kbbbbk..',
+    '...kkkk...',
+  ];
+  const OCTO_TIP_GLOW = OCTO_TIP.map((r) => r.replace(/o/g, 'a'));
+  OCTO_TIP_GLOW[4] = 'kBckyakcbk';
+  B.defineSprite('boss_octopus_merge_tip', { palette: OCTO_PAL, scale: 4, frames: [OCTO_TIP, OCTO_TIP_GLOW] });
 })(window.BOTA);

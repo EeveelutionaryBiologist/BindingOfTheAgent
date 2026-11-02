@@ -410,11 +410,11 @@ clearly marked hook additions.
 All milestones done. What shipped, compared with this doc:
 - **Items:** 45 (40 passive, 5 active). There are 9 extras beyond §9, e.g. Ctrl+C Ctrl+V, On-Call Pager,
   Garbage Collector, Feature Flag, Ctrl+Z (active), and the Extra GPU / Off-Brand GPU pair (added 2026-11-02). Locked chests cost an Approval.
-- **Enemies and bosses:** 17 spawnable enemies plus 4 minions (4 of the enemies are the Forgotten Branches family, added 2026-11-02). Each of the 6 bosses has two phases and telegraphed attacks.
+- **Enemies and bosses:** 17 spawnable enemies plus 5 minions (4 of the enemies are the Forgotten Branches family, added 2026-11-02). Each of the 7 bosses has two phases and telegraphed attacks; the Octopus Merge (2026-11-02) is the floor boss of Forgotten Branches.
 - **Layouts:** 30 (27 combat, the rest for special rooms), all validated.
 - **Presentation:**
   - 10 floor themes and an animated avatar with 4 directions plus hurt and item poses.
-  - 41 synthesized SFX and a procedural chiptune loop per floor, with a boss variant.
+  - 42 synthesized SFX and a procedural chiptune loop per floor, with a boss variant.
   - Pixel-font HUD and screens, including the "post-mortem" death report.
 - **QA:** headless-browser tests found zero console errors and held 60 fps with all items, 30 enemies and about 150 bullets.
   They also covered 300+ fuzzed floors, every enemy and boss, and multi-floor runs.

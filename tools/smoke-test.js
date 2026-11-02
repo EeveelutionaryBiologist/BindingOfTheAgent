@@ -33,6 +33,9 @@
  *   - Orphan Commit: seltener Bonus nur auf Forgotten Branches (max. 1 pro Raum), flieht in Ecken, blockiert nie
  *     das Clearing; Fangen (auch eingefroren) oder Abschuss -> 2–3 Credits; Garbage Collection mit Warnung, ohne
  *     Beute und ohne Kill
+ *   - Octopus Merge: nur auf Forgotten Branches; 8 Arme a 5 Segmente (proxy 60 %), bleiben im Raum; jeder Schwung,
+ *     Schlag, Spitzen-Schuss und Strom mit Telegraph; Merges je 12 % HP (mind. ein Arm), Phase 2 bei 50 % mit
+ *     gegenlaeufigen Stroemen; Kontakt entlang des Arms; genau ein Boss-Tod, danach keine Segmente mehr
  *   - Spezialraeume, Pause- und Todesbildschirm rendern
  * Screenshots landen in tools/out/ (nicht einchecken).
  *
@@ -1031,6 +1034,142 @@ const URL = 'file://' + path.join(ROOT, 'index.html').replace(/\\/g, '/') + '?se
     return out;
   });
   problems.push(...orphanProblems);
+
+  // --- Octopus Merge: nur Forgotten Branches; 8 Arme a 5 Segmente (proxy 60 %); jeder Schwung/Schlag/Schuss/Strom
+  //     mit Telegraph; je 12 % HP ein Merge (mind. ein Arm bleibt); Phase 2 bei 50 %; Arm-Kontakt; sauberer Tod ---
+  const octoProblems = await page.evaluate(() => {
+    const out = [];
+    const g = BOTA.game, AI = BOTA.AI, DEF = BOTA.BOSSES.octopus_merge;
+    // 1) Boss-Wahl: nur auf Forgotten Branches, dort beim ersten Besuch grob mit seinem Gewichtsanteil
+    for (let d = 1; d <= 2 * BOTA.FLOOR_THEMES.length; d++) {
+      let n = 0;
+      for (let i = 0; i < 300; i++) if (BOTA.rollBossVaried(new BOTA.RNG(BOTA.hashString('octo' + d + ':' + i)), d, []) === 'octopus_merge') n++;
+      if (BOTA.themeKeyAt(d) !== 'branches') { if (n) out.push('Octopus Merge auf Etage ' + d); continue; }
+      if (n / 300 < 0.3 || n / 300 > 0.53) out.push('Octopus Merge: Anteil ' + (n / 300).toFixed(2) + ' auf Etage ' + d);
+    }
+
+    BOTA.debug.gotoRoom('start'); BOTA.debug.god(true);
+    for (let i = 0; i < 4; i++) BOTA.debug.killAll();
+    g.room.projectiles.length = 0;
+    const p = g.player; p.x = 150; p.y = 470;
+    const DT = 1 / 60, I = BOTA.C.INNER;
+    const stepAll = (n, each) => {
+      for (let i = 0; i < n; i++) {
+        for (const en of g.room.enemies.slice()) { if (en.dead) continue; en.frozen = 0; en.update(DT, g); }
+        g.room.enemies = g.room.enemies.filter((en) => !en.dead);
+        if (g.room.projectiles.length > 150) g.room.projectiles.length = 0;   // Projektil-Limit nicht erreichen
+        if (each) each();
+      }
+    };
+    // Mitschnitt: alle Boss-Schuesse (Geschwindigkeit, Telegraph), Events
+    const shots = [];
+    const origShoot = AI.shoot, origShootAt = AI.shootAt, origHurt = p.hurt;
+    AI.shoot = function (game, e, angle, speed, opts) {
+      if (e && (e.id === 'octopus_merge' || e.id === 'octo_arm')) shots.push({ id: e.id, angle, speed, glow: e.state.glow || 0, stream: e.state.stream });
+      return origShoot.apply(this, arguments);
+    };
+    AI.shootAt = function (game, e) {
+      if (e && e.id === 'octo_arm') shots.push({ id: 'tip', glow: e.state.glow || 0 });
+      return origShootAt.apply(this, arguments);
+    };
+    const hurts = [];
+    p.hurt = function (amount, src) { hurts.push({ amount, src }); return origHurt.apply(this, arguments); };
+    const ev = [];
+    const offs = ['bossMerge', 'bossPhase', 'enemyDeath'].map((n) => BOTA.bus.on(n, (x) => ev.push(n + (x.boss === true ? ':boss' : ''))));
+    try {
+      // 2) Aufbau: 8 Arme a 5 Segmente, alle mit proxy auf den Knoten, ignoreForClear; Knoten blockiert das Clearing
+      const O = BOTA.debug.spawnBoss('octopus_merge', 480, 288);
+      O.spawnDelay = 0;
+      const S = O.state;
+      for (const a of S.arms) for (const seg of a.segs) seg.spawnDelay = 0;
+      if (S.arms.length !== 8 || S.arms.some((a) => a.segs.length !== 5)) out.push('Octopus Merge: Arme ' + S.arms.map((a) => a.segs.length).join(','));
+      const segs = S.arms.flatMap((a) => a.segs);
+      if (segs.some((sg) => sg.id !== 'octo_arm' || sg.proxy !== O || !sg.ignoreForClear)) out.push('Octopus Merge: Segmente falsch verknuepft');
+      if (!g.room.hasLivingEnemies()) out.push('Octopus Merge: Raum gilt mit lebendem Knoten als geraeumt');
+      // 3) Nach der Schonfrist ausgerollt; alle Segmente bleiben im Innenraum (auch spaeter, siehe unten)
+      let outside = 0;
+      const inRoom = () => { for (const sg of segs) if (!sg.dead && (sg.x < I.x0 - 1 || sg.x > I.x1 + 1 || sg.y < I.y0 - 1 || sg.y > I.y1 + 1)) outside++; };
+      stepAll(120, inRoom);
+      if (S.arms.some((a) => a.len < 100)) out.push('Octopus Merge: Arme nach der Schonfrist nicht ausgerollt');
+      // 4) Treffer auf ein Armsegment zaehlen zu 60 % am Knoten
+      const hp0 = O.hp;
+      S.arms[0].segs[2].hurt(10, g, {});
+      if (Math.abs(hp0 - O.hp - 6) > 0.01) out.push('Octopus Merge: Armtreffer zieht ' + (hp0 - O.hp) + ' statt 6 ab');
+      // 5) 20 s Kampf: jeder Schwung/Schlag folgt auf seinen Telegraph (>= 0.6 s), jeder Spitzen-Schuss auf ein Gluehen
+      const last = S.arms.map((a) => ({ mode: a.mode, since: 0 }));
+      let swings = 0, slams = 0;
+      stepAll(1200, () => {
+        inRoom();
+        S.arms.forEach((a, i) => {
+          const L = last[i];
+          if (a.mode === L.mode) { L.since += DT; return; }
+          if (a.mode === 'sweep') { swings++; if (L.mode !== 'sweepTell' || L.since < 0.6) out.push('Octopus Merge: Schwung ohne Telegraph'); }
+          if (a.mode === 'slam') { slams++; if (L.mode !== 'slamTell' || L.since < 0.6) out.push('Octopus Merge: Schlag ohne Telegraph'); }
+          last[i] = { mode: a.mode, since: 0 };
+        });
+      });
+      const tips = shots.filter((x) => x.id === 'tip');
+      if (swings + slams < 4) out.push('Octopus Merge: nur ' + (swings + slams) + ' Arm-Angriffe in 20 s');
+      if (tips.length < 6) out.push('Octopus Merge: nur ' + tips.length + ' Spitzen-Schuesse in 20 s');
+      if (tips.some((x) => x.glow < 0.5)) out.push('Octopus Merge: Spitzen-Schuss ohne Gluehen');
+      // 6) Merge bei 88 %: ein Arm wird eingezogen und verschwindet samt Segmenten, der Rest wird schneller
+      O.hp = O.maxHp * 0.87;
+      stepAll(1);
+      const active = () => S.arms.filter((a) => a.mode !== 'merge' && a.mode !== 'gone').length;
+      if (active() !== 7 || !ev.includes('bossMerge')) out.push('Octopus Merge: kein Merge bei 87 % (' + active() + ' aktiv)');
+      stepAll(60);
+      const gone = S.arms.filter((a) => a.mode === 'gone');
+      if (gone.length !== 1 || gone[0].segs.some((sg) => !sg.dead)) out.push('Octopus Merge: eingezogener Arm nicht entfernt');
+      if (Math.abs(S.sm - 1.1) > 0.001) out.push('Octopus Merge: Tempo nach einem Merge ' + S.sm);
+      // 7) Phase 2 bei 50 %: genau ein bossPhase, 4 Arme uebrig; Stroeme mit Telegraph, immer paarweise gegenlaeufig
+      O.hp = O.maxHp * 0.49;
+      shots.length = 0;
+      let tellT = 0, sawFireAfterTell = false;
+      stepAll(420, () => {
+        inRoom();
+        if (S.stream === 'tell') tellT += DT;
+        if (S.stream === 'fire' && tellT >= 0.6) sawFireAfterTell = true;
+        if (S.stream === 'idle') tellT = 0;
+      });
+      if (S.phase !== 2 || ev.filter((x) => x === 'bossPhase').length !== 1) out.push('Octopus Merge: Phase 2 nicht (genau einmal) erreicht');
+      if (active() !== 4) out.push('Octopus Merge: ' + active() + ' statt 4 Arme bei 49 %');
+      const stream = shots.filter((x) => x.id === 'octopus_merge');
+      if (!sawFireAfterTell || stream.length < 10) out.push('Octopus Merge: Schussstroeme fehlen oder ohne Telegraph (' + stream.length + ')');
+      for (let i = 0; i + 1 < stream.length; i += 2) {
+        if (Math.abs(BOTA.M.angleDiff(stream[i].angle + Math.PI, stream[i + 1].angle)) > 0.01) { out.push('Octopus Merge: Stroeme nicht gegenlaeufig'); break; }
+      }
+      const speeds = shots.filter((x) => x.speed !== undefined).map((x) => x.speed);
+      if (speeds.some((v) => v < 165 || v > 260)) out.push('Octopus Merge: Schussgeschwindigkeit ausserhalb 165–260: ' + speeds.find((v) => v < 165 || v > 260));
+      if (outside) out.push('Octopus Merge: ' + outside + 'x Segment ausserhalb des Innenraums');
+      // 8) Mindestens ein Arm bleibt
+      O.hp = 1;
+      stepAll(60);
+      if (active() < 1 || S.merged > 7) out.push('Octopus Merge: alle Arme eingezogen');
+      // 9) Kontakt entlang des Arms (nicht nur an den Segment-Kreisen): Spieler zwischen Ansatz und erstem Segment
+      const arm = S.arms.find((a) => a.mode === 'idle' && a.len > 100);
+      if (arm) {
+        const s0 = arm.segs[0];
+        p.x = (O.x + s0.x) / 2 + (s0.x - O.x) * 0.25; p.y = (O.y + s0.y) / 2 + (s0.y - O.y) * 0.25;
+        p.invuln = 0; hurts.length = 0;
+        O.update(DT, g);
+        if (!hurts.some((h) => h.amount === 1)) out.push('Octopus Merge: Arm-Kontakt verletzt nicht');
+      }
+      p.x = 150; p.y = 470;
+      // 10) Tod: genau ein Boss-Tod, danach platzen alle Arme; kein Segment bleibt uebrig
+      ev.length = 0;
+      O.hurt(1e6, g, {});
+      stepAll(90);
+      if (ev.filter((x) => x === 'enemyDeath:boss').length !== 1) out.push('Octopus Merge: ' + ev.filter((x) => x === 'enemyDeath:boss').length + ' Boss-Tode');
+      if (g.room.enemies.some((en) => en.id === 'octo_arm' && !en.dead)) out.push('Octopus Merge: Armsegmente ueberleben den Knoten');
+    } finally {
+      AI.shoot = origShoot; AI.shootAt = origShootAt; p.hurt = origHurt;
+      for (const off of offs) off();
+      for (let i = 0; i < 4; i++) BOTA.debug.killAll();
+      g.room.projectiles.length = 0;
+    }
+    return out;
+  });
+  problems.push(...octoProblems);
 
   // Mehrfach toedlicher Schaden, weil Items wie "Retry with Backoff" den ersten Tod abfangen
   await page.evaluate(() => {

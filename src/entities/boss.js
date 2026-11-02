@@ -24,8 +24,13 @@
  *                                    (Ziellinie -> Einfrieren -> Strahl), wandernde "Nitpick"-Kugelreihen mit
  *                                    Luecke, "REJECTED"-Stempel auf die Spielerposition; ab 50 % rot vor Wut,
  *                                    schwenkender Laser, doppelte Reihen, dreifache Stempel.
+ *   octopus_merge  Octopus Merge   — Etagen-Boss von Forgotten Branches: Wurzelknoten mit 8 Holzarmen (eigene
+ *                                    Segment-Enemies, proxy). Arme schwingen und schlagen (Faecher- bzw.
+ *                                    Ziellinien-Telegraph), Spitzen schiessen; je 12 % HP verschmilzt ein Arm,
+ *                                    der Rest wird schneller; ab 50 % "CONFLICT": Marker + zwei Schussstroeme.
  *
- * Zusaetzliches Bus-Event (nur informativ): 'bossBeam' (Reviewer feuert den Laser).
+ * Zusaetzliche Bus-Events (nur informativ): 'bossBeam' (Reviewer feuert den Laser), 'bossMerge' (Octopus Merge
+ * zieht einen Arm ein: { x, y, left }).
  *
  * Fairness-Regeln: Gegnerschuesse 165–260 px/s (Spieler: 240 px/s), jeder Angriff hat einen sichtbaren
  * Telegraph (Glow, "!", Zielring, Strahlen), max. ~100 Boss-Kugeln gleichzeitig (+ globales Limit in AI.shoot).
@@ -1709,6 +1714,514 @@
       if (s.mode === 'wall' && s.firstTell) AI.drawMark(ctx, '!', e.x, e.y - 62, e.t, '#ff4d4d', 30);
       BH.drawFrost(e, ctx);
       AI.drawSay(e, ctx);
+    },
+  };
+
+  // ===========================================================================
+  // OCTOPUS MERGE (Etagen-Boss von Forgotten Branches)
+  // ===========================================================================
+  //
+  // Ein Knoten aus Wurzeln (der Merge-Commit) mit 8 Holzarmen. Jeder Arm besteht aus OCTO.SEGS eigenen Enemies
+  // ('octo_arm', siehe enemies.js) wie die Glieder der Infinite Loop: der Knoten setzt ihre Positionen jeden Tick,
+  // Treffer auf sie gehen per proxy (60 %) an den Knoten. Gezeichnet werden die Arme vom Knoten als verjuengte
+  // Holzlinien durch die Segment-Positionen; sichtbar als eigene Figur ist nur das Spitzen-Segment (Commit-Punkt).
+  //
+  // Arm-Zustaende (arm.mode):
+  //   idle       wiegt sich auf seinem Platz (Plaetze gleichmaessig um den Knoten, drehen sich langsam)
+  //   sweepTell  Telegraph: Arm fasst den Startwinkel, ein korallroter Faecher zeigt den kommenden Schwung
+  //   sweep      schwingt ueber OCTO.SWEEP_ARC (durch die Richtung des Spielers)
+  //   slamTell   Telegraph: Arm zieht sich zurueck, gestrichelte Ziellinie + Zielring auf der (festen) Zielstelle
+  //   slam       schnellt zur Zielstelle; hold: liegt kurz dort (Phase 2: 6er-Ring aus der Spitze)
+  //   retract    zurueck auf den Platz
+  //   merge      wird eingezogen ("Merged!"), danach gone (Segmente still entfernt)
+  // Spitzen-Schuesse: zufaelliger ruhender Arm, Spitze glueht OCTO.TIP_TELL Sekunden, dann ein gezielter
+  // Bernstein-Schuss. Je 12 % verlorener HP wird ein Arm "gemergt" (mind. einer bleibt); jeder Merge macht den
+  // Rest 10 % schneller (s.sm wirkt auf Bewegung und alle Takte).
+  // Phase 2 (50 %): "CONFLICT" — Konfliktmarker an den Waenden, der Knoten spuckt periodisch zwei
+  // gegenlaeufige Schussstroeme (rotierend; Telegraph: Knoten glueht, zwei Strahlen zeigen die Startrichtungen).
+  // Kontaktschaden der Arme: der Knoten prueft den Abstand des Spielers zur Armlinie (1 halbes Herz), der Knoten
+  // selbst hat den normalen Boss-Kontaktschaden (2).
+  // Fairness: Schuesse 170–200 px/s, jeder Schwung/Schlag/Schuss/Strom hat einen Telegraph von >= 0.45 s.
+
+  const OCTO = {
+    ARMS: 8, SEGS: 5,
+    BASE: 30,                 // Armansatz: Abstand von der Knotenmitte (px)
+    REST: 150,                // Ruhelaenge eines Arms (px, ab dem Ansatz)
+    WIDTH: [15, 8],           // halbe Armdicke an Ansatz / Spitze (Zeichnen und Kontakt)
+    SWEEP_LEN: 250, SWEEP_ARC: 1.7, SWEEP_TELL: 0.75, SWEEP_TIME: 0.65,
+    SLAM_TELL: 0.7, SLAM_PULL: 80, SLAM_TIME: 0.16, SLAM_HOLD: 0.4, SLAM_REACH: 400,
+    RETRACT: 0.5, MERGE_STEP: 0.12, MERGE_SPEED: 340,
+    TIP_TELL: 0.45, TIP_EVERY: [1.25, 1.0],
+    ATK_EVERY: [2.1, 1.6],
+    STREAM_IDLE: 3.2, STREAM_TELL: 0.7, STREAM_TIME: 2.6, STREAM_GAP: 0.13, STREAM_SPIN: 0.75,
+    GRACE: 1.5,               // Schonfrist nach dem Intro: Arme entrollen sich, keine Angriffe
+  };
+  const OCTO_TIP_SHOT = { color: '#ffcf4d' };
+  const OCTO_STREAM_SHOTS = [{ color: '#ff7a5c' }, { color: '#ffcf4d' }];   // "ours" / "theirs"
+  const OCTO_WARN = '#ff7a5c';
+  const OCTO_MARKERS = [
+    ['<<<<<<<', 120, 150], ['<<<<<<<', 120, 288], ['<<<<<<<', 120, 426],
+    ['>>>>>>>', ROOM_W - 120, 150], ['>>>>>>>', ROOM_W - 120, 288], ['>>>>>>>', ROOM_W - 120, 426],
+    ['=======', CX, 98], ['=======', CX, ROOM_H - 98],
+  ];
+  const octoTmp = { x: 0, y: 0 };
+
+  /** Punkt bei t (0 = Ansatz, 1 = Spitze) auf dem gebogenen Arm, ungeklemmt */
+  function octoPoint(e, arm, t, out) {
+    const a = arm.ang + arm.curl * 4 * t * (1 - t);   // Bogen: 0 an Ansatz und Spitze
+    const d = OCTO.BASE + t * arm.len;
+    out.x = e.x + Math.cos(a) * d;
+    out.y = e.y + Math.sin(a) * d;
+    return out;
+  }
+
+  const octoActive = (s) => s.arms.filter((a) => a.mode !== 'gone' && a.mode !== 'merge');
+  const octoTip = (arm) => arm.segs[arm.segs.length - 1];
+
+  /** Arm-Plaetze: gleichmaessig um den Knoten, in Armreihenfolge, langsam rotierend */
+  function octoSlot(s, arm) {
+    const act = octoActive(s);
+    const k = act.indexOf(arm);
+    return s.spin + (Math.max(0, k) * TAU) / Math.max(1, act.length);
+  }
+
+  /** Abstand Punkt -> Strecke (fuer den Kontakt entlang des Arms) */
+  function octoSegDist(px, py, x0, y0, x1, y1) {
+    const dx = x1 - x0, dy = y1 - y0;
+    const L2 = dx * dx + dy * dy || 1;
+    const t = B.M.clamp(((px - x0) * dx + (py - y0) * dy) / L2, 0, 1);
+    return Math.hypot(px - (x0 + dx * t), py - (y0 + dy * t));
+  }
+
+  function octoStartAttack(e, game) {
+    const s = e.state, p = game.player;
+    const idle = s.arms.filter((a) => a.mode === 'idle');
+    if (!idle.length) return;
+    const pa = AI.angleTo(e, p);
+    // Arm, der am naechsten in Richtung des Spielers zeigt
+    let arm = idle[0], best = Infinity;
+    for (const a of idle) {
+      const d = Math.abs(B.M.angleDiff(a.ang, pa));
+      if (d < best) { best = d; arm = a; }
+    }
+    const near = AI.dist(e, p) < 330;
+    if (near && game.rng.chance(0.55)) {
+      const dir = game.rng.chance(0.5) ? 1 : -1;
+      arm.dir = dir;
+      arm.a0 = pa - (dir * OCTO.SWEEP_ARC) / 2;
+      arm.a1 = pa + (dir * OCTO.SWEEP_ARC) / 2;
+      arm.mode = 'sweepTell';
+      arm.t = OCTO.SWEEP_TELL;
+    } else {
+      // Ziel = Spielerposition (fest), auf die Reichweite gekuerzt
+      const d = Math.min(AI.dist(e, p), OCTO.SLAM_REACH);
+      arm.ta = pa;
+      arm.tlen = Math.max(OCTO.SLAM_PULL + 20, d - OCTO.BASE);
+      arm.tx = e.x + Math.cos(pa) * (OCTO.BASE + arm.tlen);
+      arm.ty = e.y + Math.sin(pa) * (OCTO.BASE + arm.tlen);
+      arm.mode = 'slamTell';
+      arm.t = OCTO.SLAM_TELL;
+    }
+  }
+
+  function octoMerge(e, game, arm) {
+    const tip = octoTip(arm);
+    arm.mode = 'merge';
+    arm.tipTell = 0;
+    B.bus.emit('bossMerge', { game, boss: e, x: tip.x, y: tip.y, left: octoActive(e.state).length });
+  }
+
+  B.BOSS_BEHAVIORS.octopus_merge = {
+    init(e, game) {
+      BH.placeAwayFromPlayer(e, game, 320);
+      const s = e.state;
+      s.phase = 1;
+      s.fx = [];
+      s.grace = OCTO.GRACE;
+      s.spin = game.rng.angle();
+      s.sm = 1;                         // Tempo-Faktor (steigt mit jedem Merge)
+      s.merged = 0;
+      s.atkT = OCTO.GRACE + 0.6;
+      s.tipT = OCTO.GRACE + 0.4;
+      s.wp = { x: e.x, y: e.y };
+      s.wpT = 0;
+      s.stream = 'off';                 // off | idle | tell | fire (ab Phase 2)
+      s.streamT = 0;
+      s.streamAng = 0;
+      s.streamDir = 1;
+      s.streamGap = 0;
+      s.markerT = 0;
+      e.aoeDedupe = true;               // eine Explosion ueber viele Armsegmente zaehlt nur einmal
+      e.drawLayer = -1;                 // Knoten und Arme liegen wie Wurzeln unter allem anderen
+      e.sayOffset = 24;
+      // Arme erzeugen (zusammengerollt; sie entrollen sich waehrend der Schonfrist)
+      s.arms = [];
+      const def = B.ENEMIES.octo_arm;
+      for (let i = 0; i < OCTO.ARMS; i++) {
+        const arm = { i, mode: 'idle', t: 0, ang: s.spin + (i * TAU) / OCTO.ARMS, len: 0, curl: 0, tipTell: 0, segs: [] };
+        if (def && game.room) {
+          for (let j = 0; j < OCTO.SEGS; j++) {
+            const seg = new B.Enemy(def, 'octo_arm', e.x, e.y, game, 1);
+            seg.proxy = e;
+            seg.proxyMult = 0.6;
+            seg.state.arm = i;
+            seg.state.index = j;
+            seg.state.tip = j === OCTO.SEGS - 1;
+            seg.spawnDelay = e.spawnDelay;
+            game.room.enemies.push(seg);
+            arm.segs.push(seg);
+          }
+        }
+        s.arms.push(arm);
+      }
+    },
+
+    update(e, dt, game) {
+      const s = e.state, p = game.player;
+      BH.updateFx(e, dt);
+      if (s.grace > 0) s.grace -= dt;
+
+      // ---- Merges: je 12 % verlorener HP ein Arm (mindestens einer bleibt) ----
+      while (octoActive(s).length > 1 && e.hp <= e.maxHp * (1 - OCTO.MERGE_STEP * (s.merged + 1))) {
+        const act = octoActive(s);
+        const idle = act.filter((a) => a.mode === 'idle');
+        octoMerge(e, game, game.rng.pick(idle.length ? idle : act));
+        s.merged++;
+        s.sm = 1 + 0.1 * s.merged;
+      }
+
+      // ---- Phase 2 bei 50 %: CONFLICT ----
+      if (s.phase === 1 && e.hp <= e.maxHp * 0.5) {
+        s.phase = 2;
+        BH.clearEnemyShots(game);
+        game.shake(8, 0.4);
+        AI.say(e, '<<<<<<< HEAD', 1.6, '#ff5a4d');
+        game.banner('CONFLICT', 'Both branches changed the same lines.');
+        B.bus.emit('bossPhase', { game, boss: e, phase: 2 });
+        s.stream = 'idle';
+        s.streamT = 1.4;
+      }
+      const p2 = s.phase === 2;
+      const sm = s.sm;
+      if (p2) s.markerT = Math.min(1, s.markerT + dt * 1.5);
+
+      // ---- Knoten treibt langsam zwischen Wegpunkten in der Raummitte ----
+      s.wpT -= dt;
+      if (s.wpT <= 0) {
+        s.wp.x = CX + game.rng.float(-180, 180);
+        s.wp.y = CY + game.rng.float(-70, 70);
+        s.wpT = game.rng.float(4, 6);
+      }
+      if (Math.hypot(s.wp.x - e.x, s.wp.y - e.y) > 8) AI.toward(e, s.wp.x, s.wp.y, e.speed * sm);
+      else AI.stop(e);
+      s.spin += dt * 0.08 * sm;
+
+      // ---- Schussstroeme (Phase 2) ----
+      const streaming = s.stream === 'tell' || s.stream === 'fire';
+      if (s.stream !== 'off') {
+        // Nur die Pause zwischen zwei Stroemen wird mit den Merges kuerzer; Telegraph und Strom selbst nicht
+        // (sonst schrumpfte die Warnung unter die Fairness-Grenze)
+        s.streamT -= s.stream === 'idle' ? dt * sm : dt;
+        if (s.stream === 'idle' && s.streamT <= 0) {
+          s.stream = 'tell';
+          s.streamT = OCTO.STREAM_TELL;
+          s.streamAng = AI.angleTo(e, p) + Math.PI / 2;   // startet quer zum Spieler (nicht direkt auf ihn)
+        } else if (s.stream === 'tell' && s.streamT <= 0) {
+          s.stream = 'fire';
+          s.streamT = OCTO.STREAM_TIME;
+          s.streamGap = 0;
+        } else if (s.stream === 'fire') {
+          s.streamAng += OCTO.STREAM_SPIN * s.streamDir * dt;
+          s.streamGap -= dt;
+          if (s.streamGap <= 0) {
+            s.streamGap = OCTO.STREAM_GAP;
+            const sp = AI.shotSpeed(game, 175);
+            AI.shoot(game, e, s.streamAng, sp, OCTO_STREAM_SHOTS[0]);
+            AI.shoot(game, e, s.streamAng + Math.PI, sp, OCTO_STREAM_SHOTS[1]);
+          }
+          if (s.streamT <= 0) {
+            s.stream = 'idle';
+            s.streamT = OCTO.STREAM_IDLE;
+            s.streamDir = -s.streamDir;
+          }
+        }
+      }
+
+      // ---- Angriffe der Arme (Schwung / Schlag) ----
+      if (s.grace <= 0) {
+        s.atkT -= dt * sm * (streaming ? 0.5 : 1);
+        if (s.atkT <= 0) {
+          const busy = s.arms.filter((a) => a.mode !== 'idle' && a.mode !== 'gone' && a.mode !== 'merge').length;
+          if (busy < (p2 ? 2 : 1)) octoStartAttack(e, game);
+          s.atkT = AI.cooldown(game, OCTO.ATK_EVERY[p2 ? 1 : 0]) * game.rng.float(0.85, 1.15);
+        }
+        // Spitzen-Schuesse (pausieren waehrend der Stroeme)
+        if (!streaming) {
+          s.tipT -= dt * sm;
+          if (s.tipT <= 0) {
+            const idle = s.arms.filter((a) => a.mode === 'idle' && a.tipTell <= 0 && a.len > 60);
+            if (idle.length) game.rng.pick(idle).tipTell = OCTO.TIP_TELL;
+            s.tipT = AI.cooldown(game, OCTO.TIP_EVERY[p2 ? 1 : 0]);
+          }
+        }
+      }
+
+      // ---- Arme bewegen ----
+      const T = e.t;
+      for (const arm of s.arms) {
+        if (arm.mode === 'gone') continue;
+        const slot = octoSlot(s, arm);
+        switch (arm.mode) {
+          case 'idle': {
+            const want = slot + 0.16 * Math.sin(T * 0.8 + arm.i * 1.7);
+            arm.ang = AI.turn(arm.ang, want, 1.6 * sm * dt);
+            arm.len = B.M.approach(arm.len, OCTO.REST + 14 * Math.sin(T * 0.9 + arm.i * 2.3), (s.grace > 0 ? 110 : 220) * dt);
+            arm.curl = 0.45 * Math.sin(T * 1.1 + arm.i);
+            break;
+          }
+          case 'sweepTell':
+            arm.ang = AI.turn(arm.ang, arm.a0, 6 * dt);
+            arm.len = B.M.approach(arm.len, OCTO.SWEEP_LEN, 500 * dt);
+            arm.curl = B.M.approach(arm.curl, -arm.dir * 0.3, 2 * dt);
+            arm.t -= dt;
+            if (arm.t <= 0) { arm.mode = 'sweep'; arm.t = 0; }
+            break;
+          case 'sweep': {
+            arm.t = Math.min(1, arm.t + (dt * sm) / OCTO.SWEEP_TIME);
+            const k = arm.t * arm.t * (3 - 2 * arm.t);          // weich an- und auslaufen
+            arm.ang = arm.a0 + (arm.a1 - arm.a0) * k;
+            if (arm.t >= 1) { arm.mode = 'retract'; arm.t = OCTO.RETRACT; }
+            break;
+          }
+          case 'slamTell':
+            arm.ang = AI.turn(arm.ang, arm.ta, 6 * dt);
+            arm.len = B.M.approach(arm.len, OCTO.SLAM_PULL, 400 * dt);
+            arm.curl = B.M.approach(arm.curl, 0, 3 * dt);
+            arm.t -= dt;
+            if (arm.t <= 0) { arm.mode = 'slam'; arm.t = 0; arm.ang = arm.ta; arm.curl = 0; }
+            break;
+          case 'slam':
+            arm.t = Math.min(1, arm.t + dt / OCTO.SLAM_TIME);
+            arm.len = OCTO.SLAM_PULL + (arm.tlen - OCTO.SLAM_PULL) * arm.t;
+            if (arm.t >= 1) {
+              arm.mode = 'hold';
+              arm.t = OCTO.SLAM_HOLD;
+              game.shake(5, 0.2);
+              BH.addWave(e, arm.tx, arm.ty, 70, '#ffcf4d', 0.35);
+              B.bus.emit('bossStomp', { game, boss: e, x: arm.tx, y: arm.ty });
+              if (p2) AI.ring(game, octoTip(arm), 6, AI.shotSpeed(game, 170), game.rng.angle(), OCTO_TIP_SHOT);
+            }
+            break;
+          case 'hold':
+            arm.t -= dt;
+            if (arm.t <= 0) { arm.mode = 'retract'; arm.t = OCTO.RETRACT; }
+            break;
+          case 'retract':
+            arm.ang = AI.turn(arm.ang, slot, 3 * dt);
+            arm.len = B.M.approach(arm.len, OCTO.REST, 400 * dt);
+            arm.curl = B.M.approach(arm.curl, 0, 2 * dt);
+            arm.t -= dt;
+            if (arm.t <= 0) arm.mode = 'idle';
+            break;
+          case 'merge':
+            arm.len = B.M.approach(arm.len, 0, OCTO.MERGE_SPEED * dt);
+            arm.curl = B.M.approach(arm.curl, 0, 3 * dt);
+            if (arm.len <= 0) {
+              arm.mode = 'gone';
+              for (const seg of arm.segs) seg.dead = true;   // still: der Arm ist im Knoten aufgegangen
+            }
+            break;
+        }
+
+        // Spitzen-Telegraph -> Schuss
+        if (arm.tipTell > 0) {
+          arm.tipTell -= dt;
+          if (arm.tipTell <= 0 && arm.mode === 'idle') {
+            const tip = octoTip(arm);
+            if (tip && !tip.dead) AI.shootAt(game, tip, p, AI.shotSpeed(game, 190), OCTO_TIP_SHOT);
+          }
+        }
+
+        // Segmente platzieren (in den Raum geklemmt: Wurzeln kriechen an der Wand entlang statt hindurch)
+        if (arm.mode === 'gone') continue;
+        for (let j = 0; j < arm.segs.length; j++) {
+          const seg = arm.segs[j];
+          octoPoint(e, arm, (j + 1) / arm.segs.length, octoTmp);
+          AI.clampToRoom(octoTmp.x, octoTmp.y, 12, seg);
+          seg.state.glow = seg.state.tip && arm.tipTell > 0 ? 1 - arm.tipTell / OCTO.TIP_TELL : 0;
+        }
+      }
+
+      // ---- Kontakt entlang der Arme (1 halbes Herz; der Knoten selbst macht 2 ueber touchPlayer) ----
+      if (p && !p.dead && s.grace <= 0) {
+        for (const arm of s.arms) {
+          if (arm.mode === 'gone' || arm.mode === 'merge' || arm.len < 20) continue;
+          let px = octoPoint(e, arm, 0, octoTmp).x, py = octoTmp.y;
+          for (let j = 0; j < arm.segs.length; j++) {
+            const seg = arm.segs[j];
+            const w = OCTO.WIDTH[0] + (OCTO.WIDTH[1] - OCTO.WIDTH[0]) * ((j + 1) / arm.segs.length);
+            if (!seg.dead && octoSegDist(p.x, p.y, px, py, seg.x, seg.y) < w + p.r * 0.7) {
+              if (p.hurt(1, e.def.name, game)) p.knockback(p.x - seg.x, p.y - seg.y, 320);
+              break;
+            }
+            px = seg.x; py = seg.y;
+          }
+        }
+      }
+    },
+
+    onDeath(e, game) {
+      // Arme platzen nacheinander auf (siehe octo_arm.update); nur die Spitzen geben Laub-Effekte
+      let n = 0;
+      for (const arm of e.state.arms) {
+        if (arm.mode === 'gone') continue;
+        for (const seg of arm.segs) {
+          if (seg.dead) continue;
+          seg.intangible = true;
+          seg.state.popIn = 0.06 * n + 0.03 * seg.state.index;
+        }
+        n++;
+      }
+    },
+
+    draw(e, ctx) {
+      const s = e.state;
+      // Konfliktmarker (Phase 2) blenden an den Waenden ein und flackern leicht
+      if (s.markerT > 0 && typeof B.text === 'function') {
+        const a = s.markerT * (0.5 + 0.15 * Math.sin(e.t * 9));
+        for (const [str, x, y] of OCTO_MARKERS) {
+          B.text(ctx, str, x, y, { size: 26, bold: true, color: '#ff5a4d', align: 'center', baseline: 'middle', alpha: a });
+        }
+      }
+      BH.drawFx(e, ctx);
+
+      // Telegraphe der Arme (unter den Armen)
+      for (const arm of s.arms) {
+        if (arm.mode === 'sweepTell') {
+          const k = 1 - arm.t / OCTO.SWEEP_TELL;
+          const lo = Math.min(arm.a0, arm.a1), hi = Math.max(arm.a0, arm.a1);
+          ctx.save();
+          // nur im Innenraum zeigen (der Arm selbst wird ja auch an der Wand geklemmt)
+          ctx.beginPath();
+          ctx.rect(INNER.x0, INNER.y0, INNER.x1 - INNER.x0, INNER.y1 - INNER.y0);
+          ctx.clip();
+          ctx.globalAlpha = 0.12 + 0.22 * k + 0.08 * Math.sin(e.t * 30);
+          ctx.fillStyle = OCTO_WARN;
+          ctx.beginPath();
+          ctx.arc(e.x, e.y, OCTO.BASE + OCTO.SWEEP_LEN + OCTO.WIDTH[1], lo, hi);
+          ctx.arc(e.x, e.y, OCTO.BASE, hi, lo, true);
+          ctx.closePath();
+          ctx.fill();
+          ctx.restore();
+        } else if (arm.mode === 'slamTell') {
+          const k = 1 - arm.t / OCTO.SLAM_TELL;
+          ctx.save();
+          ctx.globalAlpha = 0.45 + 0.45 * k;
+          ctx.strokeStyle = OCTO_WARN;
+          ctx.lineWidth = 3;
+          ctx.setLineDash([10, 8]);
+          ctx.beginPath();
+          ctx.moveTo(e.x, e.y);
+          ctx.lineTo(arm.tx, arm.ty);
+          ctx.stroke();
+          ctx.restore();
+          AI.drawTargetRing(ctx, arm.tx, arm.ty, 34, k, OCTO_WARN);
+        }
+      }
+
+      // Arme: verjuengte Holzlinien vom Ansatz durch die Segmente (Kontur, Rinde, Lichtkante), kleine Blaetter
+      const BL = B.BRANCH_LEAVES || { outline: '#16240f', bark: ['#5a3d22', '#a3602c'], green: ['#4f7a30', '#6f9a3c', '#86ad4a'] };
+      for (const arm of s.arms) {
+        if (arm.mode === 'gone') continue;
+        const pts = [octoPoint(e, arm, 0, { x: 0, y: 0 })];
+        let flash = false;
+        for (const seg of arm.segs) {
+          if (seg.dead) continue;
+          pts.push({ x: seg.x, y: seg.y });
+          if (seg.flash > 0) flash = true;
+        }
+        if (pts.length < 2) continue;
+        const alpha = arm.segs[0] && arm.segs[0].intangible ? 0.6 : 1;
+        ctx.save();
+        ctx.globalAlpha = alpha * (e.spawnDelay > 0 ? 0.6 : 1);
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+        // Schichten: [Farbe, Linienbreite aus der halben Armdicke w] — Kontur, Rinde, schmale Lichtkante
+        const layers = [
+          [BL.outline, (w) => w * 2 + 4],
+          [flash ? '#fff4e0' : '#7a4e2a', (w) => w * 2],
+          [flash ? '#ffffff' : BL.bark[1], (w) => w * 0.66],
+        ];
+        for (const [col, width] of layers) {
+          ctx.strokeStyle = col;
+          for (let j = 1; j < pts.length; j++) {
+            const w = OCTO.WIDTH[0] + (OCTO.WIDTH[1] - OCTO.WIDTH[0]) * (j / (pts.length - 1));
+            ctx.lineWidth = width(w);
+            ctx.beginPath();
+            ctx.moveTo(pts[j - 1].x, pts[j - 1].y);
+            ctx.lineTo(pts[j].x, pts[j].y);
+            ctx.stroke();
+          }
+        }
+        // ein Blatt an jedem zweiten Gelenk, abwechselnd links/rechts (harmloses Gruen, nur Deko)
+        for (let j = 1; j < pts.length - 1; j += 2) {
+          const a = Math.atan2(pts[j + 1].y - pts[j - 1].y, pts[j + 1].x - pts[j - 1].x) + (j % 4 === 1 ? 1 : -1) * 1.1;
+          const lx = pts[j].x + Math.cos(a) * 14, ly = pts[j].y + Math.sin(a) * 14;
+          ctx.fillStyle = BL.outline;
+          ctx.beginPath(); ctx.ellipse(lx, ly, 9, 5, a, 0, TAU); ctx.fill();
+          ctx.fillStyle = BL.green[1];
+          ctx.beginPath(); ctx.ellipse(lx, ly, 7, 3.2, a, 0, TAU); ctx.fill();
+        }
+        ctx.restore();
+      }
+
+      // Knoten: Frame 1 = Merge-Commit glueht (Telegraph der Schussstroeme)
+      const glowing = s.stream === 'tell' || s.stream === 'fire';
+      if (s.stream === 'tell') {
+        const k = 1 - s.streamT / OCTO.STREAM_TELL;
+        AI.drawGlow(ctx, e.x, e.y, e.r + 18, k, OCTO_WARN);
+        AI.drawRays(ctx, e.x, e.y, [s.streamAng, s.streamAng + Math.PI], e.r + 4, 90 + 120 * k, 0.4 + 0.5 * k, OCTO_WARN);
+      }
+      BH.drawSprite(e, ctx, e.def.sprite, e.x, e.y, { frame: glowing ? 1 : 0, alpha: e.spawnDelay > 0 ? 0.6 : 1 });
+      BH.drawFrost(e, ctx);
+      AI.drawSay(e, ctx);
+    },
+  };
+
+  /**
+   * Arm-Segment der Octopus Merge. Wird vom Knoten positioniert (static); nur die Spitze zeichnet sich selbst
+   * (Commit-Punkt, glueht vor einem Schuss). Stirbt der Knoten, platzen die Segmente nacheinander.
+   */
+  B.BEHAVIORS.octo_arm = {
+    init(e) {
+      e.static = true;
+      e.noKnockback = true;
+      e.noHpBar = true;
+      e.noSeparate = true;
+      e.noShadow = true;
+      e.ignoreForClear = true;   // nur der Knoten zaehlt fuers Clearing
+      e.contactDamage = 0;       // Kontakt prueft der Knoten entlang der ganzen Armlinie
+      e.state.glow = 0;
+    },
+    update(e, dt, game) {
+      AI.stop(e);
+      const host = e.proxy;
+      if (host && !host.dead) return;
+      // Knoten tot: nacheinander platzen (ohne Kill-Zaehlung); nur Spitzen melden sich fuer Laub-Effekte
+      e.intangible = true;
+      const s = e.state;
+      if (s.popIn === undefined) s.popIn = 0.06 * (s.arm || 0) + 0.03 * (s.index || 0);
+      s.popIn -= dt;
+      if (s.popIn <= 0) {
+        e.dead = true;
+        if (s.tip) B.bus.emit('enemyDeath', { game, enemy: e, x: e.x, y: e.y, color: e.def.color, boss: false, segment: true });
+      }
+    },
+    draw(e, ctx) {
+      if (!e.state.tip) return;
+      const g = e.state.glow || 0;
+      if (g > 0) AI.drawGlow(ctx, e.x, e.y, e.r + 8, g, '#ffcf4d');
+      AI.drawBody(e, ctx, { frame: g > 0 ? 1 : 0, flipX: false, alpha: e.intangible ? 0.6 : 1, noFrost: true });
     },
   };
 

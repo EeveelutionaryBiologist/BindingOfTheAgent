@@ -284,6 +284,17 @@
     desc: 'while (true) { suffer(); }',
   };
 
+  // Arm-Segment der Octopus Merge (Boss, Forgotten Branches): 5 pro Arm, vom Knoten positioniert (static).
+  // Leitet Schaden an den Knoten weiter (proxy, 60 %). Nur das Spitzen-Segment ist sichtbar (der Commit-Punkt,
+  // der schiesst); den Holzarm selbst zeichnet der Boss, und er prueft auch den Kontaktschaden entlang des
+  // ganzen Arms (entities/boss.js) — deshalb hier contactDamage 0.
+  E.octo_arm = {
+    name: 'Octopus Merge', hp: 1, r: 16, speed: 0, contactDamage: 0, flying: true,
+    behavior: 'octo_arm', sprite: 'boss_octopus_merge_tip', color: '#a3602c', noFlip: true,
+    spawn: false, cost: 0, family: 'branches',
+    desc: 'One of eight branches. Soon to be one of seven.',
+  };
+
   // ---------------------------------------------------------------------------
   // Spawn-Logik
   // ---------------------------------------------------------------------------

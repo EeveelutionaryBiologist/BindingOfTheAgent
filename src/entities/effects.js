@@ -477,6 +477,13 @@
     FX.leaves(e.game, e.x, e.y, e.count || 1, e.colors, e.big ? { speedMin: 30, speedMax: 120, lifeMin: 1.1, lifeMax: 1.8 } : { speedMin: 10, speedMax: 40 });
   });
 
+  // Octopus Merge zieht einen Arm ein: "Merged!"-Pop an der Spitze (Ring, Laub, Text)
+  on('bossMerge', (e) => {
+    FX.ring(e.game, e.x, e.y, 46, '#ffcf4d', 0.35, 5);
+    FX.leaves(e.game, e.x, e.y, 6, leafMix(), { speedMin: 40, speedMax: 160 });
+    FX.text(e.game, e.x, e.y - 24, 'Merged!', '#ffcf4d');
+  });
+
   // Orphan Commit gefangen: goldenes Funkeln und ein kurzer Text (die Credits fliegen ohnehin heraus)
   on('orphanCaught', (e) => {
     FX.sparkles(e.game, e.x, e.y - 6, 10, 26, '#ffe27a', { rise: 24 });
