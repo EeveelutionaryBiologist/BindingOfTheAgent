@@ -1121,6 +1121,15 @@
   // Forgotten Branches: Stale Branch
   // ===========================================================================
 
+  // Schichten ueber dem Kopf (Abstand nach oben ab e.y - e.r), damit sich nichts ueberdeckt:
+  //   HP-Balken (Code Review)   -14 .. -8   (fest in Enemy.drawHpBar)
+  //   Commit-Zaehler "-N"       Mitte -30, Pixelschrift scale 2 = 14 px plus Kontur; beim Hochzaehlen bis
+  //                             x1.36 aufgeploppt -> hoechstens -40.5 .. -19.5, also >= 4 px ueber dem Balken
+  //   Sprechtext ("STALE")      Oberkante -30 - sayOffset = -62 (steigt danach weiter), 15 px hoch ->
+  //                             Unterkante -47, also >= 6 px ueber dem aufgeploppten Zaehler
+  const STALE_COUNTER_Y = 30;
+  const STALE_SAY_OFFSET = 32;
+
   // Altersstufen: Sprite-Suffix, Laubfarben (B.BRANCH_LEAVES-Schluessel) und Farbe des Commit-Zaehlers.
   // Gelb/Braun-Zaehler bleiben bewusst "neutral" warm; erst kahl (= gefaehrlich) wird er Bernstein.
   const STALE_STAGES = [
@@ -1171,7 +1180,7 @@
       s.leafT = 0.9;                                // Takt fuer einzelne fallende Blaetter (gelb/braun)
       s.pop = 0;                                    // kurzes Aufploppen des Zaehlers beim Hochzaehlen
       s.ticks = 0;
-      e.sayOffset = 16;                             // Sprechtext ueber dem Commit-Zaehler
+      e.sayOffset = STALE_SAY_OFFSET;               // Sprechtext ueber dem Commit-Zaehler (siehe Schichten unten)
       e.spriteName = e.def.sprite + STALE_STAGES[s.stage].suffix;
     },
     update(e, dt, game) {
@@ -1270,7 +1279,7 @@
         const n = s.base + s.ticks;
         const pop = s.pop > 0 ? 1 + s.pop * 2 : 1;
         ctx.save();
-        ctx.translate(e.x, e.y - e.r - 28);
+        ctx.translate(e.x, e.y - e.r - STALE_COUNTER_Y);
         ctx.scale(pop, pop);
         B.pixelText(ctx, '-' + n, 0, 0, { scale: 2, align: 'center', baseline: 'middle', color: col, outline: '#16240f', alpha: e.alpha });
         ctx.restore();
