@@ -24,8 +24,8 @@
  * Screenshots landen in tools/out/ (nicht einchecken).
  *
  * Aufruf:   node tools/smoke-test.js
- * Voraussetzung: Node.js + Playwright mit Chromium, z. B. lokal im Projekt:
- *   npm i --no-save playwright && npx playwright install chromium
+ * Voraussetzung: Node.js + Playwright mit Chromium; einmalig einrichten mit
+ *   bash tools/setup-dev.sh
  * (keine Admin-Rechte noetig; das Spiel selbst braucht nichts davon)
  *
  * SICHERHEIT: Der Test oeffnet nur die lokale Datei; die CSP des Spiels blockiert ohnehin jedes Netzwerk.
@@ -39,7 +39,7 @@ let chromium;
 try {
   ({ chromium } = require('playwright'));
 } catch (e) {
-  console.error('Playwright fehlt. Installieren mit: npm i --no-save playwright && npx playwright install chromium');
+  console.error('Playwright fehlt. Einrichten mit: bash tools/setup-dev.sh (keine Admin-Rechte noetig)');
   process.exit(2);
 }
 

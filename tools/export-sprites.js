@@ -22,7 +22,7 @@ let chromium;
 try {
   ({ chromium } = require('playwright'));
 } catch (e) {
-  console.error('Playwright fehlt. Installieren mit: npm i --no-save playwright && npx playwright install chromium');
+  console.error('Playwright fehlt. Einrichten mit: bash tools/setup-dev.sh (keine Admin-Rechte noetig)');
   process.exit(2);
 }
 

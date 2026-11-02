@@ -87,11 +87,14 @@ Live state is under `BOTA.game` (`.player`, `.room`, `.floor`, `.depth`, `.state
 - the Off-Brand GPU turns about 12 % of shots into duds that deal no damage, and the GPU prices are 30¢ / 20¢;
 - the door transition, special rooms, pause screen and death screen work.
 
-Screenshots go to `tools/out/` (scratch; don't commit or ship). Setup without admin rights:
+Screenshots go to `tools/out/` (scratch; don't commit or ship). One-time setup without admin rights:
 ```bash
-npm i --no-save playwright && npx playwright install chromium
+bash tools/setup-dev.sh         # Playwright (pinned) into ./node_modules (gitignored) + headless Chromium into ~/.cache
 node tools/smoke-test.js        # exit 0 = green
 ```
+`setup-dev.sh` is idempotent (rerun it any time), never writes a `package.json` or lock file, and ends with a quick
+browser launch check. The Playwright version is pinned in the script so the package and the browser build match;
+raise it there when updating. A "your OS is not officially supported" warning on newer Linux versions is harmless.
 Always look at the screenshots after visual changes. A clean console doesn't mean the art looks right.
 
 `node tools/export-sprites.js` (same Playwright setup) re-exports the sprites used by `documents/*.md` into
