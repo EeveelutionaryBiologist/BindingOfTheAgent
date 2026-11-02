@@ -5,6 +5,8 @@
  *   BOTA.BEHAVIORS.<name> = {
  *     init(e, game) {},             // optional, einmalig beim Erzeugen (laeuft IM Enemy-Konstruktor)
  *     update(e, dt, game) {},       // setzt e.vx/e.vy, schiesst, wechselt Zustand (e.state ist frei nutzbar)
+ *     afterMove(e, dt, game) {},    // optional, JEDEN Tick nach Bewegung und Abstossung (auch waehrend
+ *                                   // spawnDelay/frozen) — fuer harte Abstandsgrenzen (Cherry-Pick-Stiel)
  *     onDeath(e, game) {},          // optional (z. B. Abspalten)
  *     onLethal(e, game, source) {}, // optional: true zurueckgeben = Tod verhindern (z. B. Zombie Process)
  *     onExplosion(e, game, x, y, radius) {}, // optional: jede Explosion im Raum (game.explode), egal wie nah
@@ -27,7 +29,7 @@
  *   e.sayText/sayT kurzer schwebender Text ueber dem Gegner (siehe AI.say)
  *
  * Verhalten in dieser Datei: wander, chase, fly_chase, split, blink, charge, turret, orbit, shooter,
- * revive, grow, mimic, zigzag, glitch. Boss-Verhalten (und das Wurm-Segment) stehen in entities/boss.js.
+ * revive, grow, mimic, zigzag, glitch, cherry. Boss-Verhalten (und das Wurm-Segment) stehen in entities/boss.js.
  *
  * Zusaetzliche Bus-Events (nur informativ, z. B. fuer Sound/Effekte): 'enemyRevive' (Zombie steht auf),
  * 'enemyReveal' (Hallucination enttarnt sich); aus boss.js: 'bossPhase', 'bossStomp', 'bossBounce'.
@@ -348,6 +350,7 @@
         if (this.moveAndCollide(dt, game.room)) this.state.bumped = true;
       }
       this.separate(game);
+      if (this.behavior.afterMove) this.behavior.afterMove(this, dt, game);
       this.touchPlayer(game);
     }
 
@@ -1114,6 +1117,344 @@
       }
     },
   };
+
+  // ---------------------------------------------------------------------------
+  // Forgotten Branches: Cherry-Pick
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Cherry-Pick — zwei Kirschen an einem dehnbaren Stiel (pack: 2, nur Forgotten Branches).
+   *
+   * Paarbildung (deterministisch): Im init sucht eine neue Kirsche die ERSTE noch ungepaarte, lebende Kirsche im
+   * aktuellen Raum (game.room ist beim Bevoelkern schon gesetzt) und verbindet sich mit ihr. game.populate legt die
+   * Pack-Mitglieder direkt hintereinander an, also findet die zweite Kirsche eines Packs immer die erste; bei zwei
+   * Packs entstehen die Paare 1+2 und 3+4. Liegt der Partner weiter weg (verschiedene Spawnpunkte), springt die
+   * neue Kirsche neben ihn. Die zuerst erzeugte Kirsche ist der "Lead" und zeichnet den Stiel.
+   * Einzeln erzeugt (BOTA.debug.spawn): Ist eine Kirsche beim ersten Verhaltens-Update (nach der Spawn-Phase)
+   * noch allein, laesst sie neben sich einen Partner wachsen — Cherry-Pick kommt immer als Paar.
+   *
+   * Stiel-Leine: Sprungziele bleiben weich innerhalb von ~75–93 % der Leine um den (Lande-)Punkt des Partners;
+   * zusaetzlich zieht afterMove eine Kirsche nach JEDER Bewegung (inkl. Rueckstoss und Abstossung) hart auf
+   * hoechstens params.leash px an den Partner heran (schiebt ein Fels sie zurueck, wird abwechselnd der Partner
+   * nachgezogen). Weil das jeweils nach der eigenen Bewegung passiert, ist der Abstand am Ende jedes Ticks <= leash.
+   * afterMove ist ein allgemeiner Hook in Enemy.update (nach Bewegung/Abstossung, auch eingefroren).
+   *
+   * Sprung-Zyklus: idle -> crouch (Stauchen vor dem Absprung) -> hop (Bogen, eigener Schatten am Boden)
+   *   -> land (Stauchen beim Aufsetzen) -> idle. Ruhig: Spruenge im Bogen um den Spieler herum.
+   *
+   * Wut: Verliert eine Kirsche HP (Spielerschuss, Explosion, Item — Blindgaenger mit 0 Schaden zaehlen nicht),
+   * wird der PARTNER fuer params.angryTime s wuetend (bereits wuetend: Timer neu). Wuetend = dunkleres Sprite mit
+   * zusammengekniffenen Augen, kuerzere Pausen, weitere Spruenge direkt auf den Spieler und ein Kern-Schuss:
+   * erst puff s lang aufgeblasene Backen (Telegraph), dann ein langsamer, gezielter Bernstein-Schuss.
+   * Stirbt eine Kirsche, bleibt die andere fuer immer wuetend (state.widowed) und die Leine entfaellt.
+   *
+   * Zufall nur ueber game.rng (Sprungziele, Pausen); die Wut selbst ist rein ereignisgesteuert.
+   */
+  const CHERRY_COLORS = { stem: '#4f7a30', stemDark: '#16240f', leaf: '#86ad4a', shot: '#ffcf4d', puff: '#ff7a5c' };
+
+  /** Kirsche e mit Kirsche o verbinden (o ist die aeltere = Lead, zeichnet den Stiel) */
+  function cherryLink(e, o) {
+    e.state.partner = o;
+    o.state.partner = e;
+    o.state.lead = true;
+    e.state.lead = false;
+  }
+
+  /** Partner ist weg: fuer immer wuetend, ohne Leine */
+  function cherryWidow(e) {
+    const s = e.state;
+    if (s.widowed) return;
+    s.partner = null;
+    s.widowed = true;
+    s.lead = false;
+    if (!(s.angry > 0)) s.spitCD = Math.min(s.spitCD || 0, 0.4); // frisch wuetend -> bald ein Kern
+    s.angry = Infinity;
+    AI.say(e, 'You picked the wrong cherry.', 1.8, CHERRY_COLORS.puff);
+  }
+
+  /** Partner fuer angryTime s wuetend machen (Treffer auf e) */
+  function cherryEnrage(o) {
+    const s = o.state;
+    if (s.widowed || o.dead) return;
+    if (!(s.angry > 0)) s.spitCD = Math.min(s.spitCD || 0, 0.35); // frisch wuetend -> bald ein Kern
+    s.angry = Math.max(s.angry || 0, o.params.angryTime || 3);
+  }
+
+  /** Landepunkt des Partners: Sprungziel, solange er in der Luft ist, sonst seine Position */
+  function cherryAnchor(o) {
+    const s = o.state;
+    return s.mode === 'hop' ? { x: s.tx, y: s.ty } : { x: o.x, y: o.y };
+  }
+
+  /** Ist der Boden am Punkt (x, y) fuer eine laufende Kirsche begehbar? */
+  function cherryFree(game, x, y) {
+    const t = game.room.worldToTile(x, y);
+    return !game.room.isSolid(t.c, t.r, 'walk', false);
+  }
+
+  /**
+   * Naechstes Sprungziel waehlen. Ruhig: ein Stueck weiter im Bogen um den Spieler (Umlaufrichtung wechselt
+   * gelegentlich). Wuetend: entlang des Flow-Fields direkt auf den Spieler zu. Danach weich an die Leine
+   * (Landepunkt des Partners) und in den Raum klemmen; liegt das Ziel in einem Hindernis, ein paar andere
+   * Winkel probieren, notfalls auf der Stelle huepfen.
+   */
+  function cherryTarget(e, game) {
+    const s = e.state, P = e.params, p = game.player, rng = game.rng;
+    const angry = s.angry > 0;
+    const leash = P.leash || 140;
+    const anchor = s.partner && !s.partner.dead ? cherryAnchor(s.partner) : null;
+    const soft = leash * (angry ? 0.93 : 0.75);
+    const out = { x: e.x, y: e.y };
+    for (let attempt = 0; attempt < 6; attempt++) {
+      let tx, ty;
+      if (angry) {
+        const d = game.room.flowDir(e.x, e.y, p.x, p.y);
+        const jitter = attempt ? rng.float(-0.6, 0.6) : 0; // Ausweichwinkel bei Hindernissen
+        const a = Math.atan2(d.y, d.x) + jitter;
+        const len = Math.min(P.hopLenAngry || 115, Math.max(24, Math.hypot(p.x - e.x, p.y - e.y)));
+        tx = e.x + Math.cos(a) * len;
+        ty = e.y + Math.sin(a) * len;
+      } else {
+        if (attempt === 0 && rng.chance(0.2)) s.orbitDir = -s.orbitDir;
+        const a = Math.atan2(e.y - p.y, e.x - p.x) + s.orbitDir * rng.float(0.3, 0.8);
+        const rad = B.M.clamp(Math.hypot(e.x - p.x, e.y - p.y), 120, 200) + rng.float(-20, 20);
+        tx = p.x + Math.cos(a) * rad;
+        ty = p.y + Math.sin(a) * rad;
+        // Sprungweite begrenzen (kleine Hopser)
+        const dx = tx - e.x, dy = ty - e.y, dl = Math.hypot(dx, dy), max = P.hopLen || 80;
+        if (dl > max) { tx = e.x + (dx / dl) * max; ty = e.y + (dy / dl) * max; }
+      }
+      // Weiche Leine: nie weiter als soft vom Landepunkt des Partners landen
+      if (anchor) {
+        const ax = tx - anchor.x, ay = ty - anchor.y, al = Math.hypot(ax, ay);
+        if (al > soft) { tx = anchor.x + (ax / al) * soft; ty = anchor.y + (ay / al) * soft; }
+      }
+      AI.clampToRoom(tx, ty, e.r + 2, out);
+      if (cherryFree(game, out.x, out.y)) return out;
+    }
+    out.x = e.x; out.y = e.y; // kein freies Ziel: auf der Stelle huepfen
+    return out;
+  }
+
+  B.BEHAVIORS.cherry = {
+    init(e, game) {
+      const s = e.state;
+      s.mode = 'idle';
+      s.t = game.rng.float(0.2, 0.6);
+      s.orbitDir = game.rng.chance(0.5) ? 1 : -1;
+      s.angry = 0;
+      s.spitCD = 0;
+      s.h = 0;            // aktuelle Sprunghoehe (nur Zeichnen)
+      s.blink = game.rng.float(1.5, 3.5);
+      s.lastHp = e.hp;
+      s.partner = null;
+      s.widowed = false;
+      s.lead = false;
+      s.soloChecked = false;
+      // Paarbildung: erste ungepaarte, lebende Kirsche im Raum (die neue ist hier noch nicht in der Liste)
+      const room = game.room;
+      if (!room) return;
+      const o = room.enemies.find((x) => x !== e && !x.dead && x.def === e.def && !x.state.partner && !x.state.widowed);
+      if (!o) return;
+      cherryLink(e, o);
+      // Zu weit weg (anderer Spawnpunkt)? Neben den Partner setzen, damit der Stiel nicht reissen muss.
+      if (Math.hypot(e.x - o.x, e.y - o.y) > (e.params.leash || 140) * 0.6) {
+        const a = game.rng.angle();
+        const pos = game.nearestFreePos(o.x + Math.cos(a) * 60, o.y + Math.sin(a) * 60, room);
+        e.x = pos.x;
+        e.y = pos.y;
+      }
+    },
+
+    update(e, dt, game) {
+      const s = e.state, P = e.params;
+
+      // Partner verschwunden (gestorben oder entfernt)? -> fuer immer wuetend
+      if (s.partner && s.partner.dead) cherryWidow(e);
+      // Allein erzeugt (Debug-Spawn): einen Partner wachsen lassen. Sein init verbindet sich mit e.
+      if (!s.soloChecked) {
+        s.soloChecked = true;
+        if (!s.partner && !s.widowed) {
+          const o = game.spawnEnemy(e.id, e.x, e.y, game.room);
+          if (o && o.state.partner === e) {
+            const pos = game.nearestFreePos(e.x + s.orbitDir * 50, e.y, game.room);
+            o.x = pos.x; o.y = pos.y;
+          }
+        }
+      }
+      if (s.angry > 0 && s.angry !== Infinity) s.angry = Math.max(0, s.angry - dt);
+      const angry = s.angry > 0;
+      if (s.spitCD > 0) s.spitCD -= dt;
+      s.blink -= dt;
+      if (s.blink < -0.12) s.blink = game.rng.float(1.5, 3.5);
+
+      s.t -= dt;
+      switch (s.mode) {
+        case 'idle': {
+          AI.stop(e);
+          s.h = 0;
+          if (s.t > 0) break;
+          // Wuetend und Kern bereit: Backen aufblasen (Telegraph), danach Schuss
+          const p = game.player;
+          if (angry && s.spitCD <= 0 && Math.hypot(p.x - e.x, p.y - e.y) > 70) {
+            s.mode = 'puff';
+            s.t = P.puff || 0.5;
+            break;
+          }
+          s.mode = 'crouch';
+          s.t = angry ? 0.1 : 0.18;
+          break;
+        }
+        case 'puff':
+          AI.stop(e);
+          if (s.t <= 0) {
+            AI.shootAt(game, e, game.player, AI.shotSpeed(game, P.shotSpeed || 170), { color: CHERRY_COLORS.shot, r: 7, source: e.def.name });
+            s.spitCD = AI.cooldown(game, P.spitCooldown || 2.4);
+            s.mode = 'idle';
+            s.t = 0.25;
+          }
+          break;
+        case 'crouch':
+          AI.stop(e);
+          if (s.t <= 0) {
+            const tgt = cherryTarget(e, game);
+            const dur = angry ? (P.hopDurAngry || 0.28) : (P.hopDur || 0.36);
+            s.mode = 'hop';
+            s.t = dur;
+            s.dur = dur;
+            s.tx = tgt.x;
+            s.ty = tgt.y;
+            s.bumped = false;
+            e.vx = (tgt.x - e.x) / dur;
+            e.vy = (tgt.y - e.y) / dur;
+          }
+          break;
+        case 'hop': {
+          const k = 1 - Math.max(0, s.t) / (s.dur || 0.3);
+          s.h = Math.sin(Math.PI * B.M.clamp(k, 0, 1)) * (angry ? 16 : 12);
+          if (s.t <= 0 || s.bumped) {
+            AI.stop(e);
+            s.bumped = false;
+            s.h = 0;
+            s.mode = 'land';
+            s.t = 0.12;
+          }
+          break;
+        }
+        case 'land':
+          AI.stop(e);
+          if (s.t <= 0) {
+            s.mode = 'idle';
+            s.t = AI.cooldown(game, angry ? game.rng.float(0.12, 0.25) : game.rng.float(0.35, 0.7));
+          }
+          break;
+      }
+    },
+
+    /**
+     * Laeuft jeden Tick (auch eingefroren / in der Spawn-Phase):
+     *   1. eigener HP-Verlust seit dem letzten Tick -> der Partner nimmt es persoenlich (sofort, auch wenn e
+     *      gerade eingefroren ist),
+     *   2. harte Stiel-Leine: nach jeder Bewegung hoechstens params.leash px vom Partner entfernt.
+     */
+    afterMove(e, dt, game) {
+      const s = e.state;
+      if (e.hp < s.lastHp && s.partner && !s.partner.dead) cherryEnrage(s.partner);
+      s.lastHp = e.hp;
+      const o = s.partner;
+      if (!o || o.dead) return;
+      const leash = e.params.leash || 140;
+      // Abwechselnd e und den Partner heranziehen: Landet der gezogene Punkt in einem Fels, schiebt resolveTiles
+      // ihn ein paar Pixel zurueck — der naechste Durchgang zieht dann den anderen nach.
+      for (let i = 0; i < 4; i++) {
+        const m = i % 2 ? o : e, other = i % 2 ? e : o;
+        const dx = m.x - other.x, dy = m.y - other.y, d = Math.hypot(dx, dy);
+        if (d <= leash) return;
+        m.x = other.x + (dx / d) * leash;
+        m.y = other.y + (dy / d) * leash;
+        m.resolveTiles(game.room, m.flying ? 'fly' : 'walk');
+      }
+    },
+
+    onDeath(e, game) {
+      const o = e.state.partner;
+      e.state.partner = null;
+      if (o && !o.dead) cherryWidow(o);
+    },
+
+    draw(e, ctx) {
+      const s = e.state, angry = s.angry > 0;
+      const o = s.partner;
+      // Stiel (nur der Lead zeichnet ihn, damit er einmal pro Paar erscheint)
+      if (s.lead && o && !o.dead) cherryDrawStem(e, o, ctx);
+
+      // Stauchen/Strecken: vor dem Absprung und beim Landen breit und flach, in der Luft schmal und lang
+      let sx = 1, sy = 1;
+      if (s.mode === 'crouch' || s.mode === 'land') { sx = 1.18; sy = 0.8; }
+      else if (s.mode === 'hop') { sx = 0.9; sy = 1.12; }
+      else if (s.mode === 'puff') { const w = Math.sin(e.t * 30) * 0.03; sx = 1.08 + w; sy = 0.96; }
+      const foot = e.y + 22 - s.h; // Fusspunkt = Unterkante des Sprites (24 px unter y), in der Luft angehoben
+      const puffing = s.mode === 'puff';
+      if (puffing) {
+        // Telegraph: pulsierender Korallen-Schein hinter den aufgeblasenen Backen
+        const k = 1 - Math.max(0, s.t) / (e.params.puff || 0.5);
+        AI.drawGlow(ctx, e.x, e.y - s.h, e.r + 6 + k * 6, 0.3 + 0.6 * k, CHERRY_COLORS.puff);
+      }
+      ctx.save();
+      ctx.translate(e.x, foot);
+      ctx.scale(sx, sy);
+      ctx.translate(-e.x, -foot);
+      AI.drawBody(e, ctx, {
+        sprite: angry ? 'enemy_cherry_pick_angry' : 'enemy_cherry_pick',
+        frame: angry ? (puffing ? 1 : 0) : (s.blink < 0 ? 1 : 0),
+        dy: -s.h,
+        flipX: false,
+      });
+      ctx.restore();
+      AI.drawSay(e, ctx);
+    },
+  };
+
+  /**
+   * Stiel zwischen zwei Kirschen: von Stielansatz zu Stielansatz ein Bogen nach oben mit einem Blatt am
+   * Scheitel. Je naeher die Kirschen, desto mehr Durchhang (hoeherer Bogen); an der Leinengrenze fast gerade
+   * und duenner — so sieht man, wie weit der Stiel noch nachgibt.
+   */
+  function cherryDrawStem(a, b, ctx) {
+    const sa = a.state, sb = b.state;
+    const leash = a.params.leash || 140;
+    // Stielansatz = Oberkante des Sprite-Stummels (Sprite 12 Art-px hoch, Massstab 4, zentriert -> 24 px ueber y)
+    const ax = a.x + 2, ay = a.y - 22 - (sa.h || 0);
+    const bx = b.x + 2, by = b.y - 22 - (sb.h || 0);
+    const d = Math.hypot(bx - ax, by - ay);
+    const slack = B.M.clamp(1 - d / leash, 0, 1);
+    const mx = (ax + bx) / 2, my = Math.min(ay, by) - 6 - slack * 34;
+    const thin = 0.65 + 0.35 * slack; // gespannt = duenner
+    ctx.save();
+    ctx.lineCap = 'round';
+    ctx.strokeStyle = CHERRY_COLORS.stemDark;
+    ctx.lineWidth = 9 * thin;
+    ctx.beginPath();
+    ctx.moveTo(ax, ay);
+    ctx.quadraticCurveTo(mx, my, bx, by);
+    ctx.stroke();
+    ctx.strokeStyle = CHERRY_COLORS.stem;
+    ctx.lineWidth = 5 * thin;
+    ctx.stroke();
+    // Blatt am Scheitel (Bezier-Mittelpunkt) mit dunkler Kontur
+    const px = 0.25 * ax + 0.5 * mx + 0.25 * bx, py = 0.25 * ay + 0.5 * my + 0.25 * by;
+    ctx.translate(px, py);
+    ctx.rotate(-0.5);
+    ctx.fillStyle = CHERRY_COLORS.stemDark;
+    ctx.beginPath();
+    ctx.ellipse(11, -2, 14, 7.5, 0, 0, TAU);
+    ctx.fill();
+    ctx.fillStyle = CHERRY_COLORS.leaf;
+    ctx.beginPath();
+    ctx.ellipse(11, -2, 11, 5, 0, 0, TAU);
+    ctx.fill();
+    ctx.restore();
+  }
 
   B.AI = AI;
   B.Enemy = Enemy;

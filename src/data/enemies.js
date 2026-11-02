@@ -154,6 +154,32 @@
     desc: 'Sometimes it hits first. Sometimes you do. Sometimes both.',
   };
 
+  // --- Forgotten Branches: Cherry-Pick ---
+  // Zwei Kirschen an einem dehnbaren Stiel (pack: 2), nur auf Forgotten Branches (themeOnly). Huepfen in kleinen
+  // Boegen um den Spieler; ein Treffer macht die ANDERE Kirsche 3 s lang wuetend (dunkler, schnelle Spruenge direkt
+  // auf den Spieler, spuckt einen Kern), stirbt eine, bleibt die andere fuer immer wuetend. Verhalten: 'cherry'
+  // (entities/enemy.js), dort auch die Paarbildung und die Stiel-Leine (max. leash px).
+  // family: 'branches' ist rein optisch (Blatt-Effekte/Holz-Sounds der Forgotten-Branches-Familie).
+  E.cherry_pick = {
+    name: 'Cherry-Pick', hp: 7, r: 16, speed: 75, contactDamage: 1,
+    behavior: 'cherry',
+    params: {
+      leash: 140,          // maximale Stiellaenge in px (harte Grenze, siehe afterMove)
+      hopLen: 80,          // Sprungweite ruhig (px)
+      hopLenAngry: 115,    // Sprungweite wuetend (px)
+      hopDur: 0.36,        // Flugzeit ruhig (s)
+      hopDurAngry: 0.28,   // Flugzeit wuetend (s)
+      angryTime: 3,        // Dauer der Wut nach einem Treffer auf den Partner (s)
+      puff: 0.5,           // Vorwarnung "Backen aufblasen" vor dem Kern-Schuss (s)
+      spitCooldown: 2.4,   // Abstand zwischen zwei Kernen, solange die Wut anhaelt (s)
+      shotSpeed: 170,      // langsamer, gezielter Kern (px/s, skaliert sanft mit der Tiefe)
+    },
+    sprite: 'enemy_cherry_pick', color: '#d64545',
+    minFloor: 3, weight: 6, cost: 0.9, pack: 2, maxPerRoom: 4, tags: ['melee'],
+    themeOnly: ['branches'], family: 'branches',
+    desc: 'Hand-picked from another branch. Comes as a pair; hurt one and the other takes it personally.',
+  };
+
   // ---------------------------------------------------------------------------
   // Minions (spawn: false) — entstehen nur durch andere Gegner oder Bosse
   // ---------------------------------------------------------------------------

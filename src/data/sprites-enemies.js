@@ -826,4 +826,83 @@
       '.kkkk....kkkk.',
     ],
   });
+  // ===========================================================================
+  // Forgotten Branches: Cherry-Pick
+  // ===========================================================================
+  // Eine Kirsche mit Stielstummel oben (dort setzt der gezeichnete Stiel an, siehe enemy.js 'cherry'),
+  // dunkelgruene Kontur der Forgotten-Branches-Familie (#16240f, wie prop_bush). Die Kirschen selbst duerfen rot
+  // sein (sie sind die Bedrohung); Gruen nur am Stiel.
+  //   enemy_cherry_pick        ruhig: Frame 0 normal, Frame 1 Blinzeln (das Verhalten waehlt den Frame)
+  //   enemy_cherry_pick_angry  wuetend, dunkler: Frame 0 zusammengekniffene Augen, Frame 1 aufgeblasene Backen
+  //                            (Telegraph vor dem Kern-Schuss)
+  const CHERRY_K = '#16240f';
+  B.defineSprite('enemy_cherry_pick', {
+    palette: { k: CHERRY_K, r: '#e0433f', l: '#ff9a8a', d: '#9c2430', w: W, g: '#6f9a3c' },
+    scale: 4,
+    frames: [
+      [
+        '......kk....',
+        '.....kgk....',
+        '...kkkgkkk..',
+        '..krrlrrrrk.',
+        '.krrllrrrrdk',
+        '.krlwwrwwrdk',
+        '.krrwkrwkrdk',
+        '.krrrrrrrrdk',
+        '.krrrkkkrrdk',
+        '..krrrrrrdk.',
+        '...kdddddk..',
+        '....kkkkk...',
+      ],
+      [
+        '......kk....',
+        '.....kgk....',
+        '...kkkgkkk..',
+        '..krrlrrrrk.',
+        '.krrllrrrrdk',
+        '.krlrrrrrrdk',
+        '.krrkkrkkrdk',
+        '.krrrrrrrrdk',
+        '.krrrkkkrrdk',
+        '..krrrrrrdk.',
+        '...kdddddk..',
+        '....kkkkk...',
+      ],
+    ],
+  });
+
+  B.defineSprite('enemy_cherry_pick_angry', {
+    palette: { k: CHERRY_K, r: '#a8202e', l: '#d0505a', d: '#5e0f19', w: W, g: '#6f9a3c', p: '#ff7a5c' },
+    scale: 4,
+    frames: [
+      [
+        '......kk....',
+        '.....kgk....',
+        '...kkkgkkk..',
+        '..krrlrrrrk.',
+        '.krkkrrrkkdk',
+        '.krrwkrkwrdk',
+        '.krrrrrrrrdk',
+        '.krrrkkkrrdk',
+        '.krrkrrrkrdk',
+        '..krrrrrrdk.',
+        '...kdddddk..',
+        '....kkkkk...',
+      ],
+      [
+        '......kk....',
+        '.....kgk....',
+        '...kkkgkkk..',
+        '..krrlrrrrk.',
+        '.krkkrrrkkdk',
+        '.krrwkrkwrdk',
+        'krrrrrrrrrrk',
+        'krpprrkrrppk',
+        'krpprrrrrppk',
+        '.krrrrrrrrdk',
+        '..kkdddddkk.',
+        '....kkkkk...',
+      ],
+    ],
+  });
 })(window.BOTA);
