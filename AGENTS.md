@@ -553,6 +553,18 @@ work again, the same file-ownership split works well.
 - Better item-pool exhaustion handling (e.g. hand out `blockchain` forever).
 - A human balance pass on boss HP and spawn budgets.
 - Ideas from the 2026-11-01 brainstorm, in planned order:
+  - **Floor-based enemy variety (do this first; the themed enemies below need it).** Today spawns depend only on
+    depth (`minFloor`, `weight`, `weightPerFloor` in `enemies.js`; `rollRoomEnemies(rng, depth)`), so every floor of
+    the same depth looks alike and nothing can be tied to a theme. Suggested design:
+    - An optional per-enemy field such as `themes: { branches: 3, dephell: 0.5 }` that multiplies the weight on
+      floors with that theme `key` (`B.themeFor(depth).key`). A multiplier of 0 excludes an enemy there.
+    - An optional `themeOnly: ['branches']` for enemies that should never appear elsewhere (`minFloor` still applies).
+    - Pass the theme key into `rollRoomEnemies` (it is called from `room.build` with the floor RNG). Changing the
+      weights changes enemy lists for existing seeds; that's acceptable, but say so in the commit.
+    - Keep the room budget (`cost`) logic unchanged, and extend the smoke test: themed enemies only on their floors,
+      and every floor can still fill a room.
+    - Optionally the same for bosses (e.g. a future Octopus Merge preferred on Forgotten Branches) via the same field
+      in `bosses.js` and `B.rollBossVaried`.
   - Floor-specific enemies for Forgotten Branches: Detached HEAD (head shoots, body walks), Stale Branch (speeds up
     the longer it lives), Cherry-Pick (pair; hit one, the other gets angry), Orphan Commit (flees, drops credits).
   - Stash rooms: small bonus rooms behind a bush wall that has to be shot open.
