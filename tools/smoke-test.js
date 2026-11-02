@@ -22,6 +22,8 @@
  *   - Off-Brand GPU: ~12 % Blindgaenger ohne Schaden; GPU-Preise 30/20
  *   - Rohre: ~10 % der Kampfraeume, erscheinen nach dem Clearing (nicht vor Tueren), Ziel nie Boss/Geheim/selbst,
  *     Sperrzeit verhindert Ping-Pong
+ *   - Stale Branch: nur auf Forgotten Branches; altert gruen -> gelb -> braun -> kahl (Laub faellt), wird schneller,
+ *     Commit-Zaehler steigt; kahl: Warnung, dann Sprung mit vollem Herz; Laub-Effekte/-Sounds der Familie "branches"
  *   - Spezialraeume, Pause- und Todesbildschirm rendern
  * Screenshots landen in tools/out/ (nicht einchecken).
  *
@@ -660,6 +662,106 @@ const URL = 'file://' + path.join(ROOT, 'index.html').replace(/\\/g, '/') + '?se
     return out;
   });
   problems.push(...swarmProblems);
+
+  // --- Stale Branch: nur Forgotten Branches, altert gruen->gelb->braun->kahl, wird schneller, Zaehler steigt,
+  //     kahl: Warnung (enemyWindup) -> Sprung mit vollem Herz -> zurueck auf 1; Laub-Effekte und -Sounds ---
+  const staleProblems = await page.evaluate(() => {
+    const out = [];
+    const g = BOTA.game;
+    // Spawn-Verteilung: auf Etage 3 (Forgotten Branches) dabei, auf anderen Etagen nie
+    let onBranches = 0;
+    for (const d of [2, 3, 4, 5, 9, 13]) {
+      for (let i = 0; i < 300; i++) {
+        const n = BOTA.rollRoomEnemies(new BOTA.RNG(BOTA.hashString('stale' + d + ':' + i)), d).filter((x) => x === 'stale_branch').length;
+        if (BOTA.themeKeyAt(d) === 'branches') onBranches += n;
+        else if (n) { out.push('Stale Branch auf Etage ' + d); break; }
+      }
+    }
+    if (!onBranches) out.push('Stale Branch spawnt nie auf Forgotten Branches');
+    for (const s of ['enemy_stale_branch_yellow', 'enemy_stale_branch_brown', 'enemy_stale_branch_bare']) if (!BOTA.hasSprite(s)) out.push('Sprite fehlt: ' + s);
+
+    // Altern im Zeitraffer (manuelle Schritte; Gott-Modus, damit der Kontakt egal ist)
+    g.enterFloor(3); g.setState('play');
+    BOTA.debug.gotoRoom('start'); BOTA.debug.god(true);
+    const p = g.player; p.x = 160; p.y = 300;
+    const e = BOTA.debug.spawn('stale_branch', 800, 300);
+    const counts = { shed: 0, big: 0, windup: 0 };
+    const onShed = (ev) => { if (ev.enemy === e) { counts.shed++; if (ev.big) counts.big++; } };
+    const onWind = (ev) => { if (ev.enemy === e) counts.windup++; };
+    BOTA.bus.on('enemyShed', onShed); BOTA.bus.on('enemyWindup', onWind);
+    e.state.age = 0; e.state.stage = 0; e.state.ticks = 0; e.spriteName = null; e.spawnDelay = 0;
+    const sprites = [], speeds = [];
+    let lunged = false, lungeDamage = 0, lungeSpeed = 0, sawWindupBeforeLunge = false, prevMode = 'chase';
+    const step = (sec) => {
+      for (let i = 0; i < Math.round(sec * 60); i++) {
+        e.frozen = 0;               // Items (Garbage Collector, Daily Standup) koennen sonst einfrieren
+        e.update(1 / 60, g);
+        if (e.state.mode === 'lunge') {
+          if (!lunged) { lunged = true; sawWindupBeforeLunge = prevMode === 'windup'; }
+          lungeDamage = Math.max(lungeDamage, e.contactDamage);
+          lungeSpeed = Math.max(lungeSpeed, Math.hypot(e.vx, e.vy));
+        }
+        prevMode = e.state.mode;
+        // Spieler auf Abstand halten, damit der Gegner nicht dauernd am Spieler klebt
+        if (Math.hypot(p.x - e.x, p.y - e.y) < 120) { p.x = e.x < 480 ? 800 : 160; p.y = 300; }
+      }
+    };
+    const n0 = e.state.base + e.state.ticks;
+    for (const t of [1, 6, 11, 15.3]) {
+      step(t - e.state.age);
+      sprites.push(e.spriteName || e.def.sprite);
+      speeds.push(Math.hypot(e.vx, e.vy) || 0);
+    }
+    const want = ['enemy_stale_branch', 'enemy_stale_branch_yellow', 'enemy_stale_branch_brown', 'enemy_stale_branch_bare'];
+    if (sprites.join() !== want.join()) out.push('Stale Branch: Altersstufen ' + sprites.join(','));
+    if (counts.big !== 3) out.push('Stale Branch: ' + counts.big + ' Laub-Schwaelle statt 3');
+    if (counts.shed <= counts.big) out.push('Stale Branch: kein einzelnes fallendes Blatt');
+    if (e.state.base + e.state.ticks < n0 + 5) out.push('Stale Branch: Zaehler steigt nicht (' + n0 + ' -> ' + (e.state.base + e.state.ticks) + ')');
+    if (!(speeds[0] < 75)) out.push('Stale Branch: am Anfang zu schnell (' + speeds[0].toFixed(0) + ')');
+    if (!(speeds[2] > speeds[0] + 30)) out.push('Stale Branch: wird nicht schneller (' + speeds.map((v) => v.toFixed(0)).join(',') + ')');
+    if (lunged) out.push('Stale Branch: springt schon vor dem Kahlwerden');
+    // Kahl: innerhalb weniger Sekunden Warnung, dann Sprung mit vollem Herz, danach wieder normal
+    step(6);
+    if (!counts.windup) out.push('Stale Branch: keine Sprung-Warnung (enemyWindup)');
+    if (!lunged) out.push('Stale Branch: springt nicht');
+    else {
+      if (!sawWindupBeforeLunge) out.push('Stale Branch: Sprung ohne Zittern davor');
+      if (lungeDamage !== 2) out.push('Stale Branch: Sprung-Kontaktschaden ' + lungeDamage + ' statt 2');
+      if (lungeSpeed < 300) out.push('Stale Branch: Sprung zu langsam (' + lungeSpeed.toFixed(0) + ')');
+    }
+    if (e.state.mode !== 'lunge' && e.contactDamage !== 1) out.push('Stale Branch: Kontaktschaden nach dem Sprung ' + e.contactDamage);
+    BOTA.bus.off('enemyShed', onShed); BOTA.bus.off('enemyWindup', onWind);
+
+    // Familie "branches": Treffer und Tod erzeugen fallendes Laub
+    const leaves = () => g.room.effects.filter((fx) => fx instanceof BOTA.Leaf).length;
+    g.room.effects.length = 0;
+    e.hurt(1, g, null);
+    if (!leaves()) out.push('Familie branches: Treffer ohne Laub');
+    g.room.effects.length = 0;
+    e.hurt(9999, g, null);
+    if (!e.dead || leaves() < 5) out.push('Familie branches: Tod ohne Laub (' + leaves() + ')');
+    // Sounds: vorhanden und abspielbar ohne Fehler (Headless-Chromium spielt nichts ab)
+    for (const n of ['leafHit', 'branchDeath', 'rustle', 'creak']) {
+      if (!BOTA.audio.names().includes(n)) out.push('Sound fehlt: ' + n);
+      try { BOTA.audio.play(n); } catch (err) { out.push('Sound ' + n + ': ' + err.message); }
+    }
+    for (let i = 0; i < 4; i++) BOTA.debug.killAll();
+    return out;
+  });
+  problems.push(...staleProblems);
+  // Optik: alle vier Altersstufen nebeneinander auf Forgotten Branches (Bild pruefen!)
+  await page.evaluate(() => {
+    const g = BOTA.game; g.player.x = 480; g.player.y = 470;
+    [0.5, 6, 11, 16].forEach((a, i) => {
+      const e = BOTA.debug.spawn('stale_branch', 220 + i * 170, 230);
+      e.state.age = a; e.spawnDelay = 0;
+      e.behavior.update(e, 0, g);   // Altersstufe sofort uebernehmen
+      e.update = function () {};    // Pose fuer das Bild halten
+    });
+  });
+  await page.waitForTimeout(250);
+  await shot('13-stale-branch');
+  await page.evaluate(() => { for (let i = 0; i < 4; i++) BOTA.debug.killAll(); });
   // Mehrfach toedlicher Schaden, weil Items wie "Retry with Backoff" den ersten Tod abfangen
   await page.evaluate(() => {
     const g = BOTA.game; BOTA.debug.god(false);

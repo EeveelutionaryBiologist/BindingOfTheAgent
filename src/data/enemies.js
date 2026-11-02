@@ -27,6 +27,7 @@
  *     bonusChance: 0,         // Chance, ZUSAETZLICH zum Budget aufzutauchen (Hallucination)
  *     tags: [],               // fuer Layout-Bias: 'fly', 'ranged', 'melee', 'charge', 'turret'
  *     noFlip: false,          // Sprite nicht horizontal spiegeln (Text/Symbole)
+ *     family: 'branches',     // optisch/akustische Familie: Treffer-/Tod-Effekte und -Sounds (effects.js, audio.js)
  *     // --- Etagen-Themen (optional, siehe B.themeWeight unten) ---
  *     themes: { branches: 3, devnull: 0 }, // Gewichtsfaktor je Etagen-Thema (key in FLOOR_THEMES); 0 = dort nie
  *     themeOnly: ['branches'],             // taucht NUR auf Etagen mit diesen Themen auf (minFloor gilt weiterhin)
@@ -152,6 +153,33 @@
     sprite: 'enemy_race_condition', color: '#e0603a',
     minFloor: 2, weight: 4, weightPerFloor: 0.2, maxWeight: 6, cost: 0.8, pack: 2, maxPerRoom: 4, tags: ['melee'],
     desc: 'Sometimes it hits first. Sometimes you do. Sometimes both.',
+  };
+
+  // --- Forgotten Branches: Stale Branch ---
+  // Zweig-Kreatur, die mit jeder Sekunde "staler" wird: Laub gruen -> gelb -> braun -> kahl, dazu ein
+  // Zaehler "-N commits behind". Anfangs langsam (60 px/s), mit dem Alter bis 150 px/s; kahl springt er
+  // nach 0.5 s Zittern (Warnung + Ziellinie) alle paar Sekunden in gerader Linie auf den Spieler zu.
+  // Frueh toeten ist leicht, Warten wird bestraft. Nur auf Forgotten Branches (themeOnly).
+  // family: 'branches' = rein optisch/akustisch: Laub-Partikel und Holz-/Raschel-Sounds (effects.js, audio.js).
+  E.stale_branch = {
+    name: 'Stale Branch', hp: 12, r: 16, speed: 60, contactDamage: 1,
+    behavior: 'stale', params: {
+      maxSpeed: 150,            // Endgeschwindigkeit (px/s) ...
+      rampTime: 20,             // ... nach so vielen Sekunden Alter erreicht
+      stageAt: [5, 10, 15],     // Alter (s) fuer gelb / braun / kahl
+      headStart: 3,             // Exemplare starten 0..headStart s "vorgealtert" (game.rng), damit nicht alle gleich altern
+      tick: 2.5,                // alle tick Sekunden ein Commit mehr Rueckstand
+      windup: 0.5,              // Zittern vor dem Sprung (Telegraph)
+      lungeSpeed: 430,          // Sprunggeschwindigkeit (px/s)
+      lungeTime: 0.42,          // maximale Sprungdauer (~180 px)
+      recover: 0.5,             // Verschnaufen nach dem Sprung
+      cdMin: 2.2, cdMax: 3.4,   // Pause zwischen zwei Spruengen (game.rng)
+      lungeRange: 460,          // springt nur, wenn der Spieler naeher und in Sichtlinie ist
+    },
+    sprite: 'enemy_stale_branch', color: '#a3602c',
+    minFloor: 3, weight: 6, cost: 1.5, maxPerRoom: 3, tags: ['melee', 'charge'],
+    themeOnly: ['branches'], family: 'branches',
+    desc: 'This branch is 47 commits behind main. And counting.',
   };
 
   // ---------------------------------------------------------------------------

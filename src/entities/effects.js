@@ -1,6 +1,7 @@
 /*
  * effects.js — Rein visuelle Effekte ("Juice"): Partikel, Funken, Rauch, Truemmer, Ringe, Blitze,
- * Funkelsterne, Raum-Schimmer, Bildschirm-Toenung und schwebender Text.
+ * Funkelsterne, fallendes Laub, Raum-Schimmer, Bildschirm-Toenung und schwebender Text.
+ * Gegner mit def.family (z. B. 'branches') bekommen eigene Treffer-/Tod-Effekte (FAMILY_FX unten).
  *
  * Effekte haengen am Event-Bus und werden nie direkt aus der Spiellogik aufgerufen.
  * Alle Effekte liegen in room.effects und haben update(dt, game) / draw(ctx) / dead.
@@ -202,6 +203,59 @@
     }
   }
 
+  /**
+   * Fallendes Blatt (Laub-Familie "branches"): ploppt kurz weg, segelt dann pendelnd nach unten, bleibt
+   * auf seiner "Bodenhoehe" liegen und verblasst. Gezeichnet als kleine Raute mit Mittelrippe.
+   */
+  class Leaf {
+    constructor(x, y, color, opts) {
+      const o = opts || {};
+      const a = Math.random() * Math.PI * 2, sp = rand(o.speedMin || 40, o.speedMax || 140);
+      this.x = x; this.y = y;
+      this.vx = Math.cos(a) * sp; this.vy = Math.sin(a) * sp - rand(20, 60); // leicht nach oben geworfen
+      this.ground = y + rand(o.fallMin || 18, o.fallMax || 44);           // hier landet es (Draufsicht: "unten")
+      this.color = color; this.vein = shade(color, -0.35);
+      this.size = rand(o.sizeMin || 4, o.sizeMax || 6);
+      this.phase = Math.random() * Math.PI * 2; this.sway = rand(4, 7);  // Pendeln beim Fallen
+      this.rot = Math.random() * Math.PI; this.spin = rand(-4, 4);
+      this.life = rand(o.lifeMin || 0.9, o.lifeMax || 1.5); this.max = this.life;
+      this.landed = false; this.dead = false;
+    }
+    update(dt) {
+      this.life -= dt;
+      if (this.life <= 0) { this.dead = true; return; }
+      if (this.landed) return;
+      const f = Math.exp(-5 * dt);
+      this.vx *= f;
+      this.vy = this.vy * f + 160 * dt;                                  // Schwerkraft ...
+      if (this.vy > 55) this.vy = 55;                                    // ... aber Luftwiderstand: sanftes Segeln
+      this.phase += dt * this.sway;
+      this.x += (this.vx + Math.sin(this.phase) * 30) * dt;
+      this.y += this.vy * dt;
+      this.rot += this.spin * dt;
+      if (this.y >= this.ground) { this.y = this.ground; this.landed = true; this.rot = Math.round(this.rot / Math.PI) * Math.PI; }
+    }
+    draw(ctx) {
+      const k = Math.max(0, this.life / this.max);
+      const sz = this.size;
+      ctx.save();
+      ctx.globalAlpha = Math.min(1, k * 2.5);
+      ctx.translate(Math.round(this.x), Math.round(this.y));
+      // Kippen beim Fallen = horizontale Stauchung (Pseudo-3D), liegend flach
+      const tilt = this.landed ? 1 : 0.35 + 0.65 * Math.abs(Math.cos(this.phase));
+      ctx.rotate(this.rot);
+      ctx.scale(tilt, 1);
+      ctx.fillStyle = this.color;
+      ctx.beginPath();
+      ctx.moveTo(-sz, 0); ctx.lineTo(0, -sz * 0.55); ctx.lineTo(sz, 0); ctx.lineTo(0, sz * 0.55);
+      ctx.closePath();
+      ctx.fill();
+      ctx.fillStyle = this.vein;
+      ctx.fillRect(-sz, -0.5, sz * 2, 1);
+      ctx.restore();
+    }
+  }
+
   /** Schwebender Text (Pixel-Schrift), steigt auf und verblasst */
   class FloatText {
     constructor(x, y, text, color, opts) {
@@ -345,6 +399,13 @@
       }
     },
 
+    /** Fallende Blaetter in zufaelligen Farben aus colors (Laub-Familie, Stale Branch) */
+    leaves(game, x, y, count, colors, opts) {
+      const n = Math.min(count, freeSlots(game));
+      const cols = colors && colors.length ? colors : ['#6f9a3c'];
+      for (let i = 0; i < n; i++) add(game, new Leaf(x + rand(-8, 8), y + rand(-6, 6), pick(cols), opts));
+    },
+
     /** Schwebender Text, z. B. "+1", "LGTM", "denied" */
     text(game, x, y, str, color, opts) {
       if (!str) return null;
@@ -381,8 +442,45 @@
     FX.burst(e.game, p.x + d.dx * 18, p.y - 10 + d.dy * 18, '#ffe2c8', 2, 90, { lifeMin: 0.08, lifeMax: 0.16, sizeMin: 3, sizeMax: 5 });
   });
 
-  // Gegner getroffen: Funken (weiss + Gegnerfarbe) und Mini-Blitz
+  /**
+   * Gegner-Familien (def.family): eigene Treffer-/Tod-Effekte statt der Standard-Funken.
+   * hit(e) / death(e) bekommen das Bus-Payload; death nur fuer Nicht-Bosse (Bosse behalten ihre Explosion
+   * und bekommen deco(e) obendrauf). Neue Familien: hier eintragen und in audio.js FAMILY_SOUNDS.
+   */
+  const familyOf = (e) => (e && e.enemy && e.enemy.def && e.enemy.def.family) || null;
+  const leafMix = () => {
+    const BL = B.BRANCH_LEAVES;
+    return BL ? BL.green.concat(BL.brown) : ['#6f9a3c', '#93602e'];
+  };
+  const barkCols = () => (B.BRANCH_LEAVES ? B.BRANCH_LEAVES.bark : ['#5a3d22', '#a3602c']);
+  const FAMILY_FX = {
+    // Forgotten Branches: Laub raschelt herunter, Rindensplitter statt Funken
+    branches: {
+      hit(e) {
+        FX.burst(e.game, e.x, e.y, '#ffffff', 2, 240, { streak: true, lifeMin: 0.08, lifeMax: 0.16, sizeMin: 3, sizeMax: 4 });
+        FX.burst(e.game, e.x, e.y, barkCols()[1], 2, 140, { vary: true, lifeMin: 0.12, lifeMax: 0.25, sizeMin: 3, sizeMax: 4 });
+        FX.leaves(e.game, e.x, e.y - 10, 2, leafMix(), { speedMax: 110, lifeMin: 0.7, lifeMax: 1.1 });
+      },
+      death(e) {
+        FX.flash(e.game, e.x, e.y, 20, '#fff4d0', 0.08);
+        FX.leaves(e.game, e.x, e.y - 8, 10, leafMix(), { speedMin: 60, speedMax: 200, lifeMin: 1.0, lifeMax: 1.7 });
+        FX.debris(e.game, e.x, e.y, 6, barkCols().concat(['#16240f']), 4);
+        FX.ring(e.game, e.x, e.y, 40, '#b8803f', 0.3, 4);
+        FX.smoke(e.game, e.x, e.y, 2, 8, '#4a3a26');
+      },
+      deco(e) { FX.leaves(e.game, e.x, e.y, 24, leafMix(), { speedMin: 80, speedMax: 320, lifeMin: 1.2, lifeMax: 2.2 }); },
+    },
+  };
+
+  // Laub faellt (Stale Branch altert): Stufenwechsel = ganzer Schwall, sonst einzelne Blaetter
+  on('enemyShed', (e) => {
+    FX.leaves(e.game, e.x, e.y, e.count || 1, e.colors, e.big ? { speedMin: 30, speedMax: 120, lifeMin: 1.1, lifeMax: 1.8 } : { speedMin: 10, speedMax: 40 });
+  });
+
+  // Gegner getroffen: Funken (weiss + Gegnerfarbe) und Mini-Blitz — Familien haben eigene Effekte
   on('enemyHit', (e) => {
+    const fam = FAMILY_FX[familyOf(e)];
+    if (fam && fam.hit) { fam.hit(e); return; }
     const col = e.color || '#ffffff';
     FX.burst(e.game, e.x, e.y, '#ffffff', 3, 260, { streak: true, lifeMin: 0.1, lifeMax: 0.2, sizeMin: 3, sizeMax: 4 });
     FX.burst(e.game, e.x, e.y, col, 3, 160, { vary: true, lifeMin: 0.15, lifeMax: 0.3, sizeMin: 3, sizeMax: 6 });
@@ -408,6 +506,9 @@
   // Gegner stirbt: Puff in Gegnerfarbe; Boss: Kettenexplosionen, Weissblitz, langes Beben
   on('enemyDeath', (e) => {
     const game = e.game, col = e.color || '#cccccc';
+    const fam = FAMILY_FX[familyOf(e)];
+    if (fam && !e.boss && fam.death) { fam.death(e); return; }
+    if (fam && e.boss && fam.deco) fam.deco(e);
     if (!e.boss) {
       FX.flash(game, e.x, e.y, 22, '#ffffff', 0.08);
       FX.burst(game, e.x, e.y, col, 14, 260, { vary: true, lifeMin: 0.3, lifeMax: 0.65, drag: 5 });
@@ -600,5 +701,6 @@
   });
 
   B.Particle = Particle;
+  B.Leaf = Leaf;          // fuer Tests (Laub-Effekte zaehlen)
   B.FX = FX;
 })(window.BOTA);
