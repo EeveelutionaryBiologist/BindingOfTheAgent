@@ -82,6 +82,9 @@ Live state is under `BOTA.game` (`.player`, `.room`, `.floor`, `.depth`, `.state
 - pipes appear in about 10 % of combat rooms after clearing (never by a door), never lead to the boss room, the
   secret room or the current room, and can't ping-pong during their cooldown;
 - floor names and themes have the same length, floor 3 is Forgotten Branches, and its maps have ≥ 7 dead ends;
+- `themes` / `themeOnly` on enemies and bosses only name existing theme keys with factors ≥ 0, every floor of two full
+  theme cycles fills its rooms with allowed enemies and has an allowed boss, and temporary test entries confirm
+  that exclusion, weight factors, bonus chances and the no-repeat boss rule all respect the floor theme;
 - breakable objects use the floor's kinds, stay off spawn points, door fronts and the centre, never cut a room in two,
   and break from player shots and explosions but not from enemy shots;
 - the Off-Brand GPU turns about 12 % of shots into duds that deal no damage, and the GPU prices are 30¢ / 20¢;
@@ -156,7 +159,7 @@ depend on load order.
 | `syncFollowers, Duck, UnitTest` | familiar | followers (Rubber Duck, Unit Tests orbitals) |
 | `FX, Particle` | effects | visual effects API |
 | `itemPrice, itemFx` | items | price helper, pop-up text fallback |
-| `enemyWeightAt, rollRoomEnemies, rollBoss, validateLayout` | data | spawn and layout logic |
+| `themeKeyAt, themeWeight, enemyWeightAt, rollRoomEnemies, bossWeightAt, rollBoss, rollBossVaried, validateLayout` | data | spawn and layout logic (floor themes: §4) |
 | `Renderer, text`, `HUD, pixelText, pixelTextWidth`, `Screens` | render | drawing |
 | `Game`, `game`, `debug` | game, main | state machine instance and debug API |
 | `spriteTools` | sprites-core | `shiftRow, stamp, mirror, padRows` helpers for composing sprites |
@@ -223,7 +226,8 @@ Global keys handled in every state: `M` (mute) and `F2` (debug). Holding `R` for
 
 **Boss choice:** each room build still pre-rolls `bossId` with `B.rollBoss` (so the floor RNG is unchanged), but
 `game.enterFloor` then calls `assignFloorBoss`, which replaces it with `B.rollBossVaried(rng, depth, game.bossHistory)`.
-The previous floor's boss is excluded, and bosses already met count `weight / (1 + times met)`. Its RNG is seeded with
+The previous floor's boss is excluded, and bosses already met count `weight · theme factor / (1 + times met)`
+(theme factor: §4, Floor themes). Its RNG is seeded with
 `hashString(seed + ':boss:' + depth)`, and the history only depends on earlier floors, so runs stay reproducible.
 
 **Seeds:**
@@ -434,6 +438,19 @@ Room spawning (`rollRoomEnemies`) works on a **budget**:
 - A layout's `bias` can favour enemy tags (`fly, ranged, melee, charge, turret`).
 - `bonusChance` adds extras outside the budget (the Hallucination).
 
+**Floor themes** (spawn weights per floor theme, since 2026-11-02). Enemies and bosses can carry two optional fields,
+both keyed by the theme `key` from `B.FLOOR_THEMES` (`B.themeKeyAt(depth)`):
+- `themes: { branches: 3, devnull: 0 }` multiplies the weight on floors with that theme; 0 excludes it there.
+- `themeOnly: ['branches']` limits it to those themes. `minFloor` still applies on top.
+
+`B.themeWeight(def, theme)` computes the factor (0 = excluded, otherwise the `themes` value or 1). It applies after
+`weightPerFloor` / `minWeight` / `maxWeight`, it scales `bonusChance` too (still capped at 25 % per room), and an
+excluded enemy is skipped entirely, including its bonus roll. Bosses use the same helper through `B.bossWeightAt`,
+in both `rollBoss` and `rollBossVaried`. Because themes repeat every 10 floors, a `branches` enemy also appears on
+floors 13, 23, … The roll functions take an optional `theme` argument (default: the depth's theme) for tests.
+Content without these fields rolls exactly as before (same RNG draws), so **existing seeds only change once you give
+an enemy or boss a theme field**; say so in that commit. Currently no content uses them.
+
 **Bosses** (base HP): `monolith` 360, `stakeholder` 250, `friday_deploy` 240, `infinite_loop` 300, `rogue_swarm` 4 × 80,
 `reviewer` 340 (floor 3+).
 Each has 2 phases and
@@ -467,14 +484,15 @@ plus per-floor extras `THEME_QUIPS` / `THEME_EPITAPHS` keyed by theme `key` (cur
 **Add an active item:** same as above, plus `active: true, maxCharge: N, use(player, game) { …; return true; }`.
 
 **Add an enemy**
-1. In `src/data/enemies.js`, add a definition with `behavior`, `minFloor`, `weight`, `cost` and `color`.
+1. In `src/data/enemies.js`, add a definition with `behavior`, `minFloor`, `weight`, `cost` and `color`. For a
+   floor-specific enemy, add `themeOnly` or `themes` (§4, Floor themes); the smoke test rejects unknown theme keys.
 2. If needed, add a new behaviour in `src/entities/enemy.js` (`B.BEHAVIORS.name = {update(e, dt, game) {…}}`). Use
    the `B.AI` helpers, and **telegraph** every attack (wind-up glow, `!`, target ring).
 3. Add the sprite as `enemy_<id>` in `sprites-enemies.js`, with 2 frames.
 4. Check fairness: enemy shots at 165–260 px/s (the player moves at 240), contact damage of 1 half heart (2 for charges/bosses).
 
 **Add a boss:** add a `B.BOSSES.id` entry with `name`, `subtitle` (shown on the intro card), `hp`, `r`, `behavior`, `sprite`
-and `color`, plus a `B.BOSS_BEHAVIORS.id` entry in `boss.js`. Give it ≥ 2 attacks and a phase change at a HP threshold
+and `color` (optionally `themes` / `themeOnly`, §4), plus a `B.BOSS_BEHAVIORS.id` entry in `boss.js`. Give it ≥ 2 attacks and a phase change at a HP threshold
 (emit `bossPhase`, show a `game.banner`), and place it with `BossHelpers.placeAwayFromPlayer`.
 
 **Add a layout:** use `L(id, ['normal'], weight, [7 rows × 13 chars], bias?)` in `layouts.js`. The characters are
@@ -556,19 +574,9 @@ work again, the same file-ownership split works well.
 - Better item-pool exhaustion handling (e.g. hand out `blockchain` forever).
 - A human balance pass on boss HP and spawn budgets.
 - Ideas from the 2026-11-01 brainstorm, in planned order:
-  - **Floor-based enemy variety (do this first; the themed enemies below need it).** Today spawns depend only on
-    depth (`minFloor`, `weight`, `weightPerFloor` in `enemies.js`; `rollRoomEnemies(rng, depth)`), so every floor of
-    the same depth looks alike and nothing can be tied to a theme. Suggested design:
-    - An optional per-enemy field such as `themes: { branches: 3, dephell: 0.5 }` that multiplies the weight on
-      floors with that theme `key` (`B.themeFor(depth).key`). A multiplier of 0 excludes an enemy there.
-    - An optional `themeOnly: ['branches']` for enemies that should never appear elsewhere (`minFloor` still applies).
-    - Pass the theme key into `rollRoomEnemies` (it is called from `room.build` with the floor RNG). Changing the
-      weights changes enemy lists for existing seeds; that's acceptable, but say so in the commit.
-    - Keep the room budget (`cost`) logic unchanged, and extend the smoke test: themed enemies only on their floors,
-      and every floor can still fill a room.
-    - Optionally the same for bosses (e.g. a future Octopus Merge preferred on Forgotten Branches) via the same field
-      in `bosses.js` and `B.rollBossVaried`.
-  - **Forgotten Branches enemies (themed via the mechanism above, ideally `themeOnly: ['branches']` or a high
+  - ~~Floor-based enemy variety~~: done 2026-11-02 (`themes` / `themeOnly`, see §4, Floor themes). The themed
+    content below builds on it.
+  - **Forgotten Branches enemies (themed via §4 Floor themes, ideally `themeOnly: ['branches']` or a high
     multiplier there).** Shared visual language, so they read as one family on that floor:
     - **Look:** organic and woody, like the floor and its bush props. Bark browns (`#5a3d22`, `#a3602c`), leaf greens
       (`#4f7a30`, `#6f9a3c`, `#86ad4a`) and the dark green outline `#16240f` (`prop_bush`), not the usual black.
@@ -618,7 +626,7 @@ work again, the same file-ownership split works well.
     Forgotten Branches, rarely elsewhere. Note that props deliberately never block doors today (`assignProps`), so
     this needs its own placement code, and the walkability check must treat the stash entrance as a door.
   - **Bosses:**
-    - **Octopus Merge** (Forgotten Branches, via the boss side of the theme mechanism):
+    - **Octopus Merge** (Forgotten Branches, via `themes` / `themeOnly` in `bosses.js`):
       - *Look:* a **tangle of roots and branches** around a big knot in the middle (the merge commit). 6–8 woody
         tentacles each end in a commit dot. It must read as plant matter, **not** as a cartoon octopus: no face
         with cat ears or anything resembling a well-known code-hosting company's octopus-cat mascot. Use the

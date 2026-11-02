@@ -15,6 +15,8 @@
  *   - Etagen-Bosse: nie zweimal hintereinander derselbe (300 simulierte Runs + echte Etagenfolge)
  *   - README.md: ~30 % der Etagen, nur in normalen Raeumen, deckt die Karte auf, aber nicht den Geheimraum
  *   - Etagen: FLOORS und FLOOR_THEMES gleich lang; Etage 3 = Forgotten Branches mit verzweigteren Karten
+ *   - Etagen-Themen (themes/themeOnly): nur bekannte Themen und gueltige Faktoren; jede Etage fuellt Raeume nur
+ *     mit erlaubten Gegnern und hat einen Boss; Test-Eintraege pruefen Ausschluss, Faktor und Bonus-Chance
  *   - Zerstoerbare Objekte: richtige Arten je Etage, erlaubte Plaetze, Raeume bleiben begehbar; Spielerschuss und
  *     Explosion zerbrechen sie, Gegnerschuss nicht
  *   - Off-Brand GPU: ~12 % Blindgaenger ohne Schaden; GPU-Preise 30/20
@@ -159,7 +161,7 @@ const URL = 'file://' + path.join(ROOT, 'index.html').replace(/\\/g, '/') + '?se
       const hist = [];
       for (let d = 1; d <= 12; d++) {
         const id = BOTA.rollBossVaried(new BOTA.RNG(BOTA.hashString('boss' + r + ':' + d)), d, hist);
-        if (!BOTA.BOSSES[id] || (BOTA.BOSSES[id].minFloor || 1) > d) out.push('Boss ' + id + ' auf Etage ' + d);
+        if (!BOTA.BOSSES[id] || (BOTA.BOSSES[id].minFloor || 1) > d || BOTA.themeWeight(BOTA.BOSSES[id], BOTA.themeKeyAt(d)) <= 0) out.push('Boss ' + id + ' auf Etage ' + d);
         if (hist.length && hist[hist.length - 1] === id) { out.push('Boss zweimal hintereinander: ' + id); break; }
         hist.push(id);
       }
@@ -170,6 +172,84 @@ const URL = 'file://' + path.join(ROOT, 'index.html').replace(/\\/g, '/') + '?se
     return out;
   });
   problems.push(...data);
+
+  // --- Etagen-Themen: Felder gueltig, jede Etage fuellt Raeume, Mechanik mit Test-Eintraegen ------------
+  problems.push(...await page.evaluate(() => {
+    const out = [];
+    const keys = BOTA.FLOOR_THEMES.map((t) => t.key);
+    const N = BOTA.FLOOR_THEMES.length;
+    // 1) themes/themeOnly verweisen nur auf existierende Themen, Faktoren sind Zahlen >= 0
+    const checkDefs = (kind, reg) => {
+      for (const [id, def] of Object.entries(reg)) {
+        if (def.themes !== undefined) {
+          if (!def.themes || typeof def.themes !== 'object' || Array.isArray(def.themes)) out.push(kind + ' ' + id + ': themes ist kein Objekt');
+          else for (const [k, v] of Object.entries(def.themes)) {
+            if (!keys.includes(k)) out.push(kind + ' ' + id + ': unbekanntes Thema in themes: ' + k);
+            if (typeof v !== 'number' || !Number.isFinite(v) || v < 0) out.push(kind + ' ' + id + ': ungueltiger Faktor themes.' + k);
+          }
+        }
+        if (def.themeOnly !== undefined) {
+          if (!Array.isArray(def.themeOnly) || !def.themeOnly.length) out.push(kind + ' ' + id + ': themeOnly ist keine nichtleere Liste');
+          else for (const k of def.themeOnly) if (!keys.includes(k)) out.push(kind + ' ' + id + ': unbekanntes Thema in themeOnly: ' + k);
+        }
+      }
+    };
+    checkDefs('Gegner', BOTA.ENEMIES);
+    checkDefs('Boss', BOTA.BOSSES);
+
+    // 2) Echte Inhalte: jede Etage (zwei volle Themen-Durchlaeufe) fuellt Raeume nur mit erlaubten Gegnern
+    //    und hat mindestens einen moeglichen Boss
+    for (let d = 1; d <= 2 * N; d++) {
+      const th = BOTA.themeKeyAt(d);
+      for (let i = 0; i < 40; i++) {
+        const list = BOTA.rollRoomEnemies(new BOTA.RNG(BOTA.hashString('theme' + d + ':' + i)), d);
+        if (!list.length) { out.push('Etage ' + d + ' (' + th + '): leerer Kampfraum'); break; }
+        const bad = list.filter((id) => (BOTA.ENEMIES[id].minFloor || 1) > d || BOTA.themeWeight(BOTA.ENEMIES[id], th) <= 0);
+        if (bad.length) { out.push('Etage ' + d + ' (' + th + '): nicht erlaubte Gegner ' + bad.join(',')); break; }
+      }
+      const boss = BOTA.rollBoss(new BOTA.RNG(d), d);
+      if (!BOTA.BOSSES[boss] || BOTA.themeWeight(BOTA.BOSSES[boss], th) <= 0) out.push('Etage ' + d + ' (' + th + '): kein erlaubter Boss');
+    }
+
+    // 3) Mechanik mit voruebergehenden Test-Eintraegen (werden in jedem Fall wieder entfernt)
+    const E = BOTA.ENEMIES, BS = BOTA.BOSSES;
+    const base = { hp: 1, r: 10, behavior: 'wander', minFloor: 1, cost: 1 };
+    E.__only = Object.assign({}, base, { weight: 40, themeOnly: ['branches'] });
+    E.__zero = Object.assign({}, base, { weight: 8, themes: { branches: 0, devnull: 4 } });
+    E.__bonus = Object.assign({}, base, { weight: 0, bonusChance: 0.2, themeOnly: ['branches'] });
+    BS.__boss = { name: 'Test', hp: 1, r: 10, behavior: 'monolith', minFloor: 1, weight: 1000, themeOnly: ['branches'] };
+    try {
+      const share = (d, id) => {
+        let hit = 0, all = 0;
+        for (let i = 0; i < 400; i++) {
+          const list = BOTA.rollRoomEnemies(new BOTA.RNG(BOTA.hashString('mech' + d + ':' + i)), d);
+          all += list.length;
+          hit += list.filter((x) => x === id).length;
+        }
+        return hit / Math.max(1, all);
+      };
+      for (let d = 1; d <= 2 * N; d++) {
+        const branches = BOTA.themeKeyAt(d) === 'branches';
+        const only = share(d, '__only'), bonus = share(d, '__bonus'), zero = share(d, '__zero');
+        if (branches !== (only > 0)) out.push('themeOnly: Anteil ' + only.toFixed(3) + ' auf Etage ' + d);
+        if (branches !== (bonus > 0)) out.push('themeOnly (Bonus): Anteil ' + bonus.toFixed(3) + ' auf Etage ' + d);
+        if (branches && zero > 0) out.push('themes 0: trotzdem gespawnt auf Etage ' + d);
+        if (!branches && zero <= 0) out.push('themes: neutraler Gegner fehlt auf Etage ' + d);
+        // Bosse: themeOnly-Boss nur (und mit Gewicht 1000 praktisch immer) auf seinem Thema
+        const boss = BOTA.rollBossVaried(new BOTA.RNG(d), d, []);
+        if (branches !== (boss === '__boss')) out.push('Boss themeOnly: ' + boss + ' auf Etage ' + d);
+      }
+      // Faktor 4 auf /dev/null: deutlich haeufiger als auf den Nachbaretagen
+      const dn = keys.indexOf('devnull') + 1;
+      const zDn = share(dn, '__zero'), zNb = (share(dn - 1, '__zero') + share(dn + 1, '__zero')) / 2;
+      if (!(zDn > 1.8 * zNb)) out.push('themes-Faktor wirkt nicht: ' + zDn.toFixed(3) + ' vs ' + zNb.toFixed(3));
+      // Abwechslung bleibt Vorrang: auch ein dominanter Thema-Boss kommt nicht zweimal hintereinander
+      if (BOTA.rollBossVaried(new BOTA.RNG(7), keys.indexOf('branches') + 1, ['__boss']) === '__boss') out.push('Thema-Boss zweimal hintereinander');
+    } finally {
+      delete E.__only; delete E.__zero; delete E.__bonus; delete BS.__boss;
+    }
+    return out;
+  }));
 
   // --- Jeder Gegner kurz im Startraum --------------------------------------
   const enemyIds = await page.evaluate(() => Object.keys(BOTA.ENEMIES).filter((k) => BOTA.ENEMIES[k].spawn !== false));

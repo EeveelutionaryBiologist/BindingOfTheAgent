@@ -6,7 +6,12 @@
  *     hp: 360, r: 44, speed: 50, contactDamage: 2, flying: false,
  *     behavior: 'monolith',          // Schluessel in BOTA.BOSS_BEHAVIORS
  *     params: {}, sprite: 'boss_monolith', color: '#8a8f98', minFloor: 1, weight: 1,
+ *     themes: { branches: 3 },       // optional: Gewichtsfaktor je Etagen-Thema (0 = dort nie)
+ *     themeOnly: ['branches'],       // optional: nur auf Etagen mit diesen Themen
  *   };
+ *
+ * themes/themeOnly funktionieren wie bei den Gegnern (B.themeWeight in enemies.js). Ein Boss, der
+ * auf einer Etage ausgeschlossen ist, kommt auch nicht in die Abwechslungs-Auswahl (rollBossVaried).
  *
  * HP-Tuning (DESIGN.md §8): Basis-Spieler macht 3.5 Schaden bei ~2.6 Schuss/s = ~9.2 DPS. Mit realistischer
  * Trefferquote (55–75 %, je nach Groesse/Beweglichkeit des Bosses) ergeben die Werte unten auf Etage 1
@@ -85,21 +90,33 @@
    * history = Boss-IDs der bisherigen Etagen dieses Runs (aelteste zuerst).
    * Ausloeser: Playtest mit viermal hintereinander The Infinite Loop (2026-10-31).
    */
-  B.rollBossVaried = function (rng, depth, history) {
+  B.rollBossVaried = function (rng, depth, history, theme) {
     const d = Math.max(1, depth | 0);
+    const th = theme === undefined ? B.themeKeyAt(d) : theme;
     const hist = Array.isArray(history) ? history : [];
-    const pool = Object.keys(B.BOSSES).filter((id) => (B.BOSSES[id].minFloor || 1) <= d);
+    const pool = bossPool(d, th);
     if (!pool.length) return Object.keys(B.BOSSES)[0] || null;
     const last = hist[hist.length - 1];
     const cands = pool.length > 1 ? pool.filter((id) => id !== last) : pool;
     const met = (id) => hist.reduce((n, h) => n + (h === id ? 1 : 0), 0);
-    return rng.weighted(cands, (id) => (B.BOSSES[id].weight || 1) / (1 + met(id)));
+    return rng.weighted(cands, (id) => B.bossWeightAt(B.BOSSES[id], th) / (1 + met(id)));
   };
 
-  B.rollBoss = function (rng, depth) {
+  /** Gewicht eines Bosses auf einer Etage mit diesem Thema (Basisgewicht, fehlend = 1, mal Etagen-Faktor) */
+  B.bossWeightAt = function (def, theme) {
+    return (def.weight || 1) * B.themeWeight(def, theme);
+  };
+
+  /** Bosse, die auf Tiefe d mit Thema th auftauchen duerfen (minFloor erreicht, Etagen-Faktor > 0) */
+  function bossPool(d, th) {
+    return Object.keys(B.BOSSES).filter((id) => (B.BOSSES[id].minFloor || 1) <= d && B.bossWeightAt(B.BOSSES[id], th) > 0);
+  }
+
+  B.rollBoss = function (rng, depth, theme) {
     const d = Math.max(1, depth | 0);
-    const pool = Object.keys(B.BOSSES).filter((id) => (B.BOSSES[id].minFloor || 1) <= d);
+    const th = theme === undefined ? B.themeKeyAt(d) : theme;
+    const pool = bossPool(d, th);
     if (!pool.length) return Object.keys(B.BOSSES)[0] || null;
-    return rng.weighted(pool, (id) => B.BOSSES[id].weight || 1);
+    return rng.weighted(pool, (id) => B.bossWeightAt(B.BOSSES[id], th));
   };
 })(window.BOTA);

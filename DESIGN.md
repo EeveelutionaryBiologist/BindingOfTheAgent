@@ -428,6 +428,9 @@ All milestones done. What shipped, compared with this doc:
     15 % fewer shots per second in both phases. The breaks shrink with depth, back to roughly the old pace.
   - Guaranteed Approval per floor from depth 2 (see §6, step 8). Before this, 55–80 % of floors had no
     Approval drop at all.
+- **Floor themes for spawns (2026-11-02):** enemies and bosses can be weighted per floor theme (`themes`) or limited
+  to certain themes (`themeOnly`), so a floor like Forgotten Branches can get its own enemy family. No content uses it
+  yet, and seeds are unchanged until some does. Details in AGENTS.md §4.
 
 ## 14. Stretch goals
 Gamepad support · procedural chiptune loop · seed entry on the title screen · trinkets · curse rooms

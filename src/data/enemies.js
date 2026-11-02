@@ -27,7 +27,16 @@
  *     bonusChance: 0,         // Chance, ZUSAETZLICH zum Budget aufzutauchen (Hallucination)
  *     tags: [],               // fuer Layout-Bias: 'fly', 'ranged', 'melee', 'charge', 'turret'
  *     noFlip: false,          // Sprite nicht horizontal spiegeln (Text/Symbole)
+ *     // --- Etagen-Themen (optional, siehe B.themeWeight unten) ---
+ *     themes: { branches: 3, devnull: 0 }, // Gewichtsfaktor je Etagen-Thema (key in FLOOR_THEMES); 0 = dort nie
+ *     themeOnly: ['branches'],             // taucht NUR auf Etagen mit diesen Themen auf (minFloor gilt weiterhin)
  *   };
+ *
+ * Etagen-Themen: Gespawnt wird nach Tiefe UND nach dem Thema der Etage (B.themeFor(depth).key). Die Themen
+ * wiederholen sich alle FLOOR_THEMES.length Etagen, ein "branches"-Gegner kommt also auf Etage 3, 13, 23, ...
+ * wieder. Der Faktor wirkt auf das fertige Tiefen-Gewicht (nach minWeight/maxWeight) und auf bonusChance.
+ * Gegner ohne themes/themeOnly verhalten sich exakt wie vorher (Faktor 1, keine zusaetzlichen RNG-Zuege),
+ * bestehende Seeds bleiben also gleich, solange kein Gegner die Felder nutzt.
  *
  * Etagen-Freischaltung (DESIGN.md §7): Etage 1 ist sanft (Bug, Null Pointer, Memory Leak, selten eine
  * Hallucination), ab 2 kommen Fernkaempfer, Charger und der Graphics Glitch dazu, ab 3 Orbiter und Zombies, ab 4 Scope Creep.
@@ -175,12 +184,38 @@
   // Spawn-Logik
   // ---------------------------------------------------------------------------
 
-  /** Effektives Spawn-Gewicht einer Definition auf einer Tiefe (mit Etagen-Verlauf) */
-  B.enemyWeightAt = function (def, depth) {
+  /** Thema-Schluessel einer Tiefe ('branches', 'devnull', ...) oder null, falls es keine Themen gibt */
+  B.themeKeyAt = function (depth) {
+    const t = B.themeFor ? B.themeFor(depth) : null;
+    return (t && t.key) || null;
+  };
+
+  /**
+   * Etagen-Faktor einer Gegner- ODER Boss-Definition fuer ein Thema (bosses.js nutzt dieselbe Funktion).
+   *   themeOnly gesetzt und Thema nicht enthalten -> 0 (ausgeschlossen)
+   *   themes[theme] gesetzt                       -> dieser Faktor (negative/ungueltige Werte zaehlen als 0)
+   *   sonst                                       -> 1 (neutral)
+   * Ein Thema von null (keine Themen bekannt) schliesst nur themeOnly-Definitionen aus.
+   */
+  B.themeWeight = function (def, theme) {
+    if (Array.isArray(def.themeOnly) && !def.themeOnly.includes(theme)) return 0;
+    if (def.themes && theme && Object.prototype.hasOwnProperty.call(def.themes, theme)) {
+      const f = Number(def.themes[theme]);
+      return Number.isFinite(f) && f > 0 ? f : 0;
+    }
+    return 1;
+  };
+
+  /**
+   * Effektives Spawn-Gewicht einer Definition auf einer Tiefe (mit Etagen-Verlauf und Etagen-Thema).
+   * theme: optional; ohne Angabe gilt das Thema der Tiefe (B.themeKeyAt).
+   */
+  B.enemyWeightAt = function (def, depth, theme) {
     const base = def.weight || 0;
     if (base <= 0) return 0;
     const w = base + (def.weightPerFloor || 0) * Math.max(0, depth - (def.minFloor || 1));
-    return B.M.clamp(w, def.minWeight || 0, def.maxWeight !== undefined ? def.maxWeight : 99);
+    const clamped = B.M.clamp(w, def.minWeight || 0, def.maxWeight !== undefined ? def.maxWeight : 99);
+    return clamped * B.themeWeight(def, theme === undefined ? B.themeKeyAt(depth) : theme);
   };
 
   /** Multiplikator aus dem Layout-Bias (z. B. Gruben-Layouts bevorzugen Flieger) */
@@ -198,18 +233,23 @@
    * @param {BOTA.RNG} rng   — Generator-RNG der Etage
    * @param {number} depth   — aktuelle Tiefe (1..)
    * @param {BOTA.Room} [room] — Raum (optional; room.layout.bias beeinflusst die Auswahl)
+   * @param {string|null} [theme] — Etagen-Thema (optional; Standard: Thema der Tiefe, siehe B.themeKeyAt)
    * @returns {string[]}     — Liste von Gegner-IDs
    */
-  B.rollRoomEnemies = function (rng, depth, room) {
+  B.rollRoomEnemies = function (rng, depth, room, theme) {
     const d = Math.max(1, depth | 0);
+    const th = theme === undefined ? B.themeKeyAt(d) : theme;
     const bias = room && room.layout && room.layout.bias ? room.layout.bias : null;
     const pool = [];
     const bonus = [];
     for (const id of Object.keys(E)) {
       const def = E[id];
       if (def.spawn === false || (def.minFloor || 1) > d) continue;
+      // Auf dieser Etage ausgeschlossen (themeOnly / Faktor 0): weder im Pool noch als Bonus
+      // (und damit auch kein RNG-Zug fuer seine Bonus-Chance)
+      if (B.themeWeight(def, th) <= 0) continue;
       if (def.bonusChance) bonus.push(id);
-      if (B.enemyWeightAt(def, d) > 0) pool.push(id);
+      if (B.enemyWeightAt(def, d, th) > 0) pool.push(id);
     }
     if (!pool.length) return [];
 
@@ -221,7 +261,7 @@
     let spent = 0;
 
     for (let tries = 0; tries < 40 && out.length < maxCount; tries++) {
-      const id = rng.weighted(pool, (k) => B.enemyWeightAt(E[k], d) * biasFor(E[k], bias));
+      const id = rng.weighted(pool, (k) => B.enemyWeightAt(E[k], d, th) * biasFor(E[k], bias));
       const def = E[id];
       const pack = def.pack || 1;
       const cost = (def.cost !== undefined ? def.cost : 1) * pack;
@@ -239,10 +279,12 @@
     }
     if (!out.length) out.push(pool[0]);
 
-    // Bonus-Ueberraschungen (zaehlen nicht zum Budget)
+    // Bonus-Ueberraschungen (zaehlen nicht zum Budget). Der Etagen-Faktor skaliert die Chance, die
+    // Obergrenze von 25 % pro Raum gilt trotzdem (sonst koennte ein Thema Raeume mit Bonus-Gegnern fluten).
     for (const id of bonus) {
       const def = E[id];
-      if (rng.chance(Math.min(0.25, def.bonusChance + 0.01 * (d - 1)))) out.push(id);
+      const p = (def.bonusChance + 0.01 * (d - 1)) * B.themeWeight(def, th);
+      if (rng.chance(Math.min(0.25, p))) out.push(id);
     }
     return out;
   };
