@@ -38,6 +38,9 @@
  *     gegenlaeufigen Stroemen; Kontakt entlang des Arms; genau ein Boss-Tod, danach keine Segmente mehr
  *   - Sandbox Borders (Etage 6): Kakteen nur dort, nur aus Felsen, nie vor Tueren, Anteil wie theme.cacti; Kaktus
  *     sticht einmal (dann Unverwundbarkeit) mit Rueckstoss, ist solide, Explosionen sprengen ihn; Sprites vorhanden
+ *   - Sandbox-Borders-Gegner: Deprecation Warning x2.5 und Hallucination x2 dort; Spinlock (Glieder schirmen ab, Ring,
+ *     Rassel >= 0.6 s, Vorschnellen mit 2 Schaden, Kette reisst nicht, Glieder zerfallen); Rootkit (vergraben
+ *     unverwundbar, taucht auf freiem Sand nahe dem Spieler auf, Telegraph, 8er-Ring, Bombe scheucht heraus)
  *   - Spezialraeume, Pause- und Todesbildschirm rendern
  * Screenshots landen in tools/out/ (nicht einchecken).
  *
@@ -1268,6 +1271,120 @@ const URL = 'file://' + path.join(ROOT, 'index.html').replace(/\\/g, '/') + '?se
   });
   await page.waitForTimeout(400);
   await shot('14-sandbox-borders');
+
+  // --- Sandbox-Borders-Gegner: mehr Deprecation Warnings/Hallucinations dort; Spinlock (Ring, Rassel, Vorschnellen,
+  //     Glieder schirmen ab); Rootkit (vergraben unverwundbar, Telegraph, 8er-Ring, Bombe scheucht heraus) ---
+  const desertProblems = await page.evaluate(() => {
+    const out = [];
+    const g = BOTA.game, E = BOTA.ENEMIES, DT = 1 / 60;
+    const SB = BOTA.FLOOR_THEMES.findIndex((t) => t.key === 'sandbox') + 1;
+    // 1) Baseline-Faktoren
+    const dw = BOTA.enemyWeightAt(E.deprecation_warning, SB) / BOTA.enemyWeightAt(E.deprecation_warning, SB, 'none');
+    if (Math.abs(dw - 2.5) > 1e-9) out.push('Deprecation Warning: Faktor ' + dw + ' auf Sandbox Borders');
+    let hal = 0;
+    for (let i = 0; i < 1500; i++) if (BOTA.rollRoomEnemies(new BOTA.RNG(BOTA.hashString('hal:' + i)), SB).includes('hallucination')) hal++;
+    if (Math.abs(hal / 1500 - 0.25) > 0.04) out.push('Hallucination: Anteil ' + (hal / 1500).toFixed(3) + ' statt ~0.25 auf Sandbox Borders');
+
+    BOTA.debug.gotoRoom('start'); BOTA.debug.god(true);
+    for (let i = 0; i < 4; i++) BOTA.debug.killAll();
+    g.room.projectiles.length = 0;
+    const p = g.player; p.x = 150; p.y = 450;
+    const stepAll = (n, each) => {
+      for (let i = 0; i < n; i++) {
+        for (const en of g.room.enemies.slice()) { if (!en.dead) { en.frozen = 0; en.update(DT, g); } }
+        g.room.enemies = g.room.enemies.filter((en) => !en.dead);
+        if (each && each() === false) break;
+      }
+    };
+    const events = [];
+    const offs = ['enemyWindup', 'enemyBurrow'].map((n) => BOTA.bus.on(n, (e) => events.push(n + ':' + (e.sound || (e.up ? 'up' : 'down')))));
+    try {
+      // 2) Spinlock
+      p.x = 480; p.y = 460;                               // nah genug (< 380 px), damit er gleich rasselt
+      const A = BOTA.debug.spawn('spinlock', 480, 230);
+      A.spawnDelay = 0;
+      const S = A.state, P = A.params, segs = S.segs;
+      for (const sg of segs) sg.spawnDelay = 0;
+      if (segs.length !== 4 || !segs[3].state.tail || segs.some((sg) => !sg.invulnerable || !sg.ignoreForClear || sg.state.head !== A)) out.push('Spinlock: Glieder falsch aufgebaut');
+      const hp0 = A.hp;
+      segs[1].hurt(10, g, {});
+      if (A.hp !== hp0) out.push('Spinlock: Treffer auf ein Glied schadet dem Kopf');
+      A.hurt(2, g, {});
+      if (!(A.hp < hp0)) out.push('Spinlock: Kopf nimmt keinen Schaden');
+      S.cd = 99;
+      stepAll(30);
+      const offRing = [A].concat(segs).filter((x) => Math.abs(Math.hypot(x.x - S.cx, x.y - S.cy) - P.ringR) > 6).length;
+      if (offRing) out.push('Spinlock: ' + offRing + ' Teile nicht auf dem Ring');
+      // Rassel -> Vorschnellen
+      S.cd = 0.01;
+      let rattleT = 0, lungeStart = null, maxGap = 0, lungeDmg = 0, sawCoilAgain = false;
+      stepAll(480, () => {
+        if (S.mode === 'rattle') rattleT += DT;
+        if (S.mode === 'lunge') {
+          if (!lungeStart) lungeStart = { x: A.x, y: A.y, rattleT };
+          lungeDmg = Math.max(lungeDmg, A.contactDamage);
+          let prev = A;
+          for (const sg of segs) { maxGap = Math.max(maxGap, Math.hypot(sg.x - prev.x, sg.y - prev.y)); prev = sg; }
+        }
+        if (lungeStart && S.mode === 'coil') { sawCoilAgain = true; return false; }
+      });
+      if (!lungeStart) out.push('Spinlock: schnellt nie vor');
+      else {
+        if (lungeStart.rattleT < 0.6) out.push('Spinlock: Rassel-Telegraph nur ' + lungeStart.rattleT.toFixed(2) + ' s');
+        if (!events.includes('enemyWindup:rattle')) out.push('Spinlock: kein Rassel-Event');
+        if (lungeDmg !== 2) out.push('Spinlock: Vorschnellen macht ' + lungeDmg + ' statt 2 Schaden');
+        if (maxGap > P.spacing + 1) out.push('Spinlock: Kette reisst (' + maxGap.toFixed(1) + ' px)');
+        if (!sawCoilAgain || A.contactDamage !== 1) out.push('Spinlock: rollt sich nach dem Vorschnellen nicht wieder ein');
+      }
+      // Tod: Glieder zerfallen
+      A.hurt(1e6, g, {});
+      stepAll(60);
+      if (g.room.enemies.some((en) => en.id === 'spinlock_segment')) out.push('Spinlock: Glieder ueberleben den Kopf');
+
+      // 3) Rootkit
+      p.x = 480; p.y = 300;
+      const R = BOTA.debug.spawn('rootkit', 760, 420);
+      R.spawnDelay = 0;
+      const RS = R.state, RP = R.params;
+      if (!R.intangible || R.contactDamage !== 0 || R.hurt(5, g, {})) out.push('Rootkit: vergraben nicht unverwundbar/harmlos');
+      if (!g.room.hasLivingEnemies()) out.push('Rootkit: Raum gilt als geraeumt, obwohl er vergraben lebt');
+      let tellT = 0, shotsAtUp = -1, upPos = null;
+      const enemyShots = () => g.room.projectiles.filter((pr) => pr.team === 'enemy' && !pr.dead);
+      stepAll(600, () => {
+        if (RS.mode === 'tell') tellT += DT;
+        if (RS.mode === 'up' && shotsAtUp < 0) { shotsAtUp = enemyShots().length; upPos = { x: R.x, y: R.y, tellT }; return false; }
+      });
+      if (!upPos) out.push('Rootkit: taucht nie auf');
+      else {
+        const t = g.room.worldToTile(upPos.x, upPos.y);
+        const d = Math.hypot(upPos.x - p.x, upPos.y - p.y);
+        if (g.room.tileAt(t.c, t.r) !== BOTA.TILES.FLOOR) out.push('Rootkit: taucht nicht auf freiem Sand auf');
+        if (d < RP.nearMin * 0.75 - 1 || d > RP.nearMax + 50) out.push('Rootkit: taucht ' + Math.round(d) + ' px vom Spieler auf');
+        if (upPos.tellT < 0.5) out.push('Rootkit: Telegraph nur ' + upPos.tellT.toFixed(2) + ' s');
+        if (!events.includes('enemyWindup:dig') || !events.includes('enemyBurrow:up')) out.push('Rootkit: Events fehlen (' + events.join(',') + ')');
+        const shots = enemyShots();
+        if (shots.length !== RP.ring) out.push('Rootkit: ' + shots.length + ' statt ' + RP.ring + ' Schuesse beim Auftauchen');
+        if (shots.some((pr) => pr.speed < 165 || pr.speed > 260)) out.push('Rootkit: Schussgeschwindigkeit ausserhalb 165–260');
+        if (R.intangible || !R.hurt(1, g, {})) out.push('Rootkit: oben nicht verwundbar');
+      }
+      // wieder abtauchen, dann per Bombe herausscheuchen (ohne neuen Ring)
+      stepAll(240, () => RS.mode !== 'buried' || (RS.mode === 'buried' && R.intangible && false));
+      stepAll(200, () => !(RS.mode === 'buried' && R.intangible));
+      if (RS.mode !== 'buried') out.push('Rootkit: taucht nicht wieder ab (' + RS.mode + ')');
+      g.room.projectiles.length = 0;
+      p.invuln = 5;
+      g.explode(R.x, R.y, 60, 0, 'the smoke test');
+      if (RS.mode !== 'up' || !RS.flushed || R.intangible) out.push('Rootkit: Bombe scheucht ihn nicht heraus');
+      if (enemyShots().length) out.push('Rootkit: herausgescheucht feuert er trotzdem einen Ring');
+    } finally {
+      for (const off of offs) off();
+      for (let i = 0; i < 4; i++) BOTA.debug.killAll();
+      g.room.projectiles.length = 0;
+      p.invuln = 0;
+    }
+    return out;
+  });
+  problems.push(...desertProblems);
 
   // Mehrfach toedlicher Schaden, weil Items wie "Retry with Backoff" den ersten Tod abfangen
   await page.evaluate(() => {

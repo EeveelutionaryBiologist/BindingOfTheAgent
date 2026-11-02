@@ -39,7 +39,7 @@ secret); rocks and blocks too, except on Sandbox Borders.
 | ![Forgotten Branches](images/floor_branches_swatch.png) | 3 | **Forgotten Branches** `branches` | Moss, soil and grass | Roots drawn like a `git log --graph` | Bushes | G dorian, 98 bpm, triangle, bird calls | Ivy, fireflies, branchier maps, own enemy family and boss |
 | ![Dependency Hell](images/floor_dephell_swatch.png) | 4 | **Dependency Hell** `dephell` | Square tiles | Glowing cracks and embers | Packages, cartons | B phrygian, 128 bpm, sawtooth | — |
 | ![Production](images/floor_production_swatch.png) | 5 | **Production** `production` | Checker plate with rivets | Hazard stripes at doors, cables | Packages, cartons | A harmonic minor, 138 bpm, square | — |
-| ![Sandbox Borders](images/floor_sandbox_swatch.png) | 6 | **Sandbox Borders** `sandbox` | Rippled sand | Bleached bones, pebbles, dry grass | Sandcastles | D phrygian, 100 bpm, triangle | Cacti (solid, prick), border fences, sandstone, tumbleweeds |
+| ![Sandbox Borders](images/floor_sandbox_swatch.png) | 6 | **Sandbox Borders** `sandbox` | Rippled sand | Bleached bones, pebbles, dry grass | Sandcastles | D phrygian, 100 bpm, triangle | Cacti (solid, prick), border fences, sandstone, tumbleweeds, own enemy family |
 | ![The Training Data](images/floor_training_swatch.png) | 7 | **The Training Data** `training` | Graph paper | Scattered characters (`0 1 {} lol tl;dr nan`) | Cartons, crates | E major, 116 bpm, triangle | — |
 | ![The Latent Space](images/floor_latent_swatch.png) | 8 | **The Latent Space** `latent` | Dot grid | Stars and a constellation | Bushes, packages | C lydian, 96 bpm, sine | — |
 | ![Undefined Behavior](images/floor_undefined_swatch.png) | 9 | **Undefined Behavior** `undefined` | Square tiles | Shifted colour stripes (glitches) | All four kinds | B♭ locrian, 144 bpm, square | — |
@@ -141,6 +141,9 @@ amber shots, so check contrast with screenshots before settling on a bright pale
   fences with barbed wire where blocks line up, striped concrete barriers where they stand alone.
 - **Gameplay, cacti:** half of the rocks in combat rooms are cacti instead. They are solid like rocks but prick you
   on contact (half a heart and a push back); bombs blow them up. Never right in front of a door.
+- **Gameplay, enemies:** an own family found only here, the Spinlock (a coiled desert snake that lunges) and the
+  Rootkit (burrows under the sand and pops up next to you). Deprecation Warnings are 2.5× as common, and
+  Hallucinations twice as likely (mirages).
 - **Breakables:** sandcastles in 75 % of combat rooms, up to 4 per room; when damaged, a tower collapses.
 - **Music:** D phrygian, 100 bpm, triangle lead.
 - **Extra text:** room-clear quips ("Permission denied", "Sandbox violation logged", "No water found", …) and

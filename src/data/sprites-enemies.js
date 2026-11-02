@@ -1161,4 +1161,108 @@
   const OCTO_TIP_GLOW = OCTO_TIP.map((r) => r.replace(/o/g, 'a'));
   OCTO_TIP_GLOW[4] = 'kBckyakcbk';
   B.defineSprite('boss_octopus_merge_tip', { palette: OCTO_PAL, scale: 4, frames: [OCTO_TIP, OCTO_TIP_GLOW] });
+
+  // ===========================================================================
+  // Sandbox Borders: Spinlock und Rootkit
+  // ===========================================================================
+  // Einzelne Pixel setzen: [[zeile, spalte, zeichen], ...] (B.spriteTools.stamp aus sprites-core.js)
+  const stampRows = (rows, stamps) => B.spriteTools.stamp(rows, stamps);
+  // Familien-Optik "sandbox": dunkle Koerper mit hellen Sand-Mustern und kraeftiger Kontur — auf dem hellen Sand
+  // muss Gefaehrliches dunkel sein (umgekehrt zu Forgotten Branches, wo der Boden dunkel-gruen ist).
+
+  // Spinlock — Wuestenschlange von oben. Kopf zeigt nach rechts (das Verhalten dreht ihn), Frame 1 mit Zunge.
+  // Zeichen: k Kontur, b Koerper, d Mittelstreifen, l helle Raute, y Auge, r Zunge
+  const SPIN_PAL = { k: '#1f140a', b: '#6b4a28', d: '#3a2614', l: '#e8c88a', y: '#ffcf4d', r: '#d64545', c: '#c9b48a', w: '#efe2c0' };
+  const SPIN_HEAD = [
+    '..............',
+    '..............',
+    '..............',
+    '...kkkkk......',
+    'kkkbbdbykk....',
+    'kbbblddbbbk...',
+    'kbbblddbbbbk..',
+    'kbbblddbbbk...',
+    'kkkbbdbykk....',
+    '...kkkkk......',
+    '..............',
+    '..............',
+    '..............',
+    '..............',
+  ];
+  const SPIN_HEAD_TONGUE = stampRows(SPIN_HEAD, [[6, 12, 'r'], [6, 13, 'r'], [5, 13, 'r'], [7, 13, 'r']]);
+  B.defineSprite('enemy_spinlock', { palette: SPIN_PAL, scale: 4, frames: [SPIN_HEAD, SPIN_HEAD_TONGUE] });
+  // Koerperglied: dunkler Ruecken mit einer vollen hellen Raute (aneinandergereiht ergibt das das typische
+  // Rautenmuster). Bewusst keine dunkle Mitte — ein Ring mit Loch las sich wie ein Donut.
+  B.defineSprite('enemy_spinlock_body', {
+    palette: SPIN_PAL, scale: 4,
+    rows: [
+      '...kkkk...',
+      '.kkbbbbkk.',
+      '.kbbllbbk.',
+      'kbbllllbbk',
+      'kblllllldk',
+      'kblllllldk',
+      'kbbllllddk',
+      '.kbbllddk.',
+      '.kkbddddk.',
+      '...kkkk...',
+    ],
+  });
+  // Rassel: drei Ringe, zeigt mit dem Stummel nach rechts (zum Vorgaenger); Frame 1 = Glanz verschoben (Rasseln)
+  const SPIN_TAIL = [
+    '............',
+    '............',
+    '............',
+    '..kkkkkkkk..',
+    '.kwwkwwkwwbk',
+    'kwcckccwccbk',
+    'kwcckccwccbk',
+    '.kwwkwwkwwbk',
+    '..kkkkkkkk..',
+    '............',
+    '............',
+    '............',
+  ];
+  B.defineSprite('enemy_spinlock_tail', {
+    palette: SPIN_PAL, scale: 4,
+    frames: [SPIN_TAIL, SPIN_TAIL.map((r) => r.replace(/w/g, '#').replace(/c/g, 'w').replace(/#/g, 'c'))],
+  });
+
+  // Rootkit — Maulwurf mit Grubenhelm und Stirnlampe, rote Augen. Frame 1: gerade herausgeploppt (Augen weit).
+  // Zeichen: k Kontur, g Helm, y Lampe, b Fell, e Auge, p Schnauze, P Nase, c Krallen
+  const ROOTKIT_PAL = { k: '#1f140a', g: '#7a7f88', y: '#ffe27a', b: '#5a4230', e: '#ff5a4d', p: '#e89aa0', P: '#b85a66', c: '#e8dcc0' };
+  const ROOTKIT = [
+    '....kkkk....',
+    '...kgyygk...',
+    '..kggggggk..',
+    '.kkkkkkkkkk.',
+    '.kbbbbbbbbk.',
+    'kbbebbbbebbk',
+    'kbbbbppbbbbk',
+    'kbbbpPPpbbbk',
+    'kbbbbbbbbbbk',
+    'kckbbbbbbkck',
+    'kcckbbbbkcck',
+    '.kk.kkkk.kk.',
+  ];
+  B.defineSprite('enemy_rootkit', {
+    palette: ROOTKIT_PAL, scale: 4,
+    frames: [ROOTKIT, stampRows(ROOTKIT, [[5, 4, 'e'], [5, 7, 'e'], [4, 3, 'e'], [4, 8, 'e']])],
+  });
+  // Sandhuegel ueber dem vergrabenen Rootkit; Frame 1 = aufgebrochen (Telegraph / Loch beim Auftauchen)
+  const MOUND_PAL = { k: '#3a2814', L: '#e0c08a', M: '#b8955e', D: '#8a6a3e', s: 'rgba(0,0,0,0.25)' };
+  const MOUND = [
+    '................',
+    '.....kkkkkk.....',
+    '...kkLLMMMMkk...',
+    '..kLLMMMMMMDDk..',
+    '.kLMMMMMMMMMDDk.',
+    'kMMMMDMMMMMMDDDk',
+    'kkkkkkkkkkkkkkkk',
+    '.ssssssssssssss.',
+  ];
+  B.defineSprite('enemy_rootkit_mound', {
+    palette: MOUND_PAL, scale: 4,
+    frames: [MOUND, stampRows(MOUND, [[2, 7, 'k'], [3, 7, 'k'], [3, 8, 'k'], [4, 6, 'k'], [4, 9, 'k'], [5, 9, 'k'], [2, 10, 'D']])],
+  });
 })(window.BOTA);

@@ -101,6 +101,10 @@ Live state is under `BOTA.game` (`.player`, `.room`, `.floor`, `.depth`, `.state
   - **Orphan Commit** is a rare bonus only on its floor (at most 1 per room, close to its `bonusChance`), never
     holds the doors, flees into a corner, drops 2–3 credits when caught (even while frozen) or shot, and is
     garbage-collected after its warning without loot or a kill;
+- the Sandbox Borders family: Deprecation Warnings weigh ×2.5 and Hallucinations ×2 there; the **Spinlock**'s body
+  shields its head, it coils on a ring, rattles ≥ 0.6 s before lunging (2 damage) without the chain tearing, and its
+  body falls apart with the head; the **Rootkit** can't be hurt while buried, surfaces on free sand near the player
+  after its telegraph with a ring of 8 shots, and a bomb flushes it out without the ring;
 - the **Octopus Merge** is only rolled on Forgotten Branches (at its weight share there on a first visit); it has 8 arms of
   5 segments that pass 60 % of their damage to the knot and stay inside the room; every sweep, slam, tip shot and
   stream has its telegraph first; an arm merges every 12 % of HP (at least one stays), phase 2 starts once at 50 %
@@ -393,7 +397,8 @@ Payloads usually include `game, x, y` and often `color`.
 | `shoot`, `familiarShoot` | player, familiar | audio |
 | `enemyHit`, `enemyDeath` (`boss`, `segment`) | enemy | audio, effects |
 | `enemyReveal`, `enemyRevive` | enemy behaviours | audio, effects |
-| `enemyShed` (`colors, count, big`), `enemyWindup` | Stale Branch | audio (`rustle`, `creak`), effects (falling leaves) |
+| `enemyShed` (`colors, count, big`), `enemyWindup` (`sound`?) | Stale Branch, Spinlock, Rootkit | audio (`rustle`; windup: `sound` if given, else the family's), effects (falling leaves) |
+| `enemyBurrow` (`up`) | Rootkit | audio (`sandPop`), effects (sand fountain / dust) |
 | `orphanCaught` (`count`), `enemyVanish` (`color, text`) | Orphan Commit | audio (`rescue`, `gcSweep`), effects (sparkles / puff and text) |
 | `hudGlitch` (`kind`) | game (`glitchHud`) | audio |
 | `pipeAppear`, `pipeWarp`, `pipeArrive` (`to`) | game | audio, effects |
@@ -412,7 +417,7 @@ Rule: audio and effects **only listen**. Game logic never calls them directly, e
 are game state.
 
 ### 3.12 Audio (`core/audio.js`) and effects (`entities/effects.js`)
-- **Audio:** 43 synthesized SFX in total. Every sound has a name; `audio.names()` lists them.
+- **Audio:** 48 synthesized SFX in total. Every sound has a name; `audio.names()` lists them.
   - Bus routing: voices → sfx/music bus → master → compressor.
   - Per-name rate limits (`RATE`) and a 40-voice cap keep it from getting noisy.
   - There is a procedural chiptune loop per floor plus a boss variant. Mute is persisted in storage; there's no
@@ -421,7 +426,8 @@ are game state.
 - **Effects:** use `B.FX.burst / ring / flash / smoke / debris / sparkles / text / shimmer / tint / leaves / later(game, delay, fn)`.
 - **Enemy families:** an enemy def with `family: 'branches'` gets leafy hit/death effects (`FAMILY_FX` in `effects.js`)
   and sounds (`FAMILY_SOUNDS` in `audio.js`: `leafHit`, `branchDeath`, plus `creak` on windup) instead of the
-  defaults. It's purely presentational; a new family needs an entry in both tables.
+  defaults; `family: 'sandbox'` gets sand bursts and dry crunches (`sandHit`, `sandDeath`). It's purely
+  presentational; a new family needs an entry in both tables.
   Each room holds at most 300 effects; "important" ones (text, rings, flashes) push out the oldest particles.
   Effects use `Math.random` only.
 
@@ -466,14 +472,22 @@ Item conventions:
 | detached_head | detached_body (+ head `detached_tag`) | 3, Forgotten Branches only | 12 + 6 |
 | cherry_pick | cherry | 3, Forgotten Branches only | 7 (pair of 2) |
 | orphan_commit | orphan | 3, Forgotten Branches only | 6 (bonus spawn, harmless) |
+| spinlock | spinlock (+ 4 `spinlock_segment`) | Sandbox Borders only | 16 |
+| rootkit | rootkit | Sandbox Borders only | 12 |
 
 The last four are the **Forgotten Branches family** (`themeOnly: ['branches']`, `family: 'branches'`). The first
 three have weight 6 each: on floor 3 they make up about 24 % of enemies, and about 58 % of combat rooms have at least
 one (measured 2026-11-02). The Orphan Commit is a bonus spawn like the Hallucination (`bonusChance` 0.12, about 14 %
 of combat rooms on floor 3); it is the one enemy that drops loot (2–3 credits) and it never attacks.
 
+The **Sandbox Borders family** (`themeOnly: ['sandbox']`, `family: 'sandbox'`, weight 6 each) is the Spinlock and the
+Rootkit. On that floor Deprecation Warnings also weigh ×2.5 and the Hallucination's bonus chance doubles (mirages; the
+25 % cap still applies), via `themes: { sandbox: … }` on the existing definitions. Desert enemies must be **dark**
+with a strong outline and fire non-sand colours (brick red), because the sand is the one mid-bright floor.
+The Spinlock places its body segments in `afterMove`, after its head has moved, so the chain never lags a frame.
+
 Minions (`spawn: false`): `leaklet`, `microservice`, `loop_segment`, `detached_head_tag` (Detached HEAD's head),
-`octo_arm` (Octopus Merge arm segment).
+`octo_arm` (Octopus Merge arm segment), `spinlock_segment` (Spinlock body; invulnerable, shields the head).
 
 Room spawning (`rollRoomEnemies`) works on a **budget**:
 - Each enemy has a `cost`. The budget is `min(11, 2.4 + 0.9·depth + rand(0..1.5))`, and a room starts with at most
@@ -493,7 +507,8 @@ excluded enemy is skipped entirely, including its bonus roll. Bosses use the sam
 in both `rollBoss` and `rollBossVaried`. Because themes repeat every 11 floors, a `branches` enemy also appears on
 floors 14, 25, … The roll functions take an optional `theme` argument (default: the depth's theme) for tests.
 Content without these fields rolls exactly as before (same RNG draws), so **existing seeds only change once you give
-an enemy or boss a theme field**; say so in that commit. In use by the Forgotten Branches family (below).
+an enemy or boss a theme field**; say so in that commit. In use by the Forgotten Branches and Sandbox Borders
+families (below).
 
 **Bosses** (base HP): `monolith` 360, `stakeholder` 250, `friday_deploy` 240 (floor 4+), `infinite_loop` 300,
 `rogue_swarm` 4 × 80, `reviewer` 340 (floor 4+), `octopus_merge` 330 (Forgotten Branches only, weight 12: about 52 % on
@@ -654,3 +669,16 @@ work again, the same file-ownership split works well.
   - **Bosses:**
     - ~~Octopus Merge~~: done 2026-11-02 (§4).
     - **"Human in the Loop"** (meta joke): still just a name. Needs a concept first.
+    - **Nested Infinite Loop** (idea from 2026-11-02, a souped-up variant of The Infinite Loop, e.g. as a later-floor
+      replacement or rare alternative): three worms (small, medium, large) coiled around each other like the
+      Spinlock's ring, sharing one health bar. They move together; the outer ring spins and shoots slow patterns,
+      the middle one is a little faster, the small inner one really fast. The large one dies at 50 % of the shared
+      HP, the medium one at 16.67 %, the small one at 0 %. Intro subtitle along the lines of
+      `while True { while True { println!("WHYYYYYYYY?") } }`. Code: three segment chains like the Infinite Loop,
+      a shared HP pool like the Rogue Agent Swarm's `bossGroup`, ring placement like the Spinlock.
+  - **More Sandbox Borders enemies** (brainstorm 2026-11-02, not built yet): **Dry Run** (a translucent ghost copy
+    performs every attack first, then the real one repeats it exactly — a built-in telegraph), **Stack Trace**
+    (scorpion whose segmented tail stings at range after a target line), **Rolling Release** (tumbleweed that bounces
+    off walls like Friday Deploy, a little faster after every bounce), **Rate Limiter** (walking cactus: three spine
+    shots, then a "429" bubble and a forced pause), **Honeypot** (antlion funnel that pulls you toward its jaws),
+    **Dust Daemon** (whirlwind that bends your shots), **Port Scanner** (pops out of fixed holes in sequence).

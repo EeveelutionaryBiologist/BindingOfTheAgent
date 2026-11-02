@@ -25,14 +25,14 @@ Some enemies belong to one floor theme and only appear there; floor themes repea
 | ![Bug](images/enemy_bug.png) | **Bug** `bug` | 1 | 8 | Wanders around slowly. Gets rarer on deeper floors | It's not a bug, it's a feature. A feature with mandibles. |
 | ![Null Pointer](images/enemy_null_pointer.png) | **Null Pointer** `null_pointer` | 1 | 5 | Flies straight at you, fast but fragile | Points at nothing. Charges at you anyway. |
 | ![Memory Leak](images/enemy_memory_leak.png) | **Memory Leak** `memory_leak` | 1 | 14 | Chases you slowly and grows the longer it lives. Splits into 2 Leaklets when killed | Gets bigger the longer you ignore it. |
-| ![Hallucination](images/enemy_hallucination.png) | **Hallucination** `hallucination` | 1 | 6 | Disguised as a Credit, Half Heart or Approval until you get within about 120 px or a bomb goes off nearby, then chases you fast. Real pickups of the same kinds lie around in some combat rooms too, so you can't tell them apart by looks. 10 % chance per combat room (+1 % per floor, max 25 %) to appear on top of the normal enemies (max 1) | Looked real. Was, in fact, not real. |
+| ![Hallucination](images/enemy_hallucination.png) | **Hallucination** `hallucination` | 1 | 6 | Disguised as a Credit, Half Heart or Approval until you get within about 120 px or a bomb goes off nearby, then chases you fast. Real pickups of the same kinds lie around in some combat rooms too, so you can't tell them apart by looks. 10 % chance per combat room (+1 % per floor, max 25 %) to appear on top of the normal enemies (max 1); twice that on Sandbox Borders (mirages), still at most 25 % | Looked real. Was, in fact, not real. |
 | ![Flaky Test](images/enemy_flaky_test.png) | **Flaky Test** `flaky_test` | 2 | 10 | Fades out and teleports 170–400 px away from you, then fires one aimed shot. Can't be hit while faded | Passes on my machine. |
 | ![Merge Conflict](images/enemy_merge_conflict.png) | **Merge Conflict** `merge_conflict` | 2 | 18 | When lined up with you horizontally or vertically, winds up for 0.5 s and dashes. Max 3 per room | <<<<<<< HEAD |
 | ![Jira Ticket](images/enemy_jira_ticket.png) | **Jira Ticket** `jira_ticket` | 2 | 18 | Stationary turret: a 4-way burst every 1.7 s, alternating + and × directions. Max 2 per room | Priority: Blocker. Assignee: you. |
 | ![Spaghetti Code](images/enemy_spaghetti_code.png) | **Spaghetti Code** `spaghetti_code` | 2 | 14 | Wanders and fires a 3-shot spread every 2.5 s | Nobody knows where it starts. Or ends. |
 | ![Race Condition](images/enemy_race_condition.png) | **Race Condition** `race_condition` | 2 | 6 | Always comes in pairs; zigzags erratically and sometimes sprints. Max 4 per room | Sometimes it hits first. Sometimes you do. Sometimes both. |
 | ![Graphics Glitch](images/enemy_graphics_glitch.png) | **Graphics Glitch** `graphics_glitch` | 2 | 10 | Flickers in place, then jumps 1–3 tiles in a straight line (a faint copy shows where it will land). Usually jumps toward you. When it touches you, it scrambles one part of the top bar for 7 s: hearts, active item, stats or minimap. Max 2 per room | Is it supposed to look like this...? |
-| ![Deprecation Warning](images/enemy_deprecation_warning.png) | **Deprecation Warning** `deprecation_warning` | 3 | 12 | Flies in circles around you at a distance (160–220 px) and fires an aimed shot every 2.4 s. Max 3 per room | Will be removed in a future release. Not this one. |
+| ![Deprecation Warning](images/enemy_deprecation_warning.png) | **Deprecation Warning** `deprecation_warning` | 3 | 12 | Flies in circles around you at a distance (160–220 px) and fires an aimed shot every 2.4 s. Max 3 per room. 2.5× as common on Sandbox Borders | Will be removed in a future release. Not this one. |
 | ![Zombie Process](images/enemy_zombie_process.png) | **Zombie Process** `zombie_process` | 3 | 14 | Chases you. When killed, it lies down for 1.8 s and gets back up once with half its HP, angrier | `kill -9` recommended. |
 | ![Scope Creep](images/enemy_scope_creep.png) | **Scope Creep** `scope_creep` | 4 | 10 | Slowly grows (up to 1.9× size and 1.6× HP). Once big enough, fires a ring of shots every 3.6 s. Max 2 per room | Just one more small feature. |
 
@@ -48,6 +48,16 @@ instead of clicking when hit, and shed leaves when they take damage.
 | ![Cherry-Pick](images/enemy_cherry_pick.png) | **Cherry-Pick** `cherry_pick` | 3 (Forgotten Branches only) | 7 each | Always a pair joined by a stem (at most 140 px long), hopping around you. Hit one and the *other* gets angry for 3 s: darker, faster hops straight at you, and it spits a pit after puffing its cheeks. Kill one and the other stays angry for good. Max 4 per room | Hand-picked from another branch. Comes as a pair; hurt one and the other takes it personally. |
 | ![Orphan Commit](images/enemy_orphan_commit.png) | **Orphan Commit** `orphan_commit` | 3 (Forgotten Branches only) | 6 | Harmless: never attacks and doesn't keep the doors shut. Runs away from you and hides in corners, trailing a faint dashed line. Catch it (touch it) or shoot it for 2–3 Credits. After 12 s the garbage collector takes it: it blinks and fades for the last 3 s, then vanishes without loot. 12 % chance per combat room (+1 % per floor) to appear on top of the normal enemies (max 1) | Unreachable from any branch. Catch it before the garbage collector does. |
 
+### Sandbox Borders family
+
+These only appear on Sandbox Borders floors. Dark bodies with light sand patterns (so they stand out on the sand),
+sand bursts and dry crunching sounds when hit.
+
+| | Name | First floor | HP | Behaviour | Flavour text |
+|---|---|---|---|---|---|
+| ![Spinlock](images/enemy_spinlock.png) | **Spinlock** `spinlock` | 6 (Sandbox Borders only) | 16 | A desert snake coiled into a spinning ring that slowly creeps closer ("busy wait"). Its body blocks your shots; only the head can be hurt as it spins past. Then the rattle sounds, the head turns toward you and a dashed line shows its path, and it lunges along that line for a full heart. Afterwards it lies stretched out for a moment (head exposed) and coils up again. Max 2 per room | Busy-waits in a circle until you are close enough. Then it stops waiting. |
+| ![Rootkit](images/enemy_rootkit.png) | **Rootkit** `rootkit` | 6 (Sandbox Borders only) | 12 | Travels under the sand (a moving mound, even under rocks) and can't be hurt there. Surfaces near you after a warning (the mound shakes, a target ring and "!" appear), popping out with a ring of 8 shots; stays up and hittable for 1.6 s, then dives again. A bomb near the mound flushes it out, stunned for 2 s and without the ring. Max 2 per room | Lives below the surface. Has root. Comes up only to ruin your day. |
+
 ### Minions
 
 These are only spawned by other enemies or bosses.
@@ -55,6 +65,7 @@ These are only spawned by other enemies or bosses.
 | | Name | Spawned by | HP | Behaviour | Flavour text |
 |---|---|---|---|---|---|
 | ![Leaklet](images/enemy_leaklet.png) | **Leaklet** `leaklet` | Memory Leak (on death) | 4 | Chases you | A smaller leak. Still not freed. |
+| ![Spinlock body](images/enemy_spinlock_body.png) | **Spinlock body** `spinlock_segment` | Spinlock (4 per snake) | — | Part of the snake; blocks shots and hurts on contact; the last one is the rattle. Falls apart when the head dies | Part of the lock. Not the part you want to hit. |
 | ![Octopus Merge arm tip](images/boss_octopus_merge_tip.png) | **Arm segment** `octo_arm` | Octopus Merge (8 arms of 5) | — | Part of an arm; only the tip (a commit dot) is visible and fires. Damage goes to the knot's HP at 60 %. Doesn't count for clearing the room | One of eight branches. Soon to be one of seven. |
 | ![Detached HEAD's head](images/enemy_detached_head_tag.png) | **Detached HEAD (head)** `detached_head_tag` | Detached HEAD (spawns with it) | 6 | Orbits the body and shoots; panics when the body dies (see above) | Points at a commit. Any commit. Just not yours. |
 | ![Microservice](images/enemy_microservice.png) | **Microservice** `microservice` | The Monolith (phase 2) | 7 | Chases you | One of 47. Nobody knows which one is failing. |

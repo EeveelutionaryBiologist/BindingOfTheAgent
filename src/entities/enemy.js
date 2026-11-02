@@ -31,13 +31,14 @@
  * Verhalten in dieser Datei: wander, chase, fly_chase, split, blink, charge, turret, orbit, shooter,
  * revive, grow, mimic, zigzag, glitch, stale (Stale Branch), detached_body + detached_tag (Detached HEAD),
  * cherry (Cherry-Pick), orphan (Orphan Commit). stale, detached_*, cherry und orphan gehoeren zur
- * Forgotten-Branches-Familie.
+ * Forgotten-Branches-Familie; spinlock + spinlock_segment (Spinlock) und rootkit (Rootkit) zur Sandbox-Borders-Familie.
  * Boss-Verhalten (und das Wurm-Segment) stehen in entities/boss.js.
  *
  * Zusaetzliche Bus-Events (nur informativ, z. B. fuer Sound/Effekte): 'enemyRevive' (Zombie steht auf),
  * 'enemyReveal' (Hallucination enttarnt sich), 'enemyShed' (Stale Branch verliert Laub: { colors, count, big }),
  * 'enemyWindup' (Stale Branch zittert vor dem Sprung), 'orphanCaught' (Orphan Commit gefangen: { count }),
- * 'enemyVanish' (Gegner verschwindet ohne Tod, z. B. Garbage Collection: { color, text }); aus boss.js: 'bossPhase', 'bossStomp', 'bossBounce'.
+ * 'enemyVanish' (Gegner verschwindet ohne Tod, z. B. Garbage Collection: { color, text }), 'enemyBurrow'
+ * (Rootkit taucht auf/ab: { up }); 'enemyWindup' darf { sound } tragen (Rassel, Graben); aus boss.js: 'bossPhase', 'bossStomp', 'bossBounce'.
  * 'enemyDeath' kann zusaetzlich { segment: true } tragen (platzende Wurm-Segmente, ohne Kill-Zaehlung).
  *
  * SICHERHEIT: reine Spiellogik, kein DOM-Zugriff (ausser Canvas-Zeichnen), kein eval/innerHTML,
@@ -2014,6 +2015,400 @@
         ctx.fill();
         ctx.restore();
       }
+      AI.drawSay(e, ctx);
+    },
+  };
+
+  // ===========================================================================
+  // Sandbox Borders: Spinlock ('spinlock' Kopf + 'spinlock_segment' Glieder)
+  // ===========================================================================
+  //
+  // Zustaende des Kopfes (state.mode):
+  //   coil     geschlossener Ring um (cx, cy), dreht sich mit params.spin; der Mittelpunkt rueckt langsam naeher
+  //            (nur wenn der Ring an der neuen Stelle Platz hat) und haelt ~140 px Abstand
+  //   rattle   Telegraph: Rassel rasselt ('enemyWindup', sound 'rattle'), Richtung steht fest, der Ring dreht den
+  //            Kopf auf die Spielerseite, gestrichelte Ziellinie + "!"
+  //   lunge    Kopf schnellt geradeaus (Kontaktschaden 2), Glieder folgen als Kette; endet an Hindernis/Zeit
+  //   recover  liegt gestreckt da (Kopf frei), dann neuer Ring hinter dem Kopf
+  // Im Ring setzt das Verhalten die Kopfposition direkt (e.static); beim Vorschnellen bewegt er sich normal
+  // (Kollision mit Felsen/Kakteen). Glieder: unverwundbar (schirmen ab), Kontaktschaden 1, ignoreForClear;
+  // stirbt der Kopf, zerfallen sie nacheinander (wie die Glieder der Infinite Loop).
+
+  const SPIN_TMP = { x: 0, y: 0 };
+
+  /** Passt ein Ring um (cx, cy) in den Raum (keine soliden Kacheln unter Mitte und Rand)? */
+  function spinRingFits(room, cx, cy, R) {
+    if (room.isSolidAt(cx, cy, 'walk', false)) return false;
+    for (let i = 0; i < 8; i++) {
+      const a = (i / 8) * TAU;
+      if (room.isSolidAt(cx + Math.cos(a) * (R + 12), cy + Math.sin(a) * (R + 12), 'walk', false)) return false;
+    }
+    return true;
+  }
+
+  /** Ringplatz k (0 = Kopf, 1.. = Glieder, gleichmaessig verteilt, hinter dem Kopf) */
+  function spinRingPoint(s, P, k, out) {
+    const a = s.theta - k * (TAU / (P.segments + 1));
+    out.x = s.cx + Math.cos(a) * P.ringR;
+    out.y = s.cy + Math.sin(a) * P.ringR;
+    return out;
+  }
+
+  /** Glieder platzieren: im Ring auf ihre Plaetze ziehen, sonst als Kette mit festem Abstand nachziehen */
+  function spinPlaceSegments(e, dt) {
+    const s = e.state, P = e.params;
+    const coiled = s.mode === 'coil' || s.mode === 'rattle';
+    let prev = e;
+    for (let i = 0; i < s.segs.length; i++) {
+      const seg = s.segs[i];
+      if (seg.dead) continue;
+      if (coiled) {
+        spinRingPoint(s, P, i + 1, SPIN_TMP);
+        const dx = SPIN_TMP.x - seg.x, dy = SPIN_TMP.y - seg.y, d = Math.hypot(dx, dy);
+        const step = Math.min(d, 700 * dt);   // beim Einrollen sichtbar, im Ring praktisch sofort
+        if (d > 0.01) { seg.x += (dx / d) * step; seg.y += (dy / d) * step; }
+      } else {
+        const dx = seg.x - prev.x, dy = seg.y - prev.y, d = Math.hypot(dx, dy);
+        if (d > P.spacing) { seg.x = prev.x + (dx / d) * P.spacing; seg.y = prev.y + (dy / d) * P.spacing; }
+      }
+      if (Math.hypot(prev.x - seg.x, prev.y - seg.y) > 0.5) seg.state.ang = Math.atan2(prev.y - seg.y, prev.x - seg.x);
+      prev = seg;
+    }
+  }
+
+  /**
+   * Koerperstueck zwischen zwei Teilen: dicke dunkle Linie von a bis zur Mitte zwischen a und b (mit Kontur).
+   * Jedes Teil zeichnet die Haelften zu seinen Nachbarn unter sein eigenes Sprite — so ergibt sich ein
+   * durchgehender Schlangenkoerper, ohne dass eine Verbindung ueber ein anderes Teil gemalt wird.
+   */
+  function spinDrawLink(ctx, a, b, alpha) {
+    if (!b || b.dead) return;
+    const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
+    ctx.save();
+    ctx.globalAlpha = alpha === undefined ? 1 : alpha;
+    ctx.lineCap = 'round';
+    for (const [col, w] of [['#1f140a', 22], ['#6b4a28', 16], ['#3a2614', 4]]) {
+      ctx.strokeStyle = col;
+      ctx.lineWidth = w;
+      ctx.beginPath();
+      ctx.moveTo(a.x, a.y);
+      ctx.lineTo(mx, my);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  B.BEHAVIORS.spinlock = {
+    init(e, game) {
+      const s = e.state, P = e.params;
+      s.mode = 'coil';
+      s.cx = e.x;
+      s.cy = e.y;
+      s.theta = game && game.rng ? game.rng.angle() : 0;
+      s.cd = game && game.rng ? game.rng.float(P.cdMin, P.cdMax) : 3;
+      s.t = 0;
+      s.dir = 0;
+      s.segs = [];
+      e.static = true;         // im Ring setzt das Verhalten die Position direkt
+      e.noKnockback = true;
+      e.noSeparate = true;
+      e.drawLayer = 1;         // Kopf ueber den Gliedern zeichnen
+      const def = B.ENEMIES.spinlock_segment;
+      if (def && game && game.room) {
+        for (let i = 0; i < P.segments; i++) {
+          const seg = new B.Enemy(def, 'spinlock_segment', e.x, e.y, game, 1);
+          seg.state.head = e;
+          seg.state.index = i;
+          seg.state.tail = i === P.segments - 1;
+          seg.spawnDelay = e.spawnDelay;
+          game.room.enemies.push(seg);
+          s.segs.push(seg);
+        }
+      }
+      spinRingPoint(s, P, 0, SPIN_TMP);
+      e.x = SPIN_TMP.x;
+      e.y = SPIN_TMP.y;
+      spinPlaceSegments(e, 1);   // Glieder sofort auf ihre Plaetze
+    },
+
+    update(e, dt, game) {
+      const s = e.state, P = e.params, p = game.player, room = game.room;
+      switch (s.mode) {
+        case 'coil': {
+          const d = Math.hypot(p.x - s.cx, p.y - s.cy);
+          if (d > 140) {
+            const dir = room.flowDir(s.cx, s.cy, p.x, p.y);
+            const nx = s.cx + dir.x * e.speed * dt, ny = s.cy + dir.y * e.speed * dt;
+            if (spinRingFits(room, nx, ny, P.ringR)) { s.cx = nx; s.cy = ny; }
+          }
+          s.theta += P.spin * dt;
+          s.cd -= dt;
+          if (s.cd <= 0 && d < 380 && room.lineOfSight(s.cx, s.cy, p.x, p.y)) {
+            s.mode = 'rattle';
+            s.t = P.rattle;
+            s.dir = Math.atan2(p.y - s.cy, p.x - s.cx);   // ab hier fest (die Ziellinie zeigt sie)
+            B.bus.emit('enemyWindup', { game, enemy: e, x: s.cx, y: s.cy, sound: 'rattle' });
+          }
+          break;
+        }
+        case 'rattle':
+          s.theta = AI.turn(s.theta, s.dir, 6 * dt);     // Kopf dreht sich auf die Spielerseite des Rings
+          s.t -= dt;
+          if (s.t <= 0) {
+            s.mode = 'lunge';
+            s.t = 0;
+            s.bumped = false;
+            e.static = false;
+            e.contactDamage = 2;                          // Vorschnellen = volles Herz (wie Charger)
+          }
+          break;
+        case 'lunge':
+          s.t += dt;
+          e.vx = Math.cos(s.dir) * P.lungeSpeed;
+          e.vy = Math.sin(s.dir) * P.lungeSpeed;
+          if (s.t >= P.lungeTime || s.bumped) {
+            s.bumped = false;
+            s.mode = 'recover';
+            s.t = P.recover;
+            AI.stop(e);
+            e.contactDamage = e.def.contactDamage;
+          }
+          break;
+        case 'recover':
+          AI.stop(e);
+          s.t -= dt;
+          if (s.t <= 0) {
+            // Neuer Ring hinter dem Kopf; passt er dort nicht, um den Kopf selbst (notfalls naechste freie Stelle)
+            let cx = e.x - Math.cos(s.dir) * P.ringR, cy = e.y - Math.sin(s.dir) * P.ringR;
+            if (!spinRingFits(room, cx, cy, P.ringR)) {
+              const q = game.nearestFreePos(e.x, e.y);
+              cx = q.x; cy = q.y;
+            }
+            s.cx = cx;
+            s.cy = cy;
+            s.theta = Math.atan2(e.y - cy, e.x - cx);
+            s.mode = 'coil';
+            s.cd = game.rng.float(P.cdMin, P.cdMax);
+            e.static = true;
+          }
+          break;
+      }
+      if (s.mode === 'coil' || s.mode === 'rattle') {
+        spinRingPoint(s, P, 0, SPIN_TMP);
+        e.x = SPIN_TMP.x;
+        e.y = SPIN_TMP.y;
+      }
+    },
+    // Glieder erst NACH der Bewegung des Kopfes nachziehen (sonst haengt die Kette beim Vorschnellen einen Frame
+    // hinterher und reisst sichtbar auf)
+    afterMove(e, dt) {
+      if (!e.dead) spinPlaceSegments(e, dt);
+    },
+
+    draw(e, ctx) {
+      const s = e.state, P = e.params;
+      if (s.mode === 'rattle') {
+        // Telegraph: gestrichelte Ziellinie ueber die volle Vorschnell-Weite, wird zum Ende hin deutlicher
+        const k = 1 - s.t / P.rattle;
+        const len = P.lungeSpeed * P.lungeTime;
+        ctx.save();
+        ctx.globalAlpha = 0.35 + 0.55 * k;
+        ctx.strokeStyle = '#ff7a5c';
+        ctx.lineWidth = 3;
+        ctx.setLineDash([10, 8]);
+        ctx.beginPath();
+        ctx.moveTo(e.x, e.y);
+        ctx.lineTo(e.x + Math.cos(s.dir) * len, e.y + Math.sin(s.dir) * len);
+        ctx.stroke();
+        ctx.restore();
+        AI.drawMark(ctx, '!', e.x, e.y - e.r - 12, e.t, '#ff4d4d', 22);
+      }
+      spinDrawLink(ctx, e, s.segs[0]);
+      // Blickrichtung: im Ring tangential, beim Rasseln nach aussen, sonst in Vorschnell-Richtung
+      const ang = s.mode === 'coil' ? s.theta + Math.PI / 2 : s.mode === 'rattle' ? s.theta : s.dir;
+      AI.drawBody(e, ctx, { rotation: ang, flipX: false, frame: s.mode === 'rattle' || s.mode === 'lunge' ? 1 : 0 });
+      AI.drawSay(e, ctx);
+    },
+  };
+
+  B.BEHAVIORS.spinlock_segment = {
+    init(e) {
+      e.static = true;
+      e.noKnockback = true;
+      e.noHpBar = true;
+      e.noSeparate = true;
+      e.ignoreForClear = true;   // nur der Kopf zaehlt fuers Clearing
+      e.invulnerable = true;     // schirmt den Kopf ab: Schuesse prallen ab (kurzes Aufblitzen)
+      e.state.ang = 0;
+    },
+    update(e, dt, game) {
+      AI.stop(e);
+      const head = e.state.head;
+      if (head && !head.dead) return;
+      // Kopf tot: nacheinander zerfallen (ohne Kill-Zaehlung, Effekte ueber den Bus)
+      e.intangible = true;
+      e.contactDamage = 0;
+      if (e.state.popIn === undefined) e.state.popIn = 0.08 * ((e.state.index || 0) + 1);
+      e.state.popIn -= dt;
+      if (e.state.popIn <= 0) {
+        e.dead = true;
+        B.bus.emit('enemyDeath', { game, enemy: e, x: e.x, y: e.y, color: e.def.color, boss: false, segment: true });
+      }
+    },
+    draw(e, ctx) {
+      const s = e.state, head = s.head;
+      const rattling = !!(s.tail && head && !head.dead && head.state.mode === 'rattle');
+      if (head) {
+        const segs = head.state.segs, i = s.index || 0;
+        const alpha = e.intangible ? 0.6 : 1;
+        spinDrawLink(ctx, e, i === 0 ? head : segs[i - 1], alpha);
+        spinDrawLink(ctx, e, segs[i + 1], alpha);
+      }
+      AI.drawBody(e, ctx, {
+        sprite: s.tail ? 'enemy_spinlock_tail' : null,
+        rotation: s.ang,
+        flipX: false,
+        dx: rattling ? Math.sin(e.t * 80) * 2.5 : 0,
+        frame: rattling ? Math.floor(e.t * 30) % 2 : 0,
+        alpha: e.intangible ? 0.6 : 1,
+      });
+    },
+  };
+
+  // ===========================================================================
+  // Sandbox Borders: Rootkit ('rootkit')
+  // ===========================================================================
+  //
+  // Zustaende: buried (Sandhuegel wandert zu einer Stelle nahe dem Spieler; unverwundbar, ohne Kontaktschaden,
+  // bewegt sich wie ein Flieger auch unter Felsen hindurch) -> tell (Huegel bebt, Zielring, "!"; 'enemyWindup'
+  // mit sound 'dig') -> up (herausgeploppt: 8er-Ring, verwundbar, Kontakt 1) -> dive (sinkt ab) -> buried.
+  // Auftauchen nur mitten auf einer freien Sandkachel. Explosion nahe am Huegel: sofort betaeubt oben
+  // (flushed, ohne Ring). 'enemyBurrow' { up } meldet Auf- und Abtauchen fuer Sand-Effekte und Sound.
+
+  const ROOTKIT_SHOT = { color: '#e0503a' };   // Ziegelrot: hebt sich vom Sand ab
+
+  function rootkitPickSpot(e, game) {
+    const p = game.player, room = game.room, P = e.params;
+    for (let i = 0; i < 24; i++) {
+      const a = game.rng.angle(), d = game.rng.float(P.nearMin, P.nearMax);
+      const c = AI.clampToRoom(p.x + Math.cos(a) * d, p.y + Math.sin(a) * d, 24);
+      const t = room.worldToTile(c.x, c.y);
+      if (room.tileAt(t.c, t.r) !== B.TILES.FLOOR) continue;
+      const tc = room.tileCenter(t.c, t.r);
+      if (Math.hypot(tc.x - p.x, tc.y - p.y) < P.nearMin * 0.75) continue;
+      return tc;
+    }
+    return room.randomFreePos(game.rng, { awayFrom: { x: p.x, y: p.y, d: 90 } });
+  }
+  function rootkitBury(e) {
+    e.intangible = true;
+    e.contactDamage = 0;
+    e.flying = true;
+    e.noShadow = true;
+    e.noHpBar = true;
+  }
+  function rootkitSurface(e, game) {
+    e.intangible = false;
+    e.contactDamage = e.def.contactDamage;
+    e.flying = false;
+    e.noShadow = false;
+    e.noHpBar = false;
+    B.bus.emit('enemyBurrow', { game, enemy: e, x: e.x, y: e.y, up: true });
+  }
+
+  B.BEHAVIORS.rootkit = {
+    init(e) {
+      rootkitBury(e);
+      e.state.mode = 'buried';
+      e.state.target = null;
+      e.state.t = 0;
+      e.state.flushed = false;
+    },
+    onExplosion(e, game, x, y, radius) {
+      const s = e.state;
+      if ((s.mode === 'buried' || s.mode === 'tell') && B.M.dist(x, y, e.x, e.y) < radius * 1.2) {
+        s.mode = 'up';
+        s.t = e.params.flushed;
+        s.flushed = true;
+        AI.stop(e);
+        rootkitSurface(e, game);
+        AI.say(e, 'flushed out!', 1.2, '#ffcf4d');
+      }
+    },
+    update(e, dt, game) {
+      const s = e.state, P = e.params, p = game.player;
+      switch (s.mode) {
+        case 'buried': {
+          // Ziel neu waehlen, wenn noch keins da ist oder der Spieler weit davon weg ist
+          if (!s.target || Math.hypot(s.target.x - p.x, s.target.y - p.y) > P.nearMax + 90) s.target = rootkitPickSpot(e, game);
+          const d = Math.hypot(s.target.x - e.x, s.target.y - e.y);
+          if (d < 6) {
+            AI.stop(e);
+            e.x = s.target.x;
+            e.y = s.target.y;
+            s.mode = 'tell';
+            s.t = P.tell;
+            B.bus.emit('enemyWindup', { game, enemy: e, x: e.x, y: e.y, sound: 'dig' });
+          } else {
+            AI.toward(e, s.target.x, s.target.y, e.speed);
+          }
+          break;
+        }
+        case 'tell':
+          AI.stop(e);
+          s.t -= dt;
+          if (s.t <= 0) {
+            s.mode = 'up';
+            s.t = P.up;
+            s.flushed = false;
+            rootkitSurface(e, game);
+            AI.ring(game, e, P.ring, AI.shotSpeed(game, P.shotSpeed), game.rng.angle(), ROOTKIT_SHOT);
+          }
+          break;
+        case 'up':
+          AI.stop(e);
+          s.t -= dt;
+          if (s.t <= 0) { s.mode = 'dive'; s.t = P.dive; }
+          break;
+        case 'dive':
+          AI.stop(e);
+          s.t -= dt;
+          if (s.t <= 0) {
+            rootkitBury(e);
+            s.mode = 'buried';
+            s.target = null;
+            B.bus.emit('enemyBurrow', { game, enemy: e, x: e.x, y: e.y, up: false });
+          }
+          break;
+      }
+    },
+    draw(e, ctx) {
+      const s = e.state, P = e.params;
+      if (s.mode === 'buried' || s.mode === 'tell') {
+        const telling = s.mode === 'tell';
+        const k = telling ? 1 - s.t / P.tell : 0;
+        if (telling) AI.drawTargetRing(ctx, e.x, e.y, 34, k, '#ff7a5c');
+        // Staubspur hinter dem wandernden Huegel (nur Optik)
+        const sp = Math.hypot(e.vx, e.vy);
+        if (sp > 5) {
+          ctx.save();
+          ctx.fillStyle = 'rgba(200,170,110,0.35)';
+          for (let i = 1; i <= 3; i++) {
+            ctx.beginPath();
+            ctx.arc(e.x - (e.vx / sp) * i * 12, e.y + 8 - (e.vy / sp) * i * 12 + Math.sin(e.t * 20 + i) * 2, 5 - i, 0, TAU);
+            ctx.fill();
+          }
+          ctx.restore();
+        }
+        const shake = telling ? Math.sin(e.t * 60) * (1.5 + 2.5 * k) : 0;
+        B.drawSprite(ctx, 'enemy_rootkit_mound', e.x + shake, e.y + 6, { frame: telling ? 1 : Math.floor(e.t * 6) % 2, alpha: e.alpha });
+        if (telling) AI.drawMark(ctx, '!', e.x, e.y - 26, e.t, '#ff4d4d', 22);
+        return;
+      }
+      // dive: sinkt ab; up: Frame 1 in den ersten 0.3 s (gerade herausgeploppt)
+      const sink = s.mode === 'dive' ? 1 - s.t / P.dive : 0;
+      B.drawSprite(ctx, 'enemy_rootkit_mound', e.x, e.y + 10, { frame: 1, alpha: e.alpha * 0.9 });
+      AI.drawBody(e, ctx, { dy: sink * 14 - 4, alpha: 1 - sink * 0.6, frame: !s.flushed && s.mode === 'up' && s.t > P.up - 0.3 ? 1 : 0 });
       AI.drawSay(e, ctx);
     },
   };

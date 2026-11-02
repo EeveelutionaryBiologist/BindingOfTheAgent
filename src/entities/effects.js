@@ -470,7 +470,30 @@
       },
       deco(e) { FX.leaves(e.game, e.x, e.y, 24, leafMix(), { speedMin: 80, speedMax: 320, lifeMin: 1.2, lifeMax: 2.2 }); },
     },
+    // Sandbox Borders: Sand spritzt und staubt statt Funken
+    sandbox: {
+      hit(e) {
+        FX.burst(e.game, e.x, e.y, '#ffffff', 2, 240, { streak: true, lifeMin: 0.08, lifeMax: 0.16, sizeMin: 3, sizeMax: 4 });
+        FX.burst(e.game, e.x, e.y, '#d9b878', 4, 160, { vary: true, lifeMin: 0.15, lifeMax: 0.35, sizeMin: 3, sizeMax: 5 });
+      },
+      death(e) {
+        FX.flash(e.game, e.x, e.y, 20, '#fff4d0', 0.08);
+        FX.burst(e.game, e.x, e.y, '#d9b878', 14, 260, { vary: true, lifeMin: 0.25, lifeMax: 0.55, drag: 5 });
+        FX.debris(e.game, e.x, e.y, 5, ['#6b4a28', '#3a2614', '#e8c88a'], 4);
+        FX.smoke(e.game, e.x, e.y, 3, 14, '#c9a46a');
+      },
+    },
   };
+
+  // Rootkit taucht auf (Sandfontaene + Ring) oder ab (Staubwolke)
+  on('enemyBurrow', (e) => {
+    if (e.up) {
+      FX.burst(e.game, e.x, e.y + 6, '#d9b878', 16, 240, { vary: true, lifeMin: 0.25, lifeMax: 0.5, drag: 4 });
+      FX.ring(e.game, e.x, e.y + 6, 40, '#e0c08a', 0.3, 4);
+    } else {
+      FX.smoke(e.game, e.x, e.y + 6, 3, 12, '#c9a46a');
+    }
+  });
 
   // Laub faellt (Stale Branch altert): Stufenwechsel = ganzer Schwall, sonst einzelne Blaetter
   on('enemyShed', (e) => {

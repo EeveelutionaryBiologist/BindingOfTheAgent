@@ -102,6 +102,7 @@
     behavior: 'orbit', params: { radiusMin: 160, radiusMax: 220, shotSpeed: 220, interval: 2.4 },
     sprite: 'enemy_deprecation_warning', color: '#f2c14e', noFlip: true,
     minFloor: 3, weight: 5, weightPerFloor: 0.3, maxWeight: 7, cost: 1.5, maxPerRoom: 3, tags: ['fly', 'ranged'],
+    themes: { sandbox: 2.5 },   // Sandbox Borders: veraltete Warnungen schwirren an der Grenze besonders gern herum
     desc: 'Will be removed in a future release. Not this one.',
   };
 
@@ -135,6 +136,7 @@
     sprite: 'enemy_hallucination', color: '#f2c14e',
     // Taucht nie ueber das normale Budget auf, sondern als Bonus-Ueberraschung (bonusChance)
     minFloor: 1, weight: 0, bonusChance: 0.1, cost: 0, maxPerRoom: 1, tags: ['fly'],
+    themes: { sandbox: 2 },     // Sandbox Borders: Fata Morgana — doppelte Bonus-Chance (Obergrenze 25 % bleibt)
     desc: 'Looked real. Was, in fact, not real.',
   };
 
@@ -258,6 +260,53 @@
   };
 
   // ---------------------------------------------------------------------------
+  // --- Sandbox Borders: Spinlock ---
+  // Eine kleine Wuestenschlange (Kopf + 4 Glieder, das letzte ist die Rassel), die als geschlossener Ring auf der
+  // Stelle kreiselt ("busy wait") und langsam naeherrueckt. Im Ring schirmen die Glieder ab (unverwundbar), nur
+  // der vorbeikreisende Kopf nimmt Schaden. Telegraph: die Rassel rasselt, der Kopf dreht sich zum Spieler, eine
+  // gestrichelte Ziellinie zeigt den Weg — dann schnellt der Kopf vor (volles Herz), die Glieder folgen als Kette.
+  // Danach liegt sie kurz gestreckt da (Kopf frei) und rollt sich wieder ein. Verhalten 'spinlock' in enemy.js.
+  // family: 'sandbox' = rein optisch/akustisch (Sand statt Funken, trockenes Knirschen).
+  E.spinlock = {
+    name: 'Spinlock', hp: 16, r: 15, speed: 35, contactDamage: 1,
+    behavior: 'spinlock', params: {
+      segments: 4,          // Glieder hinter dem Kopf (das letzte ist die Rassel)
+      ringR: 50,            // Radius des Rings (px; so ueberlappen sich die 5 Teile nicht)
+      spin: 3,              // Drehgeschwindigkeit im Ring (rad/s)
+      rattle: 0.75,         // Telegraph vor dem Vorschnellen (s)
+      lungeSpeed: 430,      // px/s
+      lungeTime: 0.7,       // maximale Dauer (~300 px)
+      recover: 0.7,         // liegt danach gestreckt da (Kopf frei)
+      spacing: 28,          // Gliederabstand in der Kette (px)
+      cdMin: 2.4, cdMax: 3.4,
+    },
+    sprite: 'enemy_spinlock', color: '#c9a466', noFlip: true,
+    minFloor: 5, weight: 6, cost: 2.5, maxPerRoom: 2, tags: ['melee', 'charge'],
+    themeOnly: ['sandbox'], family: 'sandbox',
+    desc: 'Busy-waits in a circle until you are close enough. Then it stops waiting.',
+  };
+
+  // --- Sandbox Borders: Rootkit ---
+  // Graebt sich unter dem Sand fort (ein wandernder Sandhuegel zeigt, wo er ist) und ist dort unverwundbar.
+  // Taucht nahe beim Spieler auf: Huegel bebt (Telegraph), dann ploppt er heraus und schiesst einen 8er-Ring.
+  // Kurz oben (verwundbar), dann taucht er wieder ab. Eine Bombe nahe am Huegel scheucht ihn betaeubt heraus.
+  // Verhalten 'rootkit' in enemy.js.
+  E.rootkit = {
+    name: 'Rootkit', hp: 12, r: 16, speed: 140, contactDamage: 1,
+    behavior: 'rootkit', params: {
+      tell: 0.65,           // Beben des Huegels vor dem Auftauchen (s)
+      up: 1.6,              // so lange oben und verwundbar (s)
+      dive: 0.35,           // Abtauchen (s)
+      ring: 8, shotSpeed: 170,
+      nearMin: 75, nearMax: 130,   // taucht in diesem Abstand zum Spieler auf
+      flushed: 2.0,         // von einer Bombe herausgescheucht: so lange betaeubt oben
+    },
+    sprite: 'enemy_rootkit', color: '#8a6a44', noFlip: true,
+    minFloor: 5, weight: 6, cost: 1.5, maxPerRoom: 2, tags: ['ranged'],
+    themeOnly: ['sandbox'], family: 'sandbox',
+    desc: 'Lives below the surface. Has root. Comes up only to ruin your day.',
+  };
+
   // ---------------------------------------------------------------------------
   // Minions (spawn: false) — entstehen nur durch andere Gegner oder Bosse
   // ---------------------------------------------------------------------------
@@ -282,6 +331,15 @@
     behavior: 'worm_segment', sprite: 'boss_infinite_loop_segment', color: '#3fb8c9', noFlip: true,
     spawn: false, cost: 0,
     desc: 'while (true) { suffer(); }',
+  };
+
+  // Glied des Spinlock: vom Kopf positioniert (static), im Ring unverwundbar (schirmt den Kopf ab), Kontakt 1.
+  // Das letzte Glied ist die Rassel (state.tail). Stirbt der Kopf, zerfallen die Glieder nacheinander.
+  E.spinlock_segment = {
+    name: 'Spinlock', hp: 1, r: 13, speed: 0, contactDamage: 1,
+    behavior: 'spinlock_segment', sprite: 'enemy_spinlock_body', color: '#c9a466', noFlip: true,
+    spawn: false, cost: 0, family: 'sandbox',
+    desc: 'Part of the lock. Not the part you want to hit.',
   };
 
   // Arm-Segment der Octopus Merge (Boss, Forgotten Branches): 5 pro Arm, vom Knoten positioniert (static).
