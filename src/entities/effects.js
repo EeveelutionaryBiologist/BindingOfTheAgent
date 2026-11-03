@@ -483,7 +483,34 @@
         FX.smoke(e.game, e.x, e.y, 3, 14, '#c9a46a');
       },
     },
+    // Production: Metallfunken (weiss/bernstein) statt Farbspritzern; Tod mit Stahlteilen, cyanem Ring und Rauch
+    production: {
+      hit(e) {
+        FX.burst(e.game, e.x, e.y, '#ffffff', 2, 260, { streak: true, lifeMin: 0.08, lifeMax: 0.16, sizeMin: 3, sizeMax: 4 });
+        FX.burst(e.game, e.x, e.y, '#ffd27a', 3, 300, { streak: true, lifeMin: 0.1, lifeMax: 0.22, sizeMin: 2, sizeMax: 3 });
+      },
+      death(e) {
+        FX.flash(e.game, e.x, e.y, 22, '#e8fbff', 0.08);
+        FX.burst(e.game, e.x, e.y, '#ffd27a', 12, 340, { streak: true, lifeMin: 0.15, lifeMax: 0.4 });
+        FX.debris(e.game, e.x, e.y, 7, ['#c4ccd4', '#8c959f', '#565e68', '#f2c230'], 5);
+        FX.ring(e.game, e.x, e.y, 40, '#5fe0ff', 0.3, 4);
+        FX.smoke(e.game, e.x, e.y, 3, 12, '#3a3f46');
+      },
+    },
   };
+
+  // Production: Rate Limiter gedrosselt ("429" — das Schild zeichnet er selbst): Dampf und kurzer Text
+  on('enemyThrottle', (e) => {
+    FX.smoke(e.game, e.x, e.y, 4, 14, '#9aa3ad');
+    FX.text(e.game, e.x, e.y - 50, 'Too Many Requests', '#ffcf4d');
+  });
+
+  // Port Scanner: taucht an einem Port auf (cyaner Ring, Metallspaene) oder der Port ist gefiltert (Text)
+  on('portScan', (e) => {
+    if (e.kind === 'filtered') { FX.text(e.game, e.x, e.y - 30, 'FILTERED', '#ffcf4d'); return; }
+    FX.ring(e.game, e.x, e.y, 34, '#5fe0ff', 0.3, 4);
+    FX.burst(e.game, e.x, e.y, '#9aa6b4', 6, 160, { vary: true, lifeMin: 0.15, lifeMax: 0.3 });
+  });
 
   // Rootkit taucht auf (Sandfontaene + Ring) oder ab (Staubwolke)
   on('enemyBurrow', (e) => {

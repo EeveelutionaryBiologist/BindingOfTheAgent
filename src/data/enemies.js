@@ -326,6 +326,67 @@
   };
 
   // ---------------------------------------------------------------------------
+  // Production-Familie (Etage 5): Rate Limiter und Port Scanner
+  // ---------------------------------------------------------------------------
+  // Gemeinsame Optik: helles Stahlgrau mit dunkler Kontur und Warnstreifen, Lampen/Augen und SCHUESSE in Cyan
+  // (#5fe0ff) — Rot ginge auf dem roten Industrieboden unter. Telegraphen in Cyan/Bernstein. family: 'production'
+  // = Metallfunken und Klonk-Sounds (rein optisch/akustisch, effects.js FAMILY_FX / audio.js FAMILY_SOUNDS).
+
+  // --- Production: Rate Limiter ---
+  // Ein Token-Bucket auf Beinen (Drehkreuz-Schrank mit drei Lampen = drei Tokens). Stapft auf Abstand, zielt
+  // (Lampen blinken, gestrichelte Ziellinie, "!"), feuert pro Token einen gezielten Schuss (Lampe erlischt, der
+  // Rotor klackt weiter) und ist dann "gedrosselt": Schild "429", ablaufender Retry-After-Ring, kein
+  // Kontaktschaden, keine Schuesse und er nimmt throttledMult-fachen Schaden. Danach fuellen sich die Lampen
+  // nacheinander wieder (Vorwarnung fuer die naechste Salve). Verhalten 'rate_limiter' in enemy.js.
+  // Zweite Heimat: The Context Limit (Etage 11) — dort dreht sich alles um Tokens und Limits.
+  E.rate_limiter = {
+    name: 'Rate Limiter', hp: 16, r: 18, speed: 62, contactDamage: 1,
+    behavior: 'rate_limiter', params: {
+      tokens: 3,            // Schuesse pro Fenster (= Lampen)
+      aim: 0.55,            // Telegraph vor der Salve (s)
+      gap: 0.24,            // Abstand zwischen den Schuessen einer Salve (s)
+      shotSpeed: 215,       // px/s (mit Tiefen-Skalierung max. ~247)
+      throttle: 2.1,        // "429"-Pause (s): harmlos und verwundbarer
+      throttledMult: 1.5,   // Schadensfaktor waehrend der Pause
+      refill: 0.22,         // je Lampe beim Wiederauffuellen (s)
+      walkMin: 0.9, walkMax: 1.5,   // Laufzeit zwischen zwei Salven (s, mit AI.cooldown)
+      near: 150, far: 290,  // Wunschabstand zum Spieler (px)
+    },
+    sprite: 'enemy_rate_limiter', color: '#9aa3ad', noFlip: true,
+    minFloor: 5, weight: 6, cost: 2, maxPerRoom: 2, tags: ['ranged'],
+    themeOnly: ['production', 'context'], family: 'production',
+    desc: 'Three requests per window. After that: 429, and a mandatory coffee break.',
+  };
+
+  // --- Production: Port Scanner ---
+  // Legt beim Erscheinen 4 feste Ports (Netzwerkbuchsen im Boden, Minion 'port_scanner_port') weit verteilt im
+  // Raum an — nie auf Hindernissen, Spawnpunkten, in der Raummitte oder vor Tueren — und nummeriert sie im
+  // Uhrzeigersinn aufsteigend (22 -> 80 -> 443 -> ...). In genau dieser Reihenfolge scannt er sie ab: unter dem
+  // Boden wandert er die sichtbare Scanlinie entlang (unverwundbar), der naechste Port leuchtet schon vorher auf,
+  // dann Ping + "!" — und er ploppt heraus, zielt kurz (Linie) und feuert einen 3er-Faecher. Steht der Spieler
+  // auf dem Port, ist er "FILTERED": der Scanner ueberspringt ihn (taucht also nie unter dem Spieler auf).
+  // Stirbt er, schliessen sich die Ports. Verhalten 'port_scanner' + 'scanner_port' in enemy.js.
+  E.port_scanner = {
+    name: 'Port Scanner', hp: 12, r: 15, speed: 0, contactDamage: 1,
+    behavior: 'port_scanner', params: {
+      ports: 4,             // Anzahl Ports
+      minGap: 150,          // Mindestabstand zwischen zwei Ports (px)
+      travel: 360,          // Wandergeschwindigkeit unter dem Boden (px/s)
+      tell: 0.6,            // Ping am Zielport vor dem Auftauchen (s)
+      rise: 0.18,           // Herausploppen (s)
+      aim: 0.45,            // Ziellinie vor dem Schuss (s)
+      fan: 3, spread: 0.24, shotSpeed: 205,  // 3er-Faecher, ~14 Grad Abstand
+      linger: 0.55,         // bleibt danach noch oben (s)
+      dive: 0.3,            // Abtauchen (s)
+      filterR: 52,          // Spieler naeher als das am Port -> "FILTERED"
+    },
+    sprite: 'enemy_port_scanner', color: '#6f7c8a', noFlip: true,
+    minFloor: 5, weight: 5, cost: 1.8, maxPerRoom: 1, tags: ['ranged'],
+    themeOnly: ['production'], family: 'production',
+    desc: 'Knocks on every port, in order. Politely. Repeatedly. With bullets.',
+  };
+
+  // ---------------------------------------------------------------------------
   // Minions (spawn: false) — entstehen nur durch andere Gegner oder Bosse
   // ---------------------------------------------------------------------------
 
@@ -358,6 +419,16 @@
     behavior: 'spinlock_segment', sprite: 'enemy_spinlock_body', color: '#c9a466', noFlip: true,
     spawn: false, cost: 0, family: 'sandbox',
     desc: 'Part of the lock. Not the part you want to hit.',
+  };
+
+  // Port des Port Scanners: Netzwerkbuchse im Boden (static, intangible, kein Kontaktschaden, zaehlt nicht fuers
+  // Clearing). Zeichnet sich unter allem anderen (drawLayer -1) mit Portnummer; leuchtet, wenn er als
+  // naechster gescannt wird. Stirbt der Scanner, schliesst sich der Port und verschwindet.
+  E.port_scanner_port = {
+    name: 'Port Scanner', hp: 1, r: 14, speed: 0, contactDamage: 0,
+    behavior: 'scanner_port', sprite: 'enemy_port_scanner_port', color: '#7f8892', noFlip: true,
+    spawn: false, cost: 0, family: 'production',
+    desc: 'An open port. Something is listening. Something is also knocking.',
   };
 
   // Ringteil der Nested Infinite Loop (Kopf oder Glied eines der drei Ringe): vom Boss positioniert (static),

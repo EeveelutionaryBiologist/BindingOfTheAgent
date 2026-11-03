@@ -28,9 +28,10 @@
 
   // Mindestabstand (s) zwischen zwei Wiedergaben desselben Effekts
   const RATE = { propHit: 0.05, propBreak: 0.04, shoot: 0.045, hit: 0.035, splat: 0.07, coin: 0.03, denied: 0.25, enemyDeath: 0.03, rock: 0.05, doorOpen: 0.1, doorClose: 0.1,
-    leafHit: 0.04, branchDeath: 0.03, rustle: 0.2, creak: 0.12, sandHit: 0.04, sandDeath: 0.03, rattle: 0.3, dig: 0.2, sandPop: 0.08 };
+    leafHit: 0.04, branchDeath: 0.03, rustle: 0.2, creak: 0.12, sandHit: 0.04, sandDeath: 0.03, rattle: 0.3, dig: 0.2, sandPop: 0.08,
+    clank: 0.04, scrap: 0.03, servo: 0.15, throttle: 0.2, token: 0.06, portPing: 0.15 };
   // Effekte, die bei vielen gleichzeitigen Stimmen zuerst wegfallen (dauernd feuernde Treffer/Schuesse)
-  const SPAMMY = { shoot: true, hit: true, splat: true, leafHit: true, sandHit: true };
+  const SPAMMY = { shoot: true, hit: true, splat: true, leafHit: true, sandHit: true, clank: true };
   const lastPlay = Object.create(null);
 
   const mtof = (m) => 440 * Math.pow(2, (m - 69) / 12);
@@ -185,6 +186,30 @@
     prick() {
       voice({ f: 1900, f2: 1300, dur: 0.05, type: 'square', vol: 0.05 });
       noise({ dur: 0.06, vol: 0.05, filter: 'highpass', f: 4000 });
+    },
+    // Production-Familie: metallisches "Klonk" (Treffer), Blechkrachen mit absterbendem Motor (Tod)
+    clank() {
+      voice({ f: 620 * rnd(0.94, 1.06), f2: 470, dur: 0.05, type: 'square', vol: 0.04 });
+      noise({ dur: 0.04, vol: 0.06, filter: 'highpass', f: 3500 });
+    },
+    scrap() {
+      noise({ dur: 0.22, vol: 0.12, filter: 'bandpass', f: 2600, f2: 700, q: 1.2 });
+      voice({ f: 330, f2: 55, dur: 0.38, type: 'sawtooth', vol: 0.045 });
+      voice({ f: 120, f2: 70, dur: 0.12, type: 'triangle', vol: 0.1 });
+    },
+    // Rate Limiter zielt (Familien-Windup): kurzes, steigendes Servo-Surren
+    servo() { voice({ f: 220, f2: 540, dur: 0.4, type: 'sawtooth', vol: 0.03, lin: true, vib: 30, vibDepth: 8 }); },
+    // Rate Limiter "429": fallender Doppel-Summton, wie ein abgelehnter Request
+    throttle() {
+      voice({ f: 330, f2: 300, dur: 0.12, type: 'square', vol: 0.05 });
+      voice({ f: 247, f2: 220, dur: 0.22, type: 'square', vol: 0.05, delay: 0.13 });
+    },
+    // Rate Limiter bekommt ein Token zurueck: kurzes, helles Blip
+    token() { voice({ f: 1320, f2: 1480, dur: 0.05, type: 'triangle', vol: 0.05 }); },
+    // Port Scanner pingt den naechsten Port an: Sonar-Ping mit leisem Echo
+    portPing() {
+      voice({ f: 1760, f2: 1700, dur: 0.25, type: 'sine', vol: 0.06 });
+      voice({ f: 1760, f2: 1700, dur: 0.18, type: 'sine', vol: 0.025, delay: 0.16 });
     },
     // Orphan Commit gefangen: kleines, freundliches Arpeggio nach oben
     rescue() { arp([72, 76, 79, 84], 0.05, 'triangle', 0.07); },
@@ -494,6 +519,7 @@
   const FAMILY_SOUNDS = {
     branches: { hit: 'leafHit', death: 'branchDeath', windup: 'creak' },
     sandbox: { hit: 'sandHit', death: 'sandDeath' },
+    production: { hit: 'clank', death: 'scrap', windup: 'servo' },
   };
   const famSound = (e, kind) => {
     const fam = e && e.enemy && e.enemy.def && FAMILY_SOUNDS[e.enemy.def.family];
@@ -512,6 +538,8 @@
   on('enemyShed', (e) => { if (e.big) p('rustle'); });  // Stale Branch verliert sein Laub
   on('enemyWindup', (e) => { const n = e.sound || famSound(e, 'windup'); if (n) p(n); });   // e.sound: eigener Warnton
   on('enemyBurrow', (e) => { if (e.up) p('sandPop'); });
+  on('enemyThrottle', () => p('throttle'));                         // Rate Limiter: "429"
+  on('portScan', (e) => { if (e.kind === 'filtered') p('denied'); });  // Port Scanner: Port gefiltert
   on('orphanCaught', () => p('rescue'));
   on('bossMerge', () => p('merge'));
   on('enemyVanish', () => p('gcSweep'));

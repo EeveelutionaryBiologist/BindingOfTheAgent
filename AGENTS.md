@@ -107,6 +107,14 @@ Live state is under `BOTA.game` (`.player`, `.room`, `.floor`, `.depth`, `.state
   after its telegraph with a ring of 8 shots, and a bomb flushes it out without the ring;
 - the **Rogue Agent** never rolls before floor 7, keeps its distance, and every volley (two 3-shot fans or three
   single shots) comes after its green glow at 165–260 px/s;
+- the Production family (floors 1–7: only on Production; cyan shots at 165–260 px/s): the **Rate Limiter** fires
+  exactly 3 shots per burst, only after its aim telegraph, one lamp going dark per shot; then its "429" pause lasts
+  the full window, is harmless and takes 1.5× damage, and the lamps refill one at a time before the next burst;
+  the **Port Scanner**'s ports never sit on obstacles, spawn points, the centre or door fronts, keep their minimum
+  gap and are numbered upwards clockwise (checked on 12 floors' worth of rooms); it surfaces exactly on the ports in
+  that fixed order, each time after its ping, fires its fan only after the aim line, is untouchable while
+  underground, skips a port the player stands on ("FILTERED"), leaves no ports after death or `killAll`, and
+  turns into a turret if its ports are gone;
 - the **Nested Infinite Loop** replaces the Infinite Loop from floor 8 (never before, and the Loop never after); it has
   rings of 14 / 9 / 5 parts, only the outermost living ring fires and can be hit, the rings break at 50 % and
   16.67 % (one `bossPhase` each), its shots stay at 165–260 px/s, its parts stay inside the room, and it dies once
@@ -333,6 +341,7 @@ The previous floor's boss is excluded, and bosses already met count `weight · t
   - **Optional flags:** `intangible, invulnerable, static, noKnockback, ignoreForClear, noHpBar, noSeparate`.
   - **Damage forwarding:** `proxy` / `proxyMult` pass damage to another enemy (worm segments → head).
   - **Area damage:** `aoeDedupe` makes sourceless damage count once per tick.
+  - **Damage taken:** `damageTakenMult` (optional) multiplies every hit (Rate Limiter: 1.5 during its "429" pause).
   - **Speech:** `sayText`.
   - **Scaling:** HP grows ×(1 + 0.15·(depth−1)).
   - **Helpers in `B.AI`:** movement (`toward, pathToward, wander, stop, turn, clampToRoom, findSpot`), shooting
@@ -393,7 +402,7 @@ The previous floor's boss is excluded, and bosses already met count `weight · t
     `prop_{crate,bush,package,carton}` (frame 1 = damaged)
   - `item_<id>`, `pickup_<type>`, `pedestal`, `trapdoor`, `bomb`, `familiar_duck`, `orbital_test`
   - `enemy_<id>`, `boss_<id>`
-- **Count:** about 117 sprites. All of them are original pixel art written as ASCII in code.
+- **Count:** about 155 sprites. All of them are original pixel art written as ASCII in code.
 
 ### 3.11 Event bus (who emits → who listens)
 Payloads usually include `game, x, y` and often `color`.
@@ -403,8 +412,10 @@ Payloads usually include `game, x, y` and often `color`.
 | `shoot`, `familiarShoot` | player, familiar | audio |
 | `enemyHit`, `enemyDeath` (`boss`, `segment`) | enemy | audio, effects |
 | `enemyReveal`, `enemyRevive` | enemy behaviours | audio, effects |
-| `enemyShed` (`colors, count, big`), `enemyWindup` (`sound`?) | Stale Branch, Spinlock, Rootkit | audio (`rustle`; windup: `sound` if given, else the family's), effects (falling leaves) |
+| `enemyShed` (`colors, count, big`), `enemyWindup` (`sound`?) | Stale Branch, Spinlock, Rootkit, Rate Limiter (`token`), Port Scanner (`portPing`) | audio (`rustle`; windup: `sound` if given, else the family's), effects (falling leaves) |
 | `enemyBurrow` (`up`) | Rootkit | audio (`sandPop`), effects (sand fountain / dust) |
+| `enemyThrottle` | Rate Limiter (enters its "429" pause) | audio (`throttle`), effects (steam, "Too Many Requests") |
+| `portScan` (`kind`: open/filtered) | Port Scanner | audio (`denied` when filtered), effects (cyan ring / "FILTERED") |
 | `orphanCaught` (`count`), `enemyVanish` (`color, text`) | Orphan Commit | audio (`rescue`, `gcSweep`), effects (sparkles / puff and text) |
 | `hudGlitch` (`kind`) | game (`glitchHud`) | audio |
 | `pipeAppear`, `pipeWarp`, `pipeArrive` (`to`) | game | audio, effects |
@@ -423,7 +434,7 @@ Rule: audio and effects **only listen**. Game logic never calls them directly, e
 are game state.
 
 ### 3.12 Audio (`core/audio.js`) and effects (`entities/effects.js`)
-- **Audio:** 48 synthesized SFX in total. Every sound has a name; `audio.names()` lists them.
+- **Audio:** 54 synthesized SFX in total. Every sound has a name; `audio.names()` lists them.
   - Bus routing: voices → sfx/music bus → master → compressor.
   - Per-name rate limits (`RATE`) and a 40-voice cap keep it from getting noisy.
   - There is a procedural chiptune loop per floor plus a boss variant. Mute is persisted in storage; there's no
@@ -432,7 +443,8 @@ are game state.
 - **Effects:** use `B.FX.burst / ring / flash / smoke / debris / sparkles / text / shimmer / tint / leaves / later(game, delay, fn)`.
 - **Enemy families:** an enemy def with `family: 'branches'` gets leafy hit/death effects (`FAMILY_FX` in `effects.js`)
   and sounds (`FAMILY_SOUNDS` in `audio.js`: `leafHit`, `branchDeath`, plus `creak` on windup) instead of the
-  defaults; `family: 'sandbox'` gets sand bursts and dry crunches (`sandHit`, `sandDeath`). It's purely
+  defaults; `family: 'sandbox'` gets sand bursts and dry crunches (`sandHit`, `sandDeath`); `family: 'production'`
+  gets metal sparks and steel debris (`clank`, `scrap`, plus `servo` on windup). It's purely
   presentational; a new family needs an entry in both tables.
   Each room holds at most 300 effects; "important" ones (text, rings, flashes) push out the oldest particles.
   Effects use `Math.random` only.
@@ -481,6 +493,8 @@ Item conventions:
 | orphan_commit | orphan | 3, Forgotten Branches only | 6 (bonus spawn, harmless) |
 | spinlock | spinlock (+ 4 `spinlock_segment`) | Sandbox Borders only | 16 |
 | rootkit | rootkit | Sandbox Borders only | 12 |
+| rate_limiter | rate_limiter | 5, Production and The Context Limit only | 16 |
+| port_scanner | port_scanner (+ 4 `port_scanner_port`) | 5, Production only | 12 (max 1 per room) |
 
 The **Rogue Agent** (floor 7+, "outside the box") reuses the Rogue Agent Swarm's four sprites (one per agent, picked
 with `game.rng`) and its green shots. It strafes at 200–320 px and cuts inward for 0.5 s after bumping into
@@ -497,8 +511,26 @@ Rootkit. On that floor Deprecation Warnings also weigh ×2.5 and the Hallucinati
 with a strong outline and fire non-sand colours (brick red), because the sand is the one mid-bright floor.
 The Spinlock places its body segments in `afterMove`, after its head has moved, so the chain never lags a frame.
 
+The **Production family** (`family: 'production'`, since 2026-11-03) is the Rate Limiter (weight 6, cost 2, max 2;
+`themeOnly: ['production', 'context']`, because The Context Limit is all about tokens and limits) and the Port
+Scanner (weight 5, cost 1.8, max 1; `themeOnly: ['production']`). Production's floor is dark and red, so the family
+is light steel with a dark outline, and its shots and telegraph lines are **cyan** (`#5fe0ff`); amber marks warnings.
+- **Rate Limiter:** a token bucket on legs (a turnstile cabinet whose three lamps are its tokens). It keeps 150–290 px
+  away, aims for 0.55 s (lamps blink, a dashed line follows you, "!"), then fires one aimed shot per token, 0.24 s
+  apart (each lamp goes dark, the rotor clicks on). Then it is throttled: a "429" sign and a draining Retry-After ring
+  for 2.1 s, no contact damage, no shots and 1.5× damage taken (`damageTakenMult`). The lamps refill one by one
+  (0.22 s each, the warning for the next burst).
+- **Port Scanner:** on spawn it places 4 ports (floor sockets, `port_scanner_port`) at least 150 px apart, never on
+  obstacles, spawn points, the centre or a door front, and numbers them upwards clockwise (22 → 80 → 443 …). It
+  scans them in that fixed order: underground (untouchable) it follows a visible dashed scan line, the target port
+  lights up, pings for 0.6 s ("!"), then it pops out, shows an aim line for 0.45 s, fires a 3-shot fan and dives
+  again. A port the player stands on is "FILTERED" and skipped, so it never surfaces under you. Unlike the Rootkit,
+  it never comes to you: the ports are fixed and you can pre-aim at the next one. Its ports close when it dies;
+  without ports it stays up as a turret.
+
 Minions (`spawn: false`): `leaklet`, `microservice`, `loop_segment`, `nested_loop_part`, `detached_head_tag` (Detached HEAD's head),
-`octo_arm` (Octopus Merge arm segment), `spinlock_segment` (Spinlock body; invulnerable, shields the head).
+`octo_arm` (Octopus Merge arm segment), `spinlock_segment` (Spinlock body; invulnerable, shields the head),
+`port_scanner_port` (Port Scanner's port; intangible floor socket, doesn't count for clearing).
 
 Room spawning (`rollRoomEnemies`) works on a **budget**:
 - Each enemy has a `cost`. The budget is `min(11, 2.4 + 0.9·depth + rand(0..1.5))`, and a room starts with at most
@@ -690,6 +722,6 @@ work again, the same file-ownership split works well.
   - **More Sandbox Borders enemies** (brainstorm 2026-11-02, not built yet): **Dry Run** (a translucent ghost copy
     performs every attack first, then the real one repeats it exactly — a built-in telegraph), **Stack Trace**
     (scorpion whose segmented tail stings at range after a target line), **Rolling Release** (tumbleweed that bounces
-    off walls like Friday Deploy, a little faster after every bounce), **Rate Limiter** (walking cactus: three spine
-    shots, then a "429" bubble and a forced pause), **Honeypot** (antlion funnel that pulls you toward its jaws),
-    **Dust Daemon** (whirlwind that bends your shots), **Port Scanner** (pops out of fixed holes in sequence).
+    off walls like Friday Deploy, a little faster after every bounce), **Honeypot** (antlion funnel that pulls you
+    toward its jaws), **Dust Daemon** (whirlwind that bends your shots). ~~Rate Limiter~~ and ~~Port Scanner~~: done
+    2026-11-03, reworked for Production instead (§4, Production family).

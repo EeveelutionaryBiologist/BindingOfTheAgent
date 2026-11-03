@@ -59,12 +59,24 @@ sand bursts and dry crunching sounds when hit.
 | ![Spinlock](images/enemy_spinlock.png) | **Spinlock** `spinlock` | 6 (Sandbox Borders only) | 16 | A desert snake coiled into a spinning ring that slowly creeps closer ("busy wait"). Its body blocks your shots; only the head can be hurt as it spins past. Then the rattle sounds, the head turns toward you and a dashed line shows its path, and it lunges along that line for a full heart. Afterwards it lies stretched out for a moment (head exposed) and coils up again. Max 2 per room | Busy-waits in a circle until you are close enough. Then it stops waiting. |
 | ![Rootkit](images/enemy_rootkit.png) | **Rootkit** `rootkit` | 6 (Sandbox Borders only) | 12 | Travels under the sand (a moving mound, even under rocks) and can't be hurt there. Surfaces near you after a warning (the mound shakes, a target ring and "!" appear), popping out with a ring of 8 shots; stays up and hittable for 1.6 s, then dives again. A bomb near the mound flushes it out, stunned for 2 s and without the ring. Max 2 per room | Lives below the surface. Has root. Comes up only to ruin your day. |
 
+### Production family
+
+These appear on Production floors (the Rate Limiter also on The Context Limit). Light steel bodies with a dark
+outline and hazard stripes; their shots and aim lines are cyan so they stand out on the red factory floor. Metal
+sparks and clanks when hit.
+
+| | Name | First floor | HP | Behaviour | Flavour text |
+|---|---|---|---|---|---|
+| ![Rate Limiter](images/enemy_rate_limiter.png) | **Rate Limiter** `rate_limiter` | 5 (Production and The Context Limit only) | 16 | A token bucket on legs: its three lamps are its tokens. Keeps its distance, then aims (lamps blink, a dashed line follows you, "!") and fires one aimed shot per token; each lamp goes dark and the turnstile rotor clicks on. With the bucket empty it is throttled for 2 s: a "429" sign and a draining ring, no contact damage, no shots, and it takes 50 % more damage. Then the lamps light up again one by one: the warning for the next burst. Max 2 per room | Three requests per window. After that: 429, and a mandatory coffee break. |
+| ![Port Scanner](images/enemy_port_scanner.png) | **Port Scanner** `port_scanner` | 5 (Production only) | 12 | Opens 4 numbered ports (floor sockets) spread around the room and scans them in a fixed order, clockwise with rising port numbers. Underground it can't be hurt; a dashed scan line shows where it goes next and the target port lights up and pings. Then it pops out, shows an aim line and fires a fan of 3 shots before diving again. Stand on the next port and it is "FILTERED": the scanner skips it. Its ports close when it dies. Max 1 per room | Knocks on every port, in order. Politely. Repeatedly. With bullets. |
+
 ### Minions
 
 These are only spawned by other enemies or bosses.
 
 | | Name | Spawned by | HP | Behaviour | Flavour text |
 |---|---|---|---|---|---|
+| ![Port](images/enemy_port_scanner_port.png) | **Port** `port_scanner_port` | Port Scanner (4 per scanner) | — | A floor socket with its port number. Harmless and can't be hit; it lights up when the scanner is about to surface there. Doesn't count for clearing the room | An open port. Something is listening. Something is also knocking. |
 | ![Leaklet](images/enemy_leaklet.png) | **Leaklet** `leaklet` | Memory Leak (on death) | 4 | Chases you | A smaller leak. Still not freed. |
 | ![Spinlock body](images/enemy_spinlock_body.png) | **Spinlock body** `spinlock_segment` | Spinlock (4 per snake) | — | Part of the snake; blocks shots and hurts on contact; the last one is the rattle. Falls apart when the head dies | Part of the lock. Not the part you want to hit. |
 | ![Octopus Merge arm tip](images/boss_octopus_merge_tip.png) | **Arm segment** `octo_arm` | Octopus Merge (8 arms of 5) | — | Part of an arm; only the tip (a commit dot) is visible and fires. Damage goes to the knot's HP at 60 %. Doesn't count for clearing the room | One of eight branches. Soon to be one of seven. |
