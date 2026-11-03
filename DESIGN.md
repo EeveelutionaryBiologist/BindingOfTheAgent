@@ -438,6 +438,9 @@ All milestones done. What shipped, compared with this doc:
   on floor 16, and the floor families and the Octopus Merge turn up anywhere. From floor 8, 1–2 combat rooms per floor
   are side quests: Monolith, Stakeholder, Infinite Loop or Rogue Agent Swarm at half the floor-boss HP, without intro or
   trapdoor. Details in AGENTS.md §3.6 and §4.
+- **Dependency Hell family (2026-11-03):** the Honeypot (a static jar whose funnel pulls you toward its jaws, then
+  bites) and the Rolling Release (a bundle of packages that bounces faster after every bump until a "Breaking Change"
+  leaves it unpacked and vulnerable); see AGENTS.md §4.
 
 ## 14. Stretch goals
 Gamepad support · procedural chiptune loop · seed entry on the title screen · trinkets · curse rooms

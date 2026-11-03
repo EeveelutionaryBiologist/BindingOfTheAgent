@@ -35,7 +35,8 @@
  * cherry (Cherry-Pick), orphan (Orphan Commit). stale, detached_*, cherry und orphan gehoeren zur
  * Forgotten-Branches-Familie; spinlock + spinlock_segment (Spinlock) und rootkit (Rootkit) zur Sandbox-Borders-Familie;
  * rogue_agent (einzelnes Swarm-Mitglied, ab Etage 7); dust_daemon (Dust Daemon, Sandbox Borders, lenkt Schuesse
- * ab); dry_run (Dry Run, The Training Data: Geist probt, Koerper wiederholt exakt).
+ * ab); dry_run (Dry Run, The Training Data: Geist probt, Koerper wiederholt exakt); stack_trace (Stack Trace,
+ * Legacy Codebase); honeypot (Honeypot) und rolling_release (Rolling Release) zur Dependency-Hell-Familie.
  * Boss-Verhalten (und das Wurm-Segment) stehen in entities/boss.js.
  *
  * Zusaetzliche Bus-Events (nur informativ, z. B. fuer Sound/Effekte): 'enemyRevive' (Zombie steht auf),
@@ -43,7 +44,9 @@
  * 'enemyWindup' (Stale Branch zittert vor dem Sprung), 'orphanCaught' (Orphan Commit gefangen: { count }),
  * 'enemyVanish' (Gegner verschwindet ohne Tod, z. B. Garbage Collection: { color, text }), 'enemyBurrow'
  * (Rootkit taucht auf/ab: { up }); 'enemyWindup' darf { sound } tragen (Rassel, Graben, Wirbel 'gust',
- * Probe 'rehearse' / Ernstfall 'replay'); aus boss.js: 'bossPhase', 'bossStomp', 'bossBounce'.
+ * Probe 'rehearse' / Ernstfall 'replay'); 'enemyChomp' (Honeypot schnappt zu: { r, ate: null|'you'|'enemy'|'push' }),
+ * 'enemyBounce' (Rolling Release prallt ab), 'enemyUnpack' (Rolling Release platzt auf); aus boss.js: 'bossPhase',
+ * 'bossStomp', 'bossBounce'.
  * 'enemyDeath' kann zusaetzlich { segment: true } tragen (platzende Wurm-Segmente, ohne Kill-Zaehlung).
  *
  * SICHERHEIT: reine Spiellogik, kein DOM-Zugriff (ausser Canvas-Zeichnen), kein eval/innerHTML,
@@ -3279,6 +3282,411 @@
       });
       if (!out) drawTorso();
       if (s.mode === 'trace' && s.t >= P.track) AI.drawMark(ctx, '!', e.x, pts[n].y - 16, e.t, '#ff4d4d', 22);
+      AI.drawSay(e, ctx);
+    },
+  };
+
+  // ===========================================================================
+  // Dependency Hell: Honeypot ('honeypot') und Rolling Release ('rolling_release')
+  // ===========================================================================
+  // Familie 'dephell'. Gefahren-Farbe ist Cyan: auf dem orange-braunen Glut-Boden von Dependency Hell gehen Rot und
+  // Orange unter, Cyan ist die Komplementaerfarbe. Linien bekommen zusaetzlich eine dunkle Unterlage, damit sie auch
+  // auf hellen oder blaeulichen Boeden anderer Etagen (ab Etage 8 tauchen Themen-Gegner ueberall auf) lesbar bleiben.
+
+  const DEP_WARN = '#56e3ff';                 // Telegraphen, Trichter, Kiefer-Warnung
+  const DEP_UNDER = 'rgba(6,16,22,0.55)';     // dunkle Unterlage fuer Linien
+  const DEP_SHOT = { color: '#8ff0ff', r: 8 }; // Verpackungschips (Rolling Release)
+
+  /** Linie/Pfad doppelt zeichnen: dunkle, breite Unterlage + farbige Linie (lesbar auf jedem Boden) */
+  function depStroke(ctx, pathFn, color, width, alpha) {
+    ctx.save();
+    ctx.globalAlpha = B.M.clamp(alpha, 0, 1);
+    ctx.lineCap = 'round';
+    ctx.strokeStyle = DEP_UNDER;
+    ctx.lineWidth = width + 4;
+    ctx.beginPath(); pathFn(); ctx.stroke();
+    ctx.strokeStyle = color;
+    ctx.lineWidth = width;
+    ctx.beginPath(); pathFn(); ctx.stroke();
+    ctx.restore();
+  }
+
+  // ---------------------------------------------------------------------------
+  // Honeypot
+  // ---------------------------------------------------------------------------
+  //
+  // Zustaende (state.mode):
+  //   idle   Deckel zu, Trichterrand schwach sichtbar (der Spieler kennt den Radius immer); Pause idleMin..idleMax
+  //   tell   Deckel springt auf, Rand leuchtet, "!" ('enemyWindup', sound 'slurp') — noch KEIN Sog
+  //   pull   Sog: Laeufer im Trichter (Spieler, andere Gegner) und Bomben werden zur Mitte gezogen. Die letzten
+  //          biteTell Sekunden: Kiefer-Warnung (Zielring im Maul-Bereich, 'enemyWindup' sound 'gnash')
+  //   chew   nach dem Zuschnappen ('enemyChomp'): kauen, kein Sog
+  // Sog-Regeln (fair und entkommbar): Staerke linear von pullEdge (Rand) bis pullCore (Mitte), fuer den Spieler hart
+  // gedeckelt auf pullCap * seine aktuelle Hoechstgeschwindigkeit (auch mit Tempo-Malus kommt man heraus). Der Sog
+  // verschiebt nur die Position und loest danach die Kacheln auf: niemand wird in Gruben, Felsen oder Waende gezogen.
+  // Flieger (fliegender Spieler, fliegende Gegner) schweben ueber dem Trichter und werden nicht gezogen. Bosse,
+  // statische und koerperlose Gegner auch nicht, ebenso alles mit noKnockback (z. B. ein rollender Rolling Release
+  // oder ein sprintender Merge Conflict: zu schwer fuer den Sog — gebissen werden sie im Maul trotzdem). Zuschnappen: Spieler im Maul = volles Herz (biteDamage), andere
+  // Gegner im Maul = enemyBite Schaden, Bomben im Maul zuenden sofort ("npm install push").
+  // Gezeichnet auf drawLayer -1 (unter allen anderen Figuren), weil der Trichter Teil des Bodens ist.
+
+  /** Sog-Staerke (px/s) im Abstand d zur Mitte; 0 ausserhalb des Trichters; cap = harte Obergrenze */
+  function honeyPullAt(P, d, cap) {
+    if (d >= P.radius) return 0;
+    const k = 1 - d / P.radius;               // 0 am Rand, 1 in der Mitte
+    return Math.min(cap, P.pullEdge + (P.pullCore - P.pullEdge) * k);
+  }
+  /** Obergrenze des Sogs fuer den Spieler (px/s): Anteil seiner aktuellen Hoechstgeschwindigkeit (240 * speed) */
+  function honeyCap(P, p) {
+    return P.pullCap * 240 * ((p && p.stats && p.stats.speed) || 1);
+  }
+  /** Figur um bis zu amount px Richtung (cx, cy) ziehen (nie ueber die Mitte hinaus), dann Kacheln aufloesen */
+  function honeyDrag(ent, cx, cy, amount, room) {
+    const dx = cx - ent.x, dy = cy - ent.y, d = Math.hypot(dx, dy);
+    if (d < 2 || amount <= 0) return;
+    const step = Math.min(amount, d - 1);
+    ent.x += (dx / d) * step;
+    ent.y += (dy / d) * step;
+    ent.resolveTiles(room, ent.flying ? 'fly' : 'walk');
+  }
+  /** Wird dieser Gegner vom Honeypot gezogen/gebissen? (keine Bosse, Flieger, statischen oder Geister) */
+  function honeyAffects(e, o) {
+    return o !== e && !o.dead && !o.isBoss && !o.static && !o.intangible && o.id !== 'honeypot';
+  }
+
+  /** Zuschnappen: alles im Maul-Bereich trifft es */
+  function honeySnap(e, game) {
+    const P = e.params, p = game.player, room = game.room;
+    let ate = null;
+    if (p && !p.dead && Math.hypot(p.x - e.x, p.y - e.y) < P.jawR + p.r * 0.5) {
+      if (p.hurt(P.biteDamage, e.def.name, game)) {
+        p.knockback(p.x - e.x || 1, p.y - e.y, 420);   // ausspucken
+        ate = 'you';
+      }
+    }
+    for (const o of room.enemies.slice()) {
+      if (!honeyAffects(e, o) || o.flying) continue;
+      if (Math.hypot(o.x - e.x, o.y - e.y) < P.jawR + o.r * 0.5) {
+        o.hurt(P.enemyBite, game, null);
+        if (!ate) ate = 'enemy';
+      }
+    }
+    for (const b of room.projectiles) {
+      if (b instanceof B.Bomb && !b.dead && Math.hypot(b.x - e.x, b.y - e.y) < P.jawR) { b.fuse = 0; ate = 'push'; }
+    }
+    if (ate === 'you') AI.say(e, 'npm install you', 1.2, DEP_WARN);
+    else if (ate === 'push') AI.say(e, 'npm install push?!', 1.2, '#ffcf4d');
+    else if (ate === 'enemy') AI.say(e, 'dependency resolved', 1.2, '#f3ece6');
+    B.bus.emit('enemyChomp', { game, enemy: e, x: e.x, y: e.y, r: P.jawR, ate });
+  }
+
+  B.BEHAVIORS.honeypot = {
+    init(e, game) {
+      e.static = true;
+      e.noKnockback = true;
+      e.noShadow = true;           // eigener dunkler Trichterkern statt Schatten
+      e.drawLayer = -1;            // Trichter ist Boden: unter allen anderen Figuren
+      e.state.mode = 'idle';
+      e.state.t = game && game.rng ? game.rng.float(e.params.idleMin, e.params.idleMax) : 1.8;
+      e.state.spin = 0;            // Drehwinkel der Trichter-Spirale (nur Optik)
+      e.state.pullK = 0;           // 0..1 Sichtbarkeit des Sogs (Ein-/Ausblenden, nur Optik)
+    },
+
+    update(e, dt, game) {
+      const s = e.state, P = e.params, p = game.player, room = game.room;
+      s.t -= dt;
+      const pulling = s.mode === 'pull';
+      s.pullK = B.M.approach(s.pullK, pulling ? 1 : 0, dt * 4);
+      s.spin += dt * (pulling ? 3.2 : s.mode === 'tell' ? 1.6 : 0.35);
+      switch (s.mode) {
+        case 'idle':
+          if (s.t <= 0) {
+            s.mode = 'tell';
+            s.t = P.tell;
+            B.bus.emit('enemyWindup', { game, enemy: e, x: e.x, y: e.y, sound: 'slurp' });
+          }
+          break;
+        case 'tell':
+          if (s.t <= 0) { s.mode = 'pull'; s.t = P.pull; s.warned = false; }
+          break;
+        case 'pull': {
+          // Spieler (nicht fliegend)
+          if (p && !p.dead && !p.flying) {
+            const d = Math.hypot(p.x - e.x, p.y - e.y);
+            honeyDrag(p, e.x, e.y, honeyPullAt(P, d, honeyCap(P, p)) * dt, room);
+          }
+          // Andere laufende Gegner (schwaecher) — man kann sie dem Honeypot zum Frass vorwerfen
+          for (const o of room.enemies) {
+            if (!honeyAffects(e, o) || o.flying || o.noKnockback) continue;   // schwere/rollende Gegner: kein Sog
+            const d = Math.hypot(o.x - e.x, o.y - e.y);
+            honeyDrag(o, e.x, e.y, honeyPullAt(P, d, Infinity) * P.enemyPull * dt, room);
+          }
+          // Bomben rutschen ebenfalls hinein
+          for (const b of room.projectiles) {
+            if (!(b instanceof B.Bomb) || b.dead) continue;
+            const d = Math.hypot(b.x - e.x, b.y - e.y);
+            honeyDrag(b, e.x, e.y, honeyPullAt(P, d, Infinity) * dt, room);
+          }
+          if (!s.warned && s.t <= P.biteTell) {
+            s.warned = true;
+            B.bus.emit('enemyWindup', { game, enemy: e, x: e.x, y: e.y, sound: 'gnash' });
+          }
+          if (s.t <= 0) {
+            honeySnap(e, game);
+            s.mode = 'chew';
+            s.t = P.chew;
+          }
+          break;
+        }
+        case 'chew':
+          if (s.t <= 0) { s.mode = 'idle'; s.t = game.rng.float(P.idleMin, P.idleMax); }
+          break;
+      }
+    },
+
+    draw(e, ctx) {
+      const s = e.state, P = e.params;
+      const R = P.radius;
+      const lit = s.mode === 'tell' ? 0.5 + 0.5 * (1 - s.t / P.tell) : s.mode === 'pull' ? 1 : 0;
+      const appear = e.spawnDelay > 0 ? 1 - e.spawnDelay / 0.5 : 1;
+      // 1) Trichter: dunkler Kern, Spiral-Arme aus "Abhaengigkeits-Linien", gestrichelter Rand (immer sichtbar)
+      ctx.save();
+      ctx.globalAlpha = appear;
+      const grd = ctx.createRadialGradient(e.x, e.y, 6, e.x, e.y, R);
+      grd.addColorStop(0, 'rgba(0,0,0,0.55)');
+      grd.addColorStop(0.35, 'rgba(0,0,0,0.25)');
+      grd.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.fillStyle = grd;
+      ctx.beginPath(); ctx.arc(e.x, e.y, R, 0, TAU); ctx.fill();
+      ctx.restore();
+      const arms = 5;
+      depStroke(ctx, () => {
+        for (let i = 0; i < arms; i++) {
+          const a0 = s.spin + (i * TAU) / arms;
+          for (let k = 0; k <= 14; k++) {
+            const f = k / 14;                       // 0 = Rand, 1 = Mitte
+            const rr = R * (1 - f) + 22 * f;
+            const a = a0 + f * 2.4;                 // Spirale dreht sich zur Mitte hin ein
+            const x = e.x + Math.cos(a) * rr, y = e.y + Math.sin(a) * rr;
+            if (k === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+          }
+        }
+      }, DEP_WARN, 2, appear * (0.16 + 0.5 * lit));
+      // Rand: gestrichelter Kreis — ruhig blass, beim Aufspringen/Sog hell und dicker
+      ctx.save();
+      ctx.setLineDash([12, 10]);
+      ctx.lineDashOffset = -s.spin * 20;
+      depStroke(ctx, () => ctx.arc(e.x, e.y, R, 0, TAU), DEP_WARN, 2 + lit, appear * (0.3 + 0.55 * lit));
+      ctx.restore();
+      // Hineinrutschende "Pakete" (kleine Quadrate auf den Spiralen; deterministisch aus der Zeit, nur Optik)
+      if (s.pullK > 0.05) {
+        ctx.save();
+        ctx.globalAlpha = s.pullK * 0.9;
+        for (let i = 0; i < 8; i++) {
+          const f = ((e.t * 0.55 + i / 8) % 1);     // 0 = Rand -> 1 = Mitte
+          const a = s.spin + i * 2.1 + f * 2.4;
+          const rr = R * (1 - f) + 22 * f;
+          const x = e.x + Math.cos(a) * rr, y = e.y + Math.sin(a) * rr, sz = 14 * (1 - f * 0.6);
+          ctx.fillStyle = '#1a0f08';
+          ctx.fillRect(x - sz / 2 - 1, y - sz / 2 - 1, sz + 2, sz + 2);
+          ctx.fillStyle = i % 2 ? '#c98a4a' : '#e8c88a';
+          ctx.fillRect(x - sz / 2, y - sz / 2, sz, sz);
+        }
+        ctx.restore();
+      }
+      // 2) Kiefer-Warnung (letzte biteTell s des Sogs): Zielring im Maul-Bereich, dazu "!"
+      const biting = s.mode === 'pull' && s.t <= P.biteTell;
+      if (biting) AI.drawTargetRing(ctx, e.x, e.y + 4, P.jawR, 1 - s.t / P.biteTell, DEP_WARN);
+      else if (s.mode !== 'chew') {
+        // ruhig: Maul-Bereich als duenner Kreis andeuten
+        ctx.save();
+        ctx.globalAlpha = appear * (0.25 + 0.3 * lit);
+        ctx.strokeStyle = DEP_WARN;
+        ctx.lineWidth = 1.5;
+        ctx.beginPath(); ctx.ellipse(e.x, e.y + 4, P.jawR, P.jawR * 0.45, 0, 0, TAU); ctx.stroke();
+        ctx.restore();
+      }
+      // 3) Der Topf: Frame 0 zu, Frame 1 offen (Aufspringen, Sog); Kiefer klappern vor dem Biss; Kauen = Wackeln
+      const open = s.mode === 'tell' || s.mode === 'pull';
+      const chewK = s.mode === 'chew' ? Math.sin(e.t * 22) : 0;
+      const pop = s.mode === 'tell' ? Math.sin((1 - s.t / P.tell) * Math.PI) * 4 : 0;
+      AI.drawBody(e, ctx, {
+        frame: open ? (biting && Math.floor(e.t * 14) % 2 ? 0 : 1) : 0,
+        dy: -pop,
+        dx: biting ? Math.sin(e.t * 60) * 1.5 : 0,
+        scale: 1 + chewK * 0.05,
+      });
+      if (s.mode === 'tell' || biting) AI.drawMark(ctx, '!', e.x, e.y - e.r - 14, e.t, '#ff4d4d', 22);
+      AI.drawSay(e, ctx);
+    },
+  };
+
+  // ---------------------------------------------------------------------------
+  // Rolling Release
+  // ---------------------------------------------------------------------------
+  //
+  // Zustaende (state.mode):
+  //   aim     wackelt auf der Stelle, gestrichelter Richtungspfeil zeigt die Diagonale (grob Richtung Spieler);
+  //           'enemyWindup' (sound 'wobble'). Beim Spawn und nach jedem Neu-Verpacken.
+  //   roll    rollt diagonal (Laeufer: prallt an Waenden, Felsen, Gruben und Objekten ab). Jeder Abprall:
+  //           +bump px/s (bis maxSpeed), Minor-Version +1, 'enemyBounce'. Nach majorAt Abprallen oder maxRoll s:
+  //   brake   rollt aus (bremst in brake s auf 0)
+  //   quake   bebt, Strahlen zeigen die Ring-Richtungen ('enemyWindup' sound 'quake') — Telegraph
+  //   open    platzt auf: Ring aus Verpackungschips ('enemyUnpack'), liegt ausgepackt da (verwundbar, x openTaken);
+  //           danach Major-Version +1, Tempo zurueck auf Grundwert, wieder 'aim'
+  // Schaden: beim Rollen/Zielen x rollTaken (verschnuert), ausgepackt x openTaken. Umgesetzt durch Umhuellen von
+  // takeHit NUR an diesem Exemplar (kein Eingriff in die Enemy-Klasse). Kein Rueckstoss beim Rollen (noKnockback).
+
+  /** Diagonale grob Richtung Spieler (Vorzeichen je Achse) */
+  function rrAimAt(e, game) {
+    const p = game.player;
+    e.state.dx = p && p.x < e.x ? -1 : 1;
+    e.state.dy = p && p.y < e.y ? -1 : 1;
+  }
+
+  B.BEHAVIORS.rolling_release = {
+    init(e, game) {
+      const s = e.state;
+      s.mode = 'aim';
+      s.t = e.params.aim;
+      s.major = 1;
+      s.minor = 0;
+      s.bounces = 0;
+      s.speed = e.speed;
+      s.rollT = 0;
+      s.spin = 0;                  // Drehwinkel des Knaeuels (nur Optik)
+      s.dx = 1; s.dy = 1;
+      if (game && game.player) rrAimAt(e, game);
+      e.noKnockback = true;
+      // Schadensfaktor je Zustand (nur dieses Exemplar): verschnuert halb, ausgepackt 150 %
+      const baseTakeHit = e.takeHit;
+      e.takeHit = function (amount, g, source, at) {
+        const k = this.state.mode === 'open' ? this.params.openTaken : this.params.rollTaken;
+        return baseTakeHit.call(this, amount * k, g, source, at);
+      };
+    },
+
+    update(e, dt, game) {
+      const s = e.state, P = e.params;
+      s.t -= dt;
+      switch (s.mode) {
+        case 'aim':
+          AI.stop(e);
+          if (!s.aimed) {
+            s.aimed = true;
+            rrAimAt(e, game);
+            B.bus.emit('enemyWindup', { game, enemy: e, x: e.x, y: e.y, sound: 'wobble' });
+          }
+          if (s.t <= 0) { s.mode = 'roll'; s.rollT = 0; s.bumped = false; s.aimed = false; }
+          break;
+        case 'roll':
+          s.rollT += dt;
+          e.vx = s.dx * s.speed * Math.SQRT1_2;
+          e.vy = s.dy * s.speed * Math.SQRT1_2;
+          s.spin += (s.speed / e.r) * dt * (s.dx || 1);
+          if (s.bounces >= P.majorAt || s.rollT >= P.maxRoll) { s.mode = 'brake'; s.t = P.brake; s.brakeFrom = s.speed; }
+          break;
+        case 'brake': {
+          const k = Math.max(0, s.t / P.brake);
+          e.vx = s.dx * s.brakeFrom * k * Math.SQRT1_2;
+          e.vy = s.dy * s.brakeFrom * k * Math.SQRT1_2;
+          s.spin += (s.brakeFrom * k / e.r) * dt * (s.dx || 1);
+          if (s.t <= 0) {
+            AI.stop(e);
+            s.mode = 'quake';
+            s.t = P.quake;
+            s.ringOff = game.rng.angle();
+            AI.say(e, 'BREAKING CHANGE', 1.2, DEP_WARN);
+            B.bus.emit('enemyWindup', { game, enemy: e, x: e.x, y: e.y, sound: 'quake' });
+          }
+          break;
+        }
+        case 'quake':
+          AI.stop(e);
+          if (s.t <= 0) {
+            s.mode = 'open';
+            s.t = P.open;
+            AI.ring(game, e, P.ring, AI.shotSpeed(game, P.shotSpeed), s.ringOff, DEP_SHOT);
+            B.bus.emit('enemyUnpack', { game, enemy: e, x: e.x, y: e.y });
+          }
+          break;
+        case 'open':
+          AI.stop(e);
+          if (s.t <= 0) {
+            s.major++;
+            s.minor = 0;
+            s.bounces = 0;
+            s.speed = e.speed;
+            s.mode = 'aim';
+            s.t = P.aim;
+          }
+          break;
+      }
+    },
+
+    // Abprall NACH der Bewegung: ist die Kugel irgendwo angestossen, pruefen, welche Achse blockiert ist, und
+    // genau die umdrehen (Ecke/Kante eines Felsens: beide). Ein Abprall pro Tick.
+    afterMove(e, dt, game) {
+      const s = e.state, P = e.params, room = game.room;
+      if (s.mode !== 'roll' && s.mode !== 'brake') { s.bumped = false; return; }
+      if (!s.bumped) return;
+      s.bumped = false;
+      const probe = e.r + 3;
+      const bx = room.isSolidAt(e.x + s.dx * probe, e.y, 'walk', false);
+      const by = room.isSolidAt(e.x, e.y + s.dy * probe, 'walk', false);
+      if (bx) s.dx = -s.dx;
+      if (by) s.dy = -s.dy;
+      if (!bx && !by) { s.dx = -s.dx; s.dy = -s.dy; }   // diagonal an eine Kante gestossen
+      if (s.mode !== 'roll') return;                     // beim Ausrollen kein Versions-Sprung mehr
+      s.bounces++;
+      s.minor++;
+      s.speed = Math.min(P.maxSpeed, s.speed + P.bump);
+      B.bus.emit('enemyBounce', { game, enemy: e, x: e.x + (bx ? s.dx * -e.r : 0), y: e.y + (by ? s.dy * -e.r : 0) });
+    },
+
+    draw(e, ctx, game) {
+      const s = e.state, P = e.params;
+      if (s.mode === 'aim') {
+        // Telegraph: gestrichelter Pfeil in Rollrichtung, wird zum Ende hin laenger und deutlicher
+        const k = 1 - Math.max(0, s.t) / P.aim;
+        const a = Math.atan2(s.dy, s.dx), len = 50 + 70 * k, r0 = e.r + 6;
+        ctx.save();
+        ctx.setLineDash([8, 7]);
+        depStroke(ctx, () => {
+          ctx.moveTo(e.x + Math.cos(a) * r0, e.y + Math.sin(a) * r0);
+          ctx.lineTo(e.x + Math.cos(a) * (r0 + len), e.y + Math.sin(a) * (r0 + len));
+        }, DEP_WARN, 3, 0.45 + 0.5 * k);
+        ctx.restore();
+        const tx = e.x + Math.cos(a) * (r0 + len), ty = e.y + Math.sin(a) * (r0 + len);
+        depStroke(ctx, () => {
+          ctx.moveTo(tx + Math.cos(a + 2.5) * 12, ty + Math.sin(a + 2.5) * 12);
+          ctx.lineTo(tx, ty);
+          ctx.lineTo(tx + Math.cos(a - 2.5) * 12, ty + Math.sin(a - 2.5) * 12);
+        }, DEP_WARN, 3, 0.45 + 0.5 * k);
+      } else if (s.mode === 'quake') {
+        const k = 1 - Math.max(0, s.t) / P.quake;
+        const angles = [];
+        for (let i = 0; i < P.ring; i++) angles.push(s.ringOff + (i * TAU) / P.ring);
+        AI.drawRays(ctx, e.x, e.y, angles, e.r + 4, 26 + 30 * k, 0.4 + 0.5 * k, DEP_WARN);
+        AI.drawGlow(ctx, e.x, e.y, e.r + 8, k, DEP_WARN);
+      }
+      const wob = s.mode === 'aim' ? Math.sin(e.t * 30) * 0.18 : 0;
+      const shake = s.mode === 'quake' ? Math.sin(e.t * 70) * 3 : 0;
+      if (s.mode === 'open') {
+        const k = Math.min(1, (P.open - s.t) / 0.15);   // kurzes Aufploppen
+        AI.drawBody(e, ctx, { sprite: 'enemy_rolling_release_open', rotation: 0, scale: 0.8 + 0.2 * k, frame: Math.floor(e.t * 5) % 2 });
+      } else {
+        AI.drawBody(e, ctx, { rotation: s.spin + wob, dx: shake, frame: Math.floor(e.t * 8) % 2 });
+      }
+      // Versions-Schild UNTER dem Knaeuel (zaehlt mit jedem Abprall hoch; oben ist Platz fuer HP-Balken und Text)
+      if (typeof B.pixelText === 'function') {
+        const fast = s.speed >= P.maxSpeed - 0.01 && s.mode === 'roll';
+        B.pixelText(ctx, 'V' + s.major + '.' + s.minor, e.x, e.y + e.r + 12, {
+          scale: 2, align: 'center', baseline: 'middle', outline: '#140a04',
+          color: s.mode === 'open' || fast ? DEP_WARN : '#f3ece6', alpha: e.alpha,
+        });
+      }
+      if (s.mode === 'quake') AI.drawMark(ctx, '!', e.x, e.y - e.r - 10, e.t, '#ff4d4d', 22);
       AI.drawSay(e, ctx);
     },
   };

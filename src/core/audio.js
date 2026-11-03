@@ -32,6 +32,9 @@
     gust: 0.25, rehearse: 0.2, replay: 0.2 };
   // Effekte, die bei vielen gleichzeitigen Stimmen zuerst wegfallen (dauernd feuernde Treffer/Schuesse)
   const SPAMMY = { shoot: true, hit: true, splat: true, leafHit: true, sandHit: true };
+  // Dependency-Hell-Familie (Honeypot, Rolling Release): eigene Drosselung, getrennt eingetragen
+  Object.assign(RATE, { boxHit: 0.04, boxDeath: 0.03, slurp: 0.3, gnash: 0.3, chomp: 0.1, wobble: 0.2, bump: 0.06, quake: 0.3, unbox: 0.1 });
+  SPAMMY.boxHit = true;
   const lastPlay = Object.create(null);
 
   const mtof = (m) => 440 * Math.pow(2, (m - 69) / 12);
@@ -181,6 +184,38 @@
     sandPop() {
       noise({ dur: 0.2, vol: 0.09, filter: 'bandpass', f: 1400, f2: 600, q: 1 });
       voice({ f: 220, f2: 420, dur: 0.08, type: 'square', vol: 0.04 });
+    },
+    // Dependency-Hell-Familie: dumpfer Karton-Treffer, Karton reisst + Klebeband ratscht (Tod)
+    boxHit() {
+      voice({ f: 150 * rnd(0.9, 1.1), f2: 90, dur: 0.05, type: 'triangle', vol: 0.09 });
+      noise({ dur: 0.05, vol: 0.05, filter: 'lowpass', f: 1200 });
+    },
+    boxDeath() {
+      noise({ dur: 0.18, vol: 0.09, filter: 'bandpass', f: 2600, f2: 900, q: 1.2 });
+      voice({ f: 120, f2: 60, dur: 0.14, type: 'triangle', vol: 0.11, delay: 0.03 });
+    },
+    // Honeypot: Deckel springt auf + Ansaugen (Telegraph), Kiefer klappern (Biss-Warnung), Zuschnappen
+    slurp() {
+      voice({ f: 330, f2: 660, dur: 0.08, type: 'square', vol: 0.04 });
+      noise({ dur: 0.6, vol: 0.07, filter: 'bandpass', f: 400, f2: 1600, q: 1.5, delay: 0.05 });
+    },
+    gnash() {
+      for (let i = 0; i < 4; i++) voice({ f: 700, f2: 500, dur: 0.03, type: 'square', vol: 0.04, delay: i * 0.12 });
+    },
+    chomp() {
+      voice({ f: 220, f2: 70, dur: 0.12, type: 'square', vol: 0.09 });
+      noise({ dur: 0.08, vol: 0.1, filter: 'lowpass', f: 1400 });
+    },
+    // Rolling Release: Wackeln vor dem Losrollen, Karton-"Bump" beim Abprall, Beben und Aufplatzen
+    wobble() { voice({ f: 160, f2: 240, dur: 0.4, type: 'triangle', vol: 0.05, vib: 14, vibDepth: 30 }); },
+    bump() {
+      voice({ f: 200 * rnd(0.95, 1.05), f2: 120, dur: 0.06, type: 'triangle', vol: 0.08 });
+      voice({ f: 1320, dur: 0.04, type: 'square', vol: 0.025, delay: 0.03 });   // kleines "Versions-Ding"
+    },
+    quake() { noise({ dur: 0.55, vol: 0.07, filter: 'lowpass', f: 300, f2: 600 }); voice({ f: 60, f2: 90, dur: 0.5, type: 'sawtooth', vol: 0.04 }); },
+    unbox() {
+      noise({ dur: 0.25, vol: 0.12, filter: 'bandpass', f: 3000, f2: 1200, q: 1 });
+      voice({ f: 180, f2: 420, dur: 0.1, type: 'square', vol: 0.05 });
     },
     // Dust Daemon dreht hoch (Telegraph): anschwellendes, hoeher werdendes Windrauschen
     gust() {
@@ -528,6 +563,7 @@
   const FAMILY_SOUNDS = {
     branches: { hit: 'leafHit', death: 'branchDeath', windup: 'creak' },
     sandbox: { hit: 'sandHit', death: 'sandDeath' },
+    dephell: { hit: 'boxHit', death: 'boxDeath' },
   };
   // Legacy Codebase (Stack Trace): Plastik-Klack, reissendes Papier, Nadeldrucker als Warnton (eigener Block)
   FAMILY_SOUNDS.legacy = { hit: 'legacyHit', death: 'legacyDeath', windup: 'dotMatrix' };
@@ -548,6 +584,9 @@
   on('enemyShed', (e) => { if (e.big) p('rustle'); });  // Stale Branch verliert sein Laub
   on('enemyWindup', (e) => { const n = e.sound || famSound(e, 'windup'); if (n) p(n); });   // e.sound: eigener Warnton
   on('enemyBurrow', (e) => { if (e.up) p('sandPop'); });
+  on('enemyChomp', () => p('chomp'));      // Honeypot schnappt zu
+  on('enemyBounce', () => p('bump'));      // Rolling Release prallt ab (Versions-Sprung)
+  on('enemyUnpack', () => p('unbox'));     // Rolling Release platzt auf
   on('orphanCaught', () => p('rescue'));
   on('bossMerge', () => p('merge'));
   on('enemyVanish', () => p('gcSweep'));

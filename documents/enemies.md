@@ -95,6 +95,17 @@ dot-matrix printer.
 |---|---|---|---|---|---|
 | ![Stack Trace](images/enemy_stack_trace.png) | **Stack Trace** `stack_trace` | 2 (Legacy Codebase only) | 14 | A scorpion built from an old beige computer case. Its tail is a strip of fan-fold printer paper, one sheet per stack frame, with a red stinger on top. It scuttles sideways in short bursts and keeps 110–230 px away. **Trace:** it stops, a dashed amber line follows you for 0.5 s, then locks in (brighter, "!") for 0.35 s while an amber pulse runs up the tail sheet by sheet. Then the paper unfolds along the line in a flash: the stinger hits for a full heart, the unrolled paper for half a heart while it lies there; folding back up is harmless. Walls and rocks stop the tail (it reaches over pits). If you stood beyond its reach when the line locked, the stinger also throws an **uncaught exception**, a single shot that flies on along the dotted part of the line. The stack unwinds as it takes damage: at 2/3 and 1/3 HP the top sheet flies off ("pop()"), so the tail and its reach shrink from 5 sheets to 4 and then 3. When it dies, its exceptions still in flight vanish. Max 2 per room | Traceback (most recent call last): you. |
 
+### Dependency Hell family
+
+These belong to Dependency Hell floors (the Rolling Release also rolls through Sandbox Borders). Warm cardboard and
+honey colours with a near-black outline; everything dangerous they do (funnel, aim lines, shots) is cyan so it stands
+out against the orange embers. Cardboard thuds and packing peanuts when hit.
+
+| | Name | First floor | HP | Behaviour | Flavour text |
+|---|---|---|---|---|---|
+| ![Honeypot](images/enemy_honeypot.png) | **Honeypot** `honeypot` | 4 (Dependency Hell only) | 22 | A golden jar with a star sticker that never moves, sitting in a funnel of dependency lines (radius about 3 tiles, always faintly visible). Every few seconds the lid pops open ("!"), then for 2.4 s it pulls everything that walks toward its jaws, at most about half your speed, so you can always walk out. In the last 0.6 s a ring marks its mouth, then it snaps shut: a full heart if you're inside. Other walking enemies get pulled in and bitten too (14 damage), and a bomb pulled into its jaws goes off right there. Flying (you or enemies) ignores the pull. Max 1 per room | 0 dependencies*, 99k stars, MIT licensed. *Terms and conditions apply. |
+| ![Rolling Release](images/enemy_rolling_release.png) | **Rolling Release** `rolling_release` | 4 (Dependency Hell; also Sandbox Borders, less often) | 18 | A rolling bundle of packages with a version label (`V1.0`). Wobbles while a dashed arrow shows its direction, then rolls diagonally and bounces off walls, rocks and pits. Every bounce bumps the version and makes it faster (130 → 250 px/s). While packed it takes only half damage. After 7 bounces: "BREAKING CHANGE", it brakes, shakes with warning rays and bursts into a ring of 6 packing-peanut shots, then lies unpacked for 1.8 s taking 150 % damage. Then it repacks as `V2.0` at starting speed. Max 2 per room | Never stable, always latest. Picks up speed with every bump. |
+
 ### Minions
 
 These are only spawned by other enemies or bosses.

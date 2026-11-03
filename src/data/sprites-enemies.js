@@ -1448,6 +1448,98 @@
   });
 
   // ===========================================================================
+  // Dependency Hell: Honeypot und Rolling Release
+  // ===========================================================================
+  // Familien-Optik "dephell": helle, warme Koerper (Gold, Karton) mit fast schwarzer Kontur — sie heben sich vom
+  // dunklen Rostboden ab. Alles Gefaehrliche (Trichter, Telegraphen, Schuesse) ist Cyan und wird im Verhalten
+  // gezeichnet (entities/enemy.js), nicht im Sprite.
+
+  // Honeypot — goldener Honigtopf mit Holzdeckel und weissem Stern-Aufkleber ("99k stars"). Frame 0: Deckel zu.
+  // Frame 1: Deckel schwebt hoch, darunter ein Maul mit Zaehnen (Sog / Zuschnappen).
+  // Zeichen: k Kontur, L Deckel, l Deckel-Licht, H Honig, h Glanz, D Schatten, s Stern, m Maul, w Zaehne
+  const HONEY_PAL = { k: '#1a0f08', L: '#8a5a2c', l: '#b8834a', H: '#f0b030', h: '#ffe08a', D: '#b07418', s: '#ffffff',
+    m: '#4a0f1a', w: '#fff4e0' };
+  const HONEY_CLOSED = [
+    '..............',
+    '.....kkkk.....',
+    '...kklllLkk...',
+    '..klLLLLLLLk..',
+    '.kkkkkkkkkkkk.',
+    '.kHHHHHhHHHHk.',
+    'kHHhHHHsHHHHHk',
+    'kHhHHsssssHHDk',
+    'kHhHHHsssHHHDk',
+    'kHhHHHsHsHHHDk',
+    'kHHHHHHHHHHHDk',
+    '.kHHHHHHHHHDk.',
+    '..kDDDDDDDDk..',
+    '...kkkkkkkk...',
+  ];
+  const HONEY_OPEN = [
+    '.....kkkk.....',
+    '...kklllLkk...',
+    '..klLLLLLLLk..',
+    '..kkkkkkkkkk..',
+    '..............',
+    '.kkkkkkkkkkkk.',
+    'kwmwmmwmmwmwmk',
+    'kHmmmmmmmmmmHk',
+    'kHwmmwmmwmmwHk',
+    'kHhHHsssssHHDk',
+    'kHhHHHsHsHHHDk',
+    '.kHHHHHHHHHDk.',
+    '..kDDDDDDDDk..',
+    '...kkkkkkkk...',
+  ];
+  B.defineSprite('enemy_honeypot', { palette: HONEY_PAL, scale: 4, frames: [HONEY_CLOSED, HONEY_OPEN] });
+
+  // Rolling Release — Knaeuel aus Kartons mit Klebeband und einem flatternden Versions-Anhaenger (wird beim Rollen
+  // gedreht). Frame 1: Anhaenger flattert auf die andere Seite.
+  // Zeichen: k Kontur, c Karton hell, b Karton dunkel, y Klebeband, t Anhaenger, o Oese
+  const RR_PAL = { k: '#140a04', c: '#d9a066', b: '#8a5a2c', y: '#f2d08a', t: '#f3ece6', o: '#56e3ff' };
+  const RR_BALL = [
+    '....kkkk....',
+    '..kkcyybkk..',
+    '.kcccyybbbk.',
+    '.kcccykbbbk.',
+    'kkkkkkkbbbbk',
+    'kbbbbkcyyckk',
+    'kbbbbkcyycok',
+    'kbybbkkkkktt',
+    '.kbybkbbcckt',
+    '.kbbbkbbcck.',
+    '..kkbkbbkk..',
+    '....kkkk....',
+  ];
+  B.defineSprite('enemy_rolling_release', {
+    palette: RR_PAL, scale: 4,
+    frames: [RR_BALL, stampRows(RR_BALL, [[7, 10, 'k'], [7, 11, '.'], [8, 11, 'k'], [5, 11, 't'], [4, 11, 't']])],
+  });
+  // Ausgepackt (Breaking Change): aufgeklappter Karton, Laschen nach aussen, Verpackungschips (p) fliegen heraus.
+  // Frame 1: die Chips sind ein Stueck weitergeflogen.
+  const RR_OPEN_PAL = Object.assign({}, RR_PAL, { d: '#2a160c', p: '#fff1c9' });
+  const RR_OPEN = [
+    '.kk........kk.',
+    '.kck......kck.',
+    '..kck.pp.kck..',
+    '...kckppkck...',
+    '..kkkkkkkkkk..',
+    '..kdpddpdpdk..',
+    '.kkkkkkkkkkkk.',
+    '.kccccccccbbk.',
+    '.kcyyyyyycbbk.',
+    '.kccccccccbbk.',
+    '.kccccccccbbk.',
+    '.kkkkkkkkkkkk.',
+  ];
+  const RR_OPEN_2 = RR_OPEN.slice();
+  RR_OPEN_2[1] = '.kck..p...kck.';
+  RR_OPEN_2[2] = '..kck.p..kck..';
+  RR_OPEN_2[3] = '...kckp.kck...';
+  RR_OPEN_2[5] = '..kddpdpddpk..';
+  B.defineSprite('enemy_rolling_release_open', { palette: RR_OPEN_PAL, scale: 4, frames: [RR_OPEN, RR_OPEN_2] });
+
+  // ===========================================================================
   // The Nested Infinite Loop (Boss ab Etage 8)
   // ===========================================================================
   // Die drei Ringe nutzen Kopf und Glied der Infinite Loop in drei Farben: aussen Tuerkis (wie das Original),

@@ -483,6 +483,20 @@
         FX.smoke(e.game, e.x, e.y, 3, 14, '#c9a46a');
       },
     },
+    // Dependency Hell: Karton-Splitter und Verpackungschips statt Funken
+    dephell: {
+      hit(e) {
+        FX.burst(e.game, e.x, e.y, '#ffffff', 2, 240, { streak: true, lifeMin: 0.08, lifeMax: 0.16, sizeMin: 3, sizeMax: 4 });
+        FX.burst(e.game, e.x, e.y, e.color || '#c98a4a', 3, 150, { vary: true, lifeMin: 0.12, lifeMax: 0.3, sizeMin: 3, sizeMax: 5 });
+      },
+      death(e) {
+        FX.flash(e.game, e.x, e.y, 22, '#fff4d0', 0.08);
+        FX.burst(e.game, e.x, e.y, '#fff1c9', 12, 260, { vary: true, lifeMin: 0.3, lifeMax: 0.6, drag: 5, sizeMin: 3, sizeMax: 5 });
+        FX.debris(e.game, e.x, e.y, 6, [e.color || '#c98a4a', '#8a5a2c', '#f2d08a'], 5);
+        FX.ring(e.game, e.x, e.y, 42, '#56e3ff', 0.3, 4);
+        FX.smoke(e.game, e.x, e.y, 3, 12, '#4a3020');
+      },
+    },
   };
 
   // Legacy Codebase (Stack Trace): alter Staub statt Funken, beim Tod flattert Endlospapier davon.
@@ -502,6 +516,22 @@
       FX.smoke(e.game, e.x, e.y, 3, 12, '#6c767a');
     },
   };
+
+  // Dependency Hell: Honeypot schnappt zu (Ring in Cyan, Kruemel), Rolling Release prallt ab (Staub) und platzt auf
+  // (Verpackungschips fliegen). Nur Optik, die Spiel-Logik steht in entities/enemy.js.
+  on('enemyChomp', (e) => {
+    FX.ring(e.game, e.x, e.y + 4, (e.r || 54) + 10, '#56e3ff', 0.25, 5);
+    FX.burst(e.game, e.x, e.y, e.ate ? '#ffffff' : '#f0b030', 8, 200, { vary: true, lifeMin: 0.15, lifeMax: 0.35 });
+    if (e.ate) FX.flash(e.game, e.x, e.y, 30, '#fff4d0', 0.1);
+  });
+  on('enemyBounce', (e) => {
+    FX.burst(e.game, e.x, e.y, '#c9a46a', 5, 120, { vary: true, lifeMin: 0.15, lifeMax: 0.3, sizeMin: 3, sizeMax: 4 });
+  });
+  on('enemyUnpack', (e) => {
+    FX.flash(e.game, e.x, e.y, 30, '#e8fbff', 0.1);
+    FX.burst(e.game, e.x, e.y, '#fff1c9', 16, 280, { vary: true, lifeMin: 0.3, lifeMax: 0.6, drag: 5 });
+    FX.ring(e.game, e.x, e.y, 50, '#56e3ff', 0.3, 5);
+  });
 
   // Rootkit taucht auf (Sandfontaene + Ring) oder ab (Staubwolke)
   on('enemyBurrow', (e) => {

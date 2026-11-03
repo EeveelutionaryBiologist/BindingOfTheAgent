@@ -44,6 +44,12 @@
  *   - Nested Infinite Loop: ab Etage 8 statt der Infinite Loop; nur der aeussere lebende Ring feuert und ist
  *     greifbar; Ringe zerfallen bei 50 % / 16,67 %; Schuesse 165–260 px/s; Teile bleiben im Raum; ein Boss-Tod
  *   - Rogue Agent: nie vor Etage 7; haelt Abstand; jede Salve nach Gluehen, zwei 3er-Faecher oder drei Einzelschuesse
+ *   - Dependency-Hell-Familie (Tiefe 1–7: Honeypot nur auf Dependency Hell, Rolling Release dort und auf Sandbox
+ *     Borders): Honeypot zieht erst nach dem Telegraph, nur im Trichter, nie schneller als 60 % des Spielertempos;
+ *     Wegrennen klappt, Stehenbleiben kostet nach der Kiefer-Warnung einen 2er-Biss; keine Gruben; Laeufer ja,
+ *     Flieger nein; Bombe im Maul zuendet. Rolling Release zielt vor dem Rollen, prallt ab (auch an Felsen), wird je
+ *     Abprall um genau `bump` schneller bis zur Obergrenze, Schadensfaktoren 0.5/1.5, Breaking Change mit Beben vor
+ *     dem 6er-Ring (165–260 px/s), Neustart bei Grundtempo; beide sterben sauber
  *   - Etagen-Besetzung (home/AWAY) auf 1–7: Heimat-Gegner wie in ROSTER, Auswaerts-Faktor genau AWAY, Raeume voll,
  *     Auswaerts-Anteil 5–45 %; Kakophonie ab 8 (mixAt, Anhebung, Familien ueberall, Octopus Merge gedeckelt);
  *     Determinismus (Begegnungen ziehen nicht aus dem Etagen-RNG)
@@ -2195,6 +2201,243 @@ const URL = 'file://' + path.join(ROOT, 'index.html').replace(/\\/g, '/') + '?se
   await page.waitForTimeout(250);
   await shot('15-stack-trace');
   await page.evaluate(() => { for (let i = 0; i < 4; i++) BOTA.debug.killAll(); BOTA.game.room.projectiles.length = 0; });
+
+  // --- Dependency Hell: Honeypot (Sog entkommbar und gedeckelt, Telegraph vor Sog und Biss, frisst Gegner und Bomben,
+  //     zieht nie in Gruben) und Rolling Release (schneller je Abprall bis zur Obergrenze, Breaking Change mit
+  //     Telegraph, Ring in 165–260 px/s, Schadensfaktoren, sauberer Tod). Getaktet wird direkt per e.update. ---
+  const depProblems = await page.evaluate(() => {
+    const out = [];
+    const g = BOTA.game, E = BOTA.ENEMIES, DT = 1 / 60, TILES = BOTA.TILES, I = BOTA.C.INNER;
+    // 1) Spawn: nur auf ihren Heimat-Etagen (geprueft fuer Tiefe 1–7; ab 8 duerfen Themen-Gegner auslaufen)
+    const homes = { honeypot: ['dephell'], rolling_release: ['dephell', 'sandbox'] };
+    for (const [id, th] of Object.entries(homes)) {
+      if (!E[id] || !BOTA.hasSprite(E[id].sprite)) { out.push(id + ': Definition oder Sprite fehlt'); continue; }
+      for (let d = 1; d <= 7; d++) {
+        let n = 0;
+        for (let i = 0; i < 300; i++) if (BOTA.rollRoomEnemies(new BOTA.RNG(BOTA.hashString('dep' + d + ':' + i)), d).includes(id)) n++;
+        const home = th.includes(BOTA.themeKeyAt(d));
+        if (home && n === 0) out.push(id + ': taucht auf seiner Heimat-Etage ' + d + ' nie auf');
+        if (!home && n > 0) out.push(id + ': taucht auf Etage ' + d + ' (' + BOTA.themeKeyAt(d) + ') auf');
+      }
+    }
+    if (!BOTA.hasSprite('enemy_rolling_release_open')) out.push('Rolling Release: Sprite "open" fehlt');
+
+    BOTA.debug.gotoRoom('start'); BOTA.debug.god(true);
+    for (let i = 0; i < 4; i++) BOTA.debug.killAll();
+    g.room.projectiles.length = 0;
+    const p = g.player, room = g.room;
+    // Spieler-Treffer mitschneiden statt anwenden (Items wie Guardrails/Retry duerfen das Ergebnis nicht verfaelschen)
+    const hits = [];
+    p.hurt = function (amt, src) { hits.push({ amt, src }); return true; };
+    const wasFlying = p.flying;
+    p.flying = false;
+    const events = [];
+    const offs = ['enemyWindup', 'enemyChomp', 'enemyBounce', 'enemyUnpack'].map((n) => BOTA.bus.on(n, (e) => events.push({ n, sound: e.sound, ate: e.ate, t: g.runStats.time })));
+    const changed = [];
+    const setTile = (c, r, t) => { changed.push([c, r, room.tileAt(c, r)]); room.setTile(c, r, t); };
+    try {
+      // 2) Honeypot
+      const H = BOTA.debug.spawn('honeypot', 480, 290);
+      H.spawnDelay = 0;
+      const S = H.state, P = H.params;
+      const cap = P.pullCap * 240 * p.stats.speed;
+      // Nur das Verhalten takten (ohne Kontaktschaden des Topfes), damit die Treffer-Liste nur Bisse enthaelt
+      const tick = () => { H.t += DT; H.behavior.update(H, DT, g); };
+      const step = (n, each) => { for (let i = 0; i < n; i++) { tick(); if (each && each() === false) break; } };
+      if (!H.static || H.contactDamage !== 1) out.push('Honeypot: nicht statisch oder Kontaktschaden != 1');
+      // Telegraph vor dem Sog: vom Ruhen bis zum Sog vergeht mindestens P.tell, mit "slurp"-Event
+      p.x = 480 + 150; p.y = 290;
+      let tellT = 0, movedBeforePull = false;
+      step(400, () => {
+        if (S.mode === 'tell') tellT += DT;
+        if (S.mode !== 'pull' && Math.abs(p.x - 630) > 0.01) movedBeforePull = true;
+        return S.mode !== 'pull';
+      });
+      if (S.mode !== 'pull') out.push('Honeypot: Sog beginnt nie');
+      if (tellT < 0.5 || tellT < P.tell - 0.02) out.push('Honeypot: Telegraph vor dem Sog nur ' + tellT.toFixed(2) + ' s');
+      if (movedBeforePull) out.push('Honeypot: zieht schon vor dem Sog');
+      if (!events.some((e) => e.n === 'enemyWindup' && e.sound === 'slurp')) out.push('Honeypot: kein Telegraph-Event (slurp)');
+      // Sog-Staerke: innen > 0, aussen 0, nie ueber der Obergrenze (auch mit halbem Tempo)
+      const measure = (d) => {
+        p.x = 480 + d; p.y = 290;
+        const tSave = S.t; S.t = 1.5;         // mitten im Sog, nicht in der Biss-Phase
+        tick();
+        S.t = tSave;
+        return (480 + d - p.x) / DT;
+      };
+      let maxPull = 0;
+      for (let d = 40; d <= 260; d += 10) {
+        const v = measure(d);
+        maxPull = Math.max(maxPull, v);
+        if (d < P.radius - 5 && v <= 1) out.push('Honeypot: kein Sog bei ' + d + ' px');
+        if (d > P.radius + 5 && Math.abs(v) > 0.01) out.push('Honeypot: Sog ausserhalb des Trichters (' + d + ' px)');
+      }
+      // feste Grenze (nicht aus den Parametern abgeleitet): hoechstens 60 % der Spielergeschwindigkeit
+      if (maxPull > cap + 0.5 || maxPull > 0.6 * 240 * p.stats.speed) out.push('Honeypot: Sog ' + maxPull.toFixed(0) + ' px/s ueber der Obergrenze ' + cap.toFixed(0));
+      const spd0 = p.stats.speed;
+      p.stats.speed = 0.5;
+      const slowPull = measure(60);
+      p.stats.speed = spd0;
+      if (slowPull > P.pullCap * 240 * 0.5 + 0.5 || slowPull > 0.6 * 240 * 0.5) out.push('Honeypot: Sog bei Tempo 0.5 nicht gedeckelt (' + slowPull.toFixed(0) + ' px/s)');
+      // Entkommen: wer mit voller Geschwindigkeit wegrennt, wird nie gebissen und kommt heraus
+      S.mode = 'pull'; S.t = P.pull; S.warned = false;
+      p.x = 480 + 120; p.y = 290;
+      let minD = 999;
+      hits.length = 0;
+      step(Math.ceil(P.pull / DT) + 2, () => {
+        p.x = Math.min(I.x1 - 30, p.x + 240 * p.stats.speed * DT);   // "Spieler laeuft nach rechts weg"
+        minD = Math.min(minD, Math.hypot(p.x - 480, p.y - 290));
+      });
+      if (minD < 115 || hits.length) out.push('Honeypot: Wegrennen hilft nicht (min ' + minD.toFixed(0) + ' px, Treffer ' + hits.length + ')');
+      // Stehenbleiben: wird hineingezogen; Biss-Warnung (gnash) mindestens biteTell vor dem Biss, Biss = 2
+      step(400, () => S.mode !== 'pull');
+      p.x = 480 + 150; p.y = 290;
+      hits.length = 0;
+      events.length = 0;
+      let warnAt = null, biteAt = null, tt = 0;
+      const nBefore = events.length;
+      step(Math.ceil(P.pull / DT) + 5, () => {
+        tt += DT;
+        if (warnAt === null && events.slice(nBefore).some((e) => e.sound === 'gnash')) warnAt = tt;
+        if (biteAt === null && events.slice(nBefore).some((e) => e.n === 'enemyChomp')) { biteAt = tt; return false; }
+      });
+      if (biteAt === null) out.push('Honeypot: schnappt nie zu');
+      else {
+        if (warnAt === null || biteAt - warnAt < Math.max(0.4, P.biteTell - 0.03)) out.push('Honeypot: Biss-Warnung zu kurz/fehlt');
+        if (hits.length !== 1 || hits[0].amt !== 2) out.push('Honeypot: Biss auf stehenden Spieler ' + JSON.stringify(hits));
+      }
+      // Grube zwischen Spieler und Topf: der Sog zieht niemanden hinein
+      S.mode = 'pull'; S.t = P.pull; S.warned = false;
+      const tc = room.worldToTile(480 + 96, 290);
+      setTile(tc.c, tc.r, TILES.PIT);
+      p.x = (tc.c + 1) * 64 + p.r + 2; p.y = room.tileCenter(tc.c, tc.r).y;
+      step(Math.ceil((P.pull - P.biteTell - 0.1) / DT));
+      const pt = room.worldToTile(p.x, p.y);
+      if (room.tileAt(pt.c, pt.r) === TILES.PIT || p.x - p.r < (tc.c + 1) * 64 - 0.5) out.push('Honeypot: zieht den Spieler in eine Grube');
+      p.x = 160; p.y = 470;                     // weit weg (ausserhalb des Trichters)
+      step(400, () => S.mode !== 'idle');
+      // Andere Gegner: laufende werden gezogen und im Maul gebissen, Flieger nicht; Bomben im Maul zuenden
+      const bug = BOTA.debug.spawn('bug', 480 - 110, 290);
+      const fly = BOTA.debug.spawn('null_pointer', 480, 290 - 110);
+      const bomb = new BOTA.Bomb(480 + 100, 290 + 40, { fuse: 99 });
+      room.projectiles.push(bomb);
+      const bugX = bug.x, flyY = fly.y, bugHp = bug.hp;
+      S.mode = 'pull'; S.t = P.pull; S.warned = false;
+      events.length = 0;
+      step(Math.ceil(P.pull / DT) + 3);
+      if (!(bug.x > bugX + 30)) out.push('Honeypot: zieht andere Laeufer nicht');
+      if (Math.abs(fly.y - flyY) > 0.01) out.push('Honeypot: zieht Flieger');
+      if (!(bug.dead || bug.hp < bugHp)) out.push('Honeypot: beisst andere Gegner im Maul nicht');
+      if (!(bomb.fuse <= 0)) out.push('Honeypot: Bombe im Maul zuendet nicht (Abstand ' + Math.hypot(bomb.x - 480, bomb.y - 290).toFixed(0) + ' px)');
+      bomb.dead = true;
+      // Tod
+      H.hurt(1e6, g, {});
+      if (!H.dead) out.push('Honeypot: stirbt nicht');
+      for (let i = 0; i < 4; i++) BOTA.debug.killAll();
+      room.projectiles.length = 0;
+      if (room.enemies.some((e) => !e.dead)) out.push('Honeypot: killAll laesst etwas zurueck');
+
+      // 3) Rolling Release
+      p.x = I.x0 + 40; p.y = I.y0 + 40;
+      const R = BOTA.debug.spawn('rolling_release', 480, 300);
+      R.spawnDelay = 0;
+      const RS = R.state, RP = R.params;
+      // Felsen im Weg: er prallt auch daran ab und steckt nie darin
+      setTile(4, 6, TILES.ROCK);
+      setTile(10, 2, TILES.ROCK);
+      events.length = 0;
+      let aimT = 0, firstRoll = null, maxSp = 0, inSolid = false, outside = false, badStep = '', lastSpeed = RS.speed;
+      let quakeT = 0, opened = null, rollTaken = null, sawReset = false, contact = new Set();
+      for (let i = 0; i < 60 * 40 && !sawReset; i++) {
+        R.update(DT, g);
+        contact.add(R.contactDamage);
+        if (RS.mode === 'aim' && firstRoll === null) aimT += DT;
+        if (RS.mode === 'roll' && firstRoll === null) firstRoll = aimT;
+        if (RS.mode === 'roll') {
+          const v = Math.hypot(R.vx, R.vy);
+          maxSp = Math.max(maxSp, v, RS.speed);
+          if (RS.speed !== lastSpeed) {
+            const want = Math.min(RP.maxSpeed, lastSpeed + RP.bump);
+            if (Math.abs(RS.speed - want) > 1e-6) badStep = lastSpeed + '->' + RS.speed;
+            lastSpeed = RS.speed;
+          }
+          if (rollTaken === null && RS.rollT > 1) {
+            const hp = R.hp; R.hurt(4, g, {}); rollTaken = hp - R.hp;
+          }
+        }
+        if (room.isSolidAt(R.x, R.y, 'walk', false)) inSolid = true;
+        if (R.x < I.x0 || R.x > I.x1 || R.y < I.y0 || R.y > I.y1) outside = true;
+        if (RS.mode === 'quake') quakeT += DT;
+        if (RS.mode === 'open' && !opened) {
+          const shots = room.projectiles.filter((pr) => pr.team === 'enemy' && !pr.dead);
+          const hp = R.hp; R.hurt(4, g, {});
+          opened = { quakeT, shots: shots.length, speeds: shots.map((pr) => pr.speed), taken: hp - R.hp, bounces: RS.bounces, major: RS.major };
+          room.projectiles.length = 0;
+        }
+        if (opened && RS.mode === 'aim') sawReset = true;
+      }
+      const bounces = events.filter((e) => e.n === 'enemyBounce').length;
+      if (firstRoll === null) out.push('Rolling Release: rollt nie los');
+      else if (firstRoll < Math.max(0.5, RP.aim - 0.02)) out.push('Rolling Release: Zielen nur ' + firstRoll.toFixed(2) + ' s');
+      if (!events.some((e) => e.sound === 'wobble')) out.push('Rolling Release: kein Ziel-Telegraph-Event');
+      if (bounces < 3) out.push('Rolling Release: nur ' + bounces + ' Abpraller');
+      if (badStep) out.push('Rolling Release: falscher Tempo-Sprung ' + badStep);
+      if (maxSp > Math.min(RP.maxSpeed, 260) + 0.5) out.push('Rolling Release: Tempo ' + maxSp.toFixed(0) + ' ueber der Obergrenze');
+      if (inSolid || outside) out.push('Rolling Release: steckt in Fels/Wand oder verlaesst den Raum');
+      if (contact.size !== 1 || !contact.has(1)) out.push('Rolling Release: Kontaktschaden ' + [...contact].join(','));
+      if (rollTaken === null || Math.abs(rollTaken - 4 * RP.rollTaken) > 1e-6) out.push('Rolling Release: rollend nimmt er ' + rollTaken + ' statt ' + 4 * RP.rollTaken);
+      if (!opened) out.push('Rolling Release: kein Breaking Change');
+      else {
+        if (opened.quakeT < Math.max(0.5, RP.quake - 0.02)) out.push('Rolling Release: Beben vor dem Aufplatzen nur ' + opened.quakeT.toFixed(2) + ' s');
+        if (!events.some((e) => e.sound === 'quake')) out.push('Rolling Release: kein Beben-Event');
+        if (opened.shots !== RP.ring) out.push('Rolling Release: ' + opened.shots + ' statt ' + RP.ring + ' Schuesse beim Aufplatzen');
+        if (opened.speeds.some((v) => v < 165 || v > 260)) out.push('Rolling Release: Schussgeschwindigkeit ausserhalb 165–260');
+        if (Math.abs(opened.taken - 4 * RP.openTaken) > 1e-6) out.push('Rolling Release: ausgepackt nimmt er ' + opened.taken + ' statt ' + 4 * RP.openTaken);
+        if (!events.some((e) => e.n === 'enemyUnpack')) out.push('Rolling Release: kein Unpack-Event');
+      }
+      if (!sawReset) out.push('Rolling Release: packt sich nach dem Breaking Change nicht neu');
+      else if (RS.speed !== R.speed || RS.major !== 2 || RS.bounces !== 0) out.push('Rolling Release: kein Neustart (Tempo ' + RS.speed + ', v' + RS.major + ')');
+      // Tod: sauber, nichts bleibt zurueck
+      R.hurt(1e6, g, {});
+      if (!R.dead) out.push('Rolling Release: stirbt nicht');
+      for (let i = 0; i < 4; i++) BOTA.debug.killAll();
+      if (room.enemies.some((e) => !e.dead)) out.push('Rolling Release: killAll laesst etwas zurueck');
+    } finally {
+      for (const off of offs) off();
+      delete p.hurt;                       // zurueck zur Klassen-Methode
+      p.flying = wasFlying;
+      for (const [c, r, t] of changed.reverse()) room.setTile(c, r, t);
+      for (let i = 0; i < 4; i++) BOTA.debug.killAll();
+      room.projectiles.length = 0;
+    }
+    return out;
+  });
+  problems.push(...depProblems);
+
+  // Optik: Honeypot (kurz vor dem Biss) und Rolling Release (ausgepackt + zielend) in einem normalen Raum auf
+  // Dependency Hell (Bild pruefen!). Posen werden gehalten (update leer), damit nichts weiterlaeuft.
+  await page.evaluate(() => {
+    const g = BOTA.game;
+    g.enterFloor(BOTA.FLOOR_THEMES.findIndex((t) => t.key === 'dephell') + 1); g.setState('play');
+    const c = [...g.floor.cells.values()].find((x) => x.type === 'normal');
+    c.room.populated = true; c.room.cleared = true;
+    g.teleport(c.room);
+    for (let i = 0; i < 4; i++) BOTA.debug.killAll();
+    const at = (x, y) => g.nearestFreePos(x, y);
+    const put = (id, x, y, st) => {
+      const q = at(x, y), e = BOTA.debug.spawn(id, q.x, q.y);
+      e.spawnDelay = 0; Object.assign(e.state, st);
+      e.update = function (dt) { this.t += dt; };   // Pose halten, Animation laeuft weiter
+      return e;
+    };
+    put('honeypot', 560, 300, { mode: 'pull', t: 0.3, pullK: 1, warned: true });
+    put('rolling_release', 220, 170, { mode: 'open', t: 1.5, major: 2 });
+    put('rolling_release', 800, 470, { mode: 'aim', t: 0.2, minor: 4 });
+    const q = at(330, 330); g.player.x = q.x; g.player.y = q.y;
+  });
+  await page.waitForTimeout(250);
+  await shot('06-dephell-enemies');
+  await page.evaluate(() => { for (let i = 0; i < 4; i++) BOTA.debug.killAll(); });
 
   // Mehrfach toedlicher Schaden, weil Items wie "Retry with Backoff" den ersten Tod abfangen
   await page.evaluate(() => {
