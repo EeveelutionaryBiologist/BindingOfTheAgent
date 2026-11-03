@@ -60,7 +60,7 @@ secret); rocks and blocks too, except on Sandbox Borders.
 | ![The Latent Space](images/floor_latent_swatch.png) | 8 | **The Latent Space** `latent` | Dot grid | Stars and a constellation | Bushes, packages | C lydian, 96 bpm, sine | — |
 | ![Undefined Behavior](images/floor_undefined_swatch.png) | 9 | **Undefined Behavior** `undefined` | Square tiles | Shifted colour stripes (glitches) | All four kinds | B♭ locrian, 144 bpm, square | — |
 | ![/dev/null](images/floor_devnull_swatch.png) | 10 | **/dev/null** `devnull` | Dot grid | Almost nothing: a few lost bits | Crates, packages | G minor, 80 bpm, triangle | — |
-| ![The Context Limit](images/floor_context_swatch.png) | 11 | **The Context Limit** `context` | Square tiles, wet | Fading fragments of earlier context, puddles, water streaks | All four kinds | C♯ mixolydian, 108 bpm, square | Downpour, whispers, distant lightning, Rate Limiters |
+| ![The Context Limit](images/floor_context_swatch.png) | 11 | **The Context Limit** `context` | Square tiles, wet | Fading fragments of earlier context, puddles, water streaks | Crates, packages, cartons | C♯ minor, 84 bpm, sine | Downpour, whispers, distant lightning, Rate Limiters |
 
 The swatch is a tiny room in the theme's colours: wall, floor checkerboard, door (top) and accent (centre dot).
 
@@ -244,8 +244,9 @@ amber shots, so check contrast with screenshots before settling on a bright pale
   loses its letters one by one (truncated context) and fades away, with a whisper you can barely hear. Purely
   cosmetic: it never touches the run's random numbers, so seeds stay the same.
 - **Gameplay, enemies:** the Rate Limiter from Production also lives here (a floor about tokens and limits).
-- **Breakables:** all four kinds in 80 % of combat rooms, up to 5 per room.
-- **Music:** C♯ mixolydian, 108 bpm, square lead.
+- **Breakables:** crates, packages and cartons in 80 % of combat rooms, up to 5 per room (no bushes since 2026-11-03:
+  they fit the theme but clashed with the rain and puddles).
+- **Music:** C♯ minor, 84 bpm, soft sine lead (was C♯ mixolydian, 108 bpm, square until 2026-11-03).
 
 ---
 

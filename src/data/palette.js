@@ -173,13 +173,15 @@
       // Platzregen ueber dem Raum, Pfuetzen mit Ringen, Wasserspuren an den Waenden, fernes Wetterleuchten und
       // Satzfetzen, die als Fluestern durch den Raum huschen (ambient 'rain', siehe renderer.js / game.updateAmbience)
       key: 'context',
-      props: { kinds: ['crate', 'bush', 'package', 'carton'], chance: 0.8, max: 5 },
+      // Keine Bueschen (passten thematisch, stoerten aber optisch zwischen Regen und Pfuetzen; seit 2026-11-03)
+      props: { kinds: ['crate', 'package', 'carton'], chance: 0.8, max: 5 },
       floor: '#2a323f', floorAlt: '#2e3745', grout: 'rgba(0,0,0,0.24)',
       wall: '#1a202d', wallLight: '#38455c', wallDark: '#0c1018', wallTop: '#222a39',
       door: '#465674', accent: '#9ec5ff',
       pattern: 'tiles', decor: 'fog', wallDecor: 'rain', ambient: 'rain',
       light: 'rgba(190,215,250,0.05)', vignette: '2,5,12',
-      music: { root: 49, mode: 'mixolydian', bpm: 108, lead: 'square' },
+      // Trist und langsam (bis 2026-11-03: Cis-mixolydisch, 108 bpm, Rechteck-Lead)
+      music: { root: 49, mode: 'minor', bpm: 84, lead: 'sine' },
     },
   ];
 
