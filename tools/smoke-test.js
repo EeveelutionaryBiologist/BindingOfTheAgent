@@ -44,6 +44,12 @@
  *   - Nested Infinite Loop: ab Etage 8 statt der Infinite Loop; nur der aeussere lebende Ring feuert und ist
  *     greifbar; Ringe zerfallen bei 50 % / 16,67 %; Schuesse 165–260 px/s; Teile bleiben im Raum; ein Boss-Tod
  *   - Rogue Agent: nie vor Etage 7; haelt Abstand; jede Salve nach Gluehen, zwei 3er-Faecher oder drei Einzelschuesse
+ *   - Etagen-Besetzung (home/AWAY) auf 1–7: Heimat-Gegner wie in ROSTER, Auswaerts-Faktor genau AWAY, Raeume voll,
+ *     Auswaerts-Anteil 5–45 %; Kakophonie ab 8 (mixAt, Anhebung, Familien ueberall, Octopus Merge gedeckelt);
+ *     Determinismus (Begegnungen ziehen nicht aus dem Etagen-RNG)
+ *   - Zwischenboss-Begegnungen ab 8: Anzahl je Tiefe, Platzierung, offene Arena, nie der Etagen-Boss; jeder der vier
+ *     Bosse durch eine Tuer: kein Intro, HP x ENCOUNTER_HP, agiert, raeumt den Raum, keine Falltuer/Reste
+ *   - Themen-Gegner und -Bosse "nur auf ihrer Etage" gilt vor Etage 8 (danach Kakophonie)
  *   - Spezialraeume, Pause- und Todesbildschirm rendern
  * Screenshots landen in tools/out/ (nicht einchecken).
  *
@@ -141,10 +147,10 @@ const URL = 'file://' + path.join(ROOT, 'index.html').replace(/\\/g, '/') + '?se
         const ll = c.room.looseLoot;
         if (!ll.length) continue;
         combatWithLoot++;
-        if (c.type !== 'normal' || !c.room.plannedEnemies.length) out.push('fuzz' + i + ': lose Pickups in ' + c.type);
+        if (c.type !== 'normal' || (!c.room.plannedEnemies.length && !c.room.encounterBoss)) out.push('fuzz' + i + ': lose Pickups in ' + c.type);
         if (ll.length > 2 || ll.some((t) => !BOTA.LOOSE_LOOT.types[t])) out.push('fuzz' + i + ': lose Pickups ' + ll.join(','));
       }
-      combatRooms += [...f.cells.values()].filter((c) => c.type === 'normal' && c.room.plannedEnemies.length).length;
+      combatRooms += [...f.cells.values()].filter((c) => c.type === 'normal' && (c.room.plannedEnemies.length || c.room.encounterBoss)).length;
       // README.md: hoechstens eines, nur in normalen Raeumen
       const readmes = [...f.cells.values()].filter((c) => c.room.hasReadme);
       if (readmes.length > 1 || readmes.some((c) => c.type !== 'normal')) out.push('fuzz' + i + ': README in ' + readmes.map((c) => c.type));
@@ -173,7 +179,7 @@ const URL = 'file://' + path.join(ROOT, 'index.html').replace(/\\/g, '/') + '?se
       for (const c of f.cells.values()) {
         if (!c.room.hasPipe) continue;
         pipeRooms++;
-        if (c.type !== 'normal' || !c.room.plannedEnemies.length) out.push('fuzz' + i + ': Rohr in ' + c.type);
+        if (c.type !== 'normal' || (!c.room.plannedEnemies.length && !c.room.encounterBoss)) out.push('fuzz' + i + ': Rohr in ' + c.type);
       }
     }
     if (Math.abs(pipeRooms / Math.max(1, combatRooms) - 0.1) > 0.04) out.push('Anteil Raeume mit Rohr ' + (pipeRooms / combatRooms).toFixed(3));
@@ -226,11 +232,11 @@ const URL = 'file://' + path.join(ROOT, 'index.html').replace(/\\/g, '/') + '?se
       for (let i = 0; i < 40; i++) {
         const list = BOTA.rollRoomEnemies(new BOTA.RNG(BOTA.hashString('theme' + d + ':' + i)), d);
         if (!list.length) { out.push('Etage ' + d + ' (' + th + '): leerer Kampfraum'); break; }
-        const bad = list.filter((id) => (BOTA.ENEMIES[id].minFloor || 1) > d || BOTA.themeWeight(BOTA.ENEMIES[id], th) <= 0);
+        const bad = list.filter((id) => (BOTA.ENEMIES[id].minFloor || 1) > d || BOTA.themeWeight(BOTA.ENEMIES[id], th, d) <= 0);
         if (bad.length) { out.push('Etage ' + d + ' (' + th + '): nicht erlaubte Gegner ' + bad.join(',')); break; }
       }
       const boss = BOTA.rollBoss(new BOTA.RNG(d), d);
-      if (!BOTA.BOSSES[boss] || BOTA.themeWeight(BOTA.BOSSES[boss], th) <= 0) out.push('Etage ' + d + ' (' + th + '): kein erlaubter Boss');
+      if (!BOTA.BOSSES[boss] || BOTA.themeWeight(BOTA.BOSSES[boss], th, d) <= 0) out.push('Etage ' + d + ' (' + th + '): kein erlaubter Boss');
     }
 
     // 3) Mechanik mit voruebergehenden Test-Eintraegen (werden in jedem Fall wieder entfernt)
@@ -253,13 +259,24 @@ const URL = 'file://' + path.join(ROOT, 'index.html').replace(/\\/g, '/') + '?se
       for (let d = 1; d <= 2 * N; d++) {
         const branches = BOTA.themeKeyAt(d) === 'branches';
         const only = share(d, '__only'), bonus = share(d, '__bonus'), zero = share(d, '__zero');
-        if (branches !== (only > 0)) out.push('themeOnly: Anteil ' + only.toFixed(3) + ' auf Etage ' + d);
-        if (branches !== (bonus > 0)) out.push('themeOnly (Bonus): Anteil ' + bonus.toFixed(3) + ' auf Etage ' + d);
-        if (branches && zero > 0) out.push('themes 0: trotzdem gespawnt auf Etage ' + d);
-        if (!branches && zero <= 0) out.push('themes: neutraler Gegner fehlt auf Etage ' + d);
-        // Bosse: themeOnly-Boss nur (und mit Gewicht 1000 praktisch immer) auf seinem Thema
         const boss = BOTA.rollBossVaried(new BOTA.RNG(d), d, []);
-        if (branches !== (boss === '__boss')) out.push('Boss themeOnly: ' + boss + ' auf Etage ' + d);
+        if (d < BOTA.MIX_FROM) {
+          if (branches !== (only > 0)) out.push('themeOnly: Anteil ' + only.toFixed(3) + ' auf Etage ' + d);
+          if (branches !== (bonus > 0)) out.push('themeOnly (Bonus): Anteil ' + bonus.toFixed(3) + ' auf Etage ' + d);
+          if (branches && zero > 0) out.push('themes 0: trotzdem gespawnt auf Etage ' + d);
+          // Bosse: themeOnly-Boss nur (und mit Gewicht 1000 praktisch immer) auf seinem Thema
+          if (branches !== (boss === '__boss')) out.push('Boss themeOnly: ' + boss + ' auf Etage ' + d);
+        } else {
+          // Kakophonie: Ausschluss (themeOnly, Faktor 0) wird angehoben -> taucht ueberall auf
+          if (!(only > 0)) out.push('Kakophonie: themeOnly fehlt auf Etage ' + d);
+          if (!(bonus > 0)) out.push('Kakophonie: themeOnly-Bonus fehlt auf Etage ' + d);
+          if (!(zero > 0)) out.push('Kakophonie: themes 0 fehlt auf Etage ' + d);
+          // Themen-Boss: auf seiner Etage praktisch immer, sonst hoechstens mit Gewicht 3 x Mischungsgrad
+          if (branches && boss !== '__boss') out.push('Boss themeOnly fehlt auf seiner Etage ' + d);
+          const bw = BOTA.bossWeightAt(BS.__boss, BOTA.themeKeyAt(d), d);
+          if (!branches && Math.abs(bw - 3 * BOTA.mixAt(d)) > 1e-9) out.push('Kakophonie: Themen-Boss-Gewicht ' + bw + ' auf Etage ' + d);
+        }
+        if (!branches && zero <= 0) out.push('themes: neutraler Gegner fehlt auf Etage ' + d);
       }
       // Faktor 4 auf /dev/null: deutlich haeufiger als auf den Nachbaretagen
       const dn = keys.indexOf('devnull') + 1;
@@ -688,9 +705,9 @@ const URL = 'file://' + path.join(ROOT, 'index.html').replace(/\\/g, '/') + '?se
   const staleProblems = await page.evaluate(() => {
     const out = [];
     const g = BOTA.game;
-    // Spawn-Verteilung: auf Etage 3 (Forgotten Branches) dabei, auf anderen Etagen nie
+    // Spawn-Verteilung: auf Etage 3 (Forgotten Branches) dabei, auf anderen Etagen vor der Kakophonie (8) nie
     let onBranches = 0;
-    for (const d of [2, 3, 4, 5, 9, 13]) {
+    for (const d of [2, 3, 4, 5, 6, 7]) {
       for (let i = 0; i < 300; i++) {
         const n = BOTA.rollRoomEnemies(new BOTA.RNG(BOTA.hashString('stale' + d + ':' + i)), d).filter((x) => x === 'stale_branch').length;
         if (BOTA.themeKeyAt(d) === 'branches') onBranches += n;
@@ -908,7 +925,10 @@ const URL = 'file://' + path.join(ROOT, 'index.html').replace(/\\/g, '/') + '?se
     if (!withCherries) { out.push('Cherry-Pick: kein Raum auf Etage 3 mit Kirschen'); return out; }
     // 2) Echter Raum: Bevoelkern verbindet die Kirschen paarweise und gegenseitig, Stiel innerhalb der Leine
     g.enterFloor(3);
-    const cell = [...g.floor.cells.values()].find((c) => c.type === 'normal');
+    // Raum ohne Gruben: Schritt 4 setzt eine Kirsche weit weg; hinter einem Grubengraben kann die Leine (Laeufer)
+    // sie nicht heranziehen — das ist im Spiel unerreichbar (seit der Etagen-Besetzung 2026-11-03 kam hier pit_moat)
+    const normals = [...g.floor.cells.values()].filter((c) => c.type === 'normal');
+    const cell = normals.find((c) => !c.room.layout || !c.room.layout.rows.join('').includes('p')) || normals[0];
     cell.room.plannedEnemies = list.slice();
     cell.room.looseLoot = []; cell.room.hasReadme = false;
     g.teleport(cell.room);
@@ -983,8 +1003,10 @@ const URL = 'file://' + path.join(ROOT, 'index.html').replace(/\\/g, '/') + '?se
         rooms++; withOrphan += n;
       }
       const share = withOrphan / rooms;
-      if (BOTA.themeKeyAt(d) !== 'branches') { if (share > 0) out.push('Orphan Commit auf Etage ' + d); continue; }
-      const want = Math.min(0.25, E.orphan_commit.bonusChance + 0.01 * (d - 1));
+      // vor Etage 8 nur auf Forgotten Branches, danach ueberall mit angehobenem Faktor (Kakophonie)
+      const f = BOTA.themeWeight(E.orphan_commit, BOTA.themeKeyAt(d), d);
+      if (f <= 0) { if (share > 0) out.push('Orphan Commit auf Etage ' + d); continue; }
+      const want = Math.min(0.25, (E.orphan_commit.bonusChance + 0.01 * (d - 1)) * f);
       if (Math.abs(share - want) > 0.05) out.push('Orphan Commit: Anteil ' + share.toFixed(3) + ' statt ~' + want.toFixed(2) + ' auf Etage ' + d);
     }
 
@@ -1053,11 +1075,11 @@ const URL = 'file://' + path.join(ROOT, 'index.html').replace(/\\/g, '/') + '?se
     for (let d = 1; d <= 2 * BOTA.FLOOR_THEMES.length; d++) {
       let n = 0;
       for (let i = 0; i < 400; i++) if (BOTA.rollBossVaried(new BOTA.RNG(BOTA.hashString('octo' + d + ':' + i)), d, []) === 'octopus_merge') n++;
-      if (BOTA.themeKeyAt(d) !== 'branches') { if (n) out.push('Octopus Merge auf Etage ' + d); continue; }
+      if (BOTA.themeKeyAt(d) !== 'branches' && d < BOTA.MIX_FROM) { if (n) out.push('Octopus Merge auf Etage ' + d); continue; }
       const th = BOTA.themeKeyAt(d);
       const ids = Object.keys(BOTA.BOSSES).filter((id) => BOTA.bossEligible(BOTA.BOSSES[id], d, th));
-      const total = ids.reduce((sum, id) => sum + BOTA.bossWeightAt(BOTA.BOSSES[id], th), 0);
-      const want = BOTA.bossWeightAt(DEF, th) / total;
+      const total = ids.reduce((sum, id) => sum + BOTA.bossWeightAt(BOTA.BOSSES[id], th, d), 0);
+      const want = BOTA.bossWeightAt(DEF, th, d) / total;
       if (Math.abs(n / 400 - want) > 0.08) out.push('Octopus Merge: Anteil ' + (n / 400).toFixed(2) + ' statt ~' + want.toFixed(2) + ' auf Etage ' + d);
     }
 
@@ -1282,7 +1304,7 @@ const URL = 'file://' + path.join(ROOT, 'index.html').replace(/\\/g, '/') + '?se
     const g = BOTA.game, E = BOTA.ENEMIES, DT = 1 / 60;
     const SB = BOTA.FLOOR_THEMES.findIndex((t) => t.key === 'sandbox') + 1;
     // 1) Baseline-Faktoren
-    const dw = BOTA.enemyWeightAt(E.deprecation_warning, SB) / BOTA.enemyWeightAt(E.deprecation_warning, SB, 'none');
+    const dw = BOTA.enemyWeightAt(E.deprecation_warning, SB) / BOTA.enemyWeightAt(E.deprecation_warning, SB, null);
     if (Math.abs(dw - 2.5) > 1e-9) out.push('Deprecation Warning: Faktor ' + dw + ' auf Sandbox Borders');
     let hal = 0;
     for (let i = 0; i < 1500; i++) if (BOTA.rollRoomEnemies(new BOTA.RNG(BOTA.hashString('hal:' + i)), SB).includes('hallucination')) hal++;
@@ -1535,6 +1557,201 @@ const URL = 'file://' + path.join(ROOT, 'index.html').replace(/\\/g, '/') + '?se
     return out;
   });
   problems.push(...rogueProblems);
+
+  // --- Etagen-Identitaet (home/AWAY) auf 1–7, Kakophonie ab 8, Zwischenboss-Begegnungen ab 8 (Daten) ---
+  const spawnProblems = await page.evaluate(() => {
+    const out = [];
+    const E = BOTA.ENEMIES;
+    // 1) Heimat-Besetzung der allgemeinen Gegner (ohne themeOnly-Familien) je Etage 1–7.
+    //    Neue allgemeine Gegner mit home muessen hier eingetragen werden.
+    const ROSTER = {
+      backlog: ['bug', 'memory_leak', 'null_pointer'],
+      legacy: ['bug', 'deprecation_warning', 'jira_ticket', 'null_pointer', 'spaghetti_code', 'zombie_process'],
+      branches: ['merge_conflict'],
+      dephell: ['memory_leak', 'race_condition', 'scope_creep', 'zombie_process'],
+      production: ['flaky_test', 'graphics_glitch', 'jira_ticket', 'merge_conflict', 'null_pointer', 'race_condition'],
+      sandbox: ['deprecation_warning'],
+      training: ['deprecation_warning', 'flaky_test', 'rogue_agent', 'spaghetti_code'],
+    };
+    for (let d = 1; d <= 7; d++) {
+      const th = BOTA.themeKeyAt(d);
+      const home = Object.keys(E).filter((id) => {
+        const def = E[id];
+        return def.spawn !== false && !def.themeOnly && (def.weight || 0) > 0 && (def.minFloor || 1) <= d && BOTA.themeFactor(def, th) >= 1;
+      }).sort();
+      const want = (ROSTER[th] || []).filter((id) => E[id] && (E[id].minFloor || 1) <= d).sort();
+      if (home.join() !== want.join()) out.push('Besetzung ' + th + ' (Etage ' + d + '): ' + home.join(',') + ' statt ' + want.join(','));
+      // Auswaerts-Gegner zaehlen genau mit AWAY, Heimat-Gegner voll (oder mit ihrem themes-Faktor)
+      for (const [id, def] of Object.entries(E)) {
+        if (!Array.isArray(def.home) || (def.minFloor || 1) > d || !(def.weight > 0)) continue;
+        const ratio = BOTA.enemyWeightAt(def, d) / BOTA.enemyWeightAt(def, d, null);
+        const explicit = def.themes && Object.prototype.hasOwnProperty.call(def.themes, th);
+        const exp = explicit ? def.themes[th] : (def.home.includes(th) ? 1 : BOTA.AWAY);
+        if (Math.abs(ratio - exp) > 1e-9) out.push(id + ' auf Etage ' + d + ': Faktor ' + ratio.toFixed(3) + ' statt ' + exp);
+      }
+      // Raeume fuellen sich weiter sinnvoll; der Anteil der Auswaerts-Gegner ist klein, aber nicht null
+      let all = 0, away = 0, rooms = 0;
+      for (let i = 0; i < 800; i++) {
+        const l = BOTA.rollRoomEnemies(new BOTA.RNG(BOTA.hashString('roster' + d + ':' + i)), d);
+        rooms++; all += l.length;
+        away += l.filter((id) => BOTA.themeFactor(E[id], th) < 1).length;
+      }
+      if (all / rooms < 3) out.push('Etage ' + d + ': nur ' + (all / rooms).toFixed(2) + ' Gegner pro Raum');
+      const aw = away / Math.max(1, all);
+      if (d === 1 ? aw > 0 : (aw < 0.05 || aw > 0.45)) out.push('Etage ' + d + ' (' + th + '): Auswaerts-Anteil ' + aw.toFixed(3));
+    }
+
+    // 2) Kakophonie: mixAt 0 vor 8, 0.25 auf 8, steigt um 0.1, ab 16 = 1; f' = f + (1 - f) * mix, Boosts bleiben
+    for (let d = 1; d <= 22; d++) {
+      const m = BOTA.mixAt(d);
+      const want = d < BOTA.MIX_FROM ? 0 : Math.min(1, 0.25 + 0.1 * (d - BOTA.MIX_FROM));
+      if (Math.abs(m - want) > 1e-9) out.push('mixAt(' + d + ') = ' + m);
+    }
+    if (BOTA.themeWeight(E.spinlock, 'latent') !== 0) out.push('themeWeight ohne Tiefe hebt an');
+    if (Math.abs(BOTA.themeWeight(E.spinlock, 'latent', 8) - 0.25) > 1e-9) out.push('Kakophonie: themeOnly auf Etage 8 nicht 0.25');
+    if (Math.abs(BOTA.themeWeight(E.bug, 'latent', 8) - (BOTA.AWAY + (1 - BOTA.AWAY) * 0.25)) > 1e-9) out.push('Kakophonie: AWAY auf Etage 8 falsch');
+    if (BOTA.themeWeight(E.deprecation_warning, 'sandbox', 17) !== 2.5) out.push('Kakophonie: Boost auf Sandbox Borders veraendert');
+    if (BOTA.themeWeight(E.bug, 'latent', 16) !== 1) out.push('Kakophonie: Etage 16 nicht voll gemischt');
+    // Familien tauchen ab Etage 8 auf fremden Etagen auf, immer haeufiger
+    const fam = ['stale_branch', 'detached_head', 'cherry_pick', 'spinlock', 'rootkit'];
+    const famShare = (d) => {
+      let n = 0, all = 0;
+      for (let i = 0; i < 600; i++) {
+        const l = BOTA.rollRoomEnemies(new BOTA.RNG(BOTA.hashString('mix' + d + ':' + i)), d);
+        all += l.length; n += l.filter((id) => fam.includes(id)).length;
+      }
+      return n / Math.max(1, all);
+    };
+    const seen = new Set();
+    for (const d of [8, 9, 10]) for (let i = 0; i < 600; i++) for (const id of BOTA.rollRoomEnemies(new BOTA.RNG(BOTA.hashString('fam' + d + ':' + i)), d)) seen.add(id);
+    for (const id of fam.concat(['orphan_commit'])) if (!seen.has(id)) out.push('Kakophonie: ' + id + ' fehlt auf Etage 8–10');
+    const s8 = famShare(8), s12 = famShare(12);
+    if (!(s8 > 0.05 && s12 > s8)) out.push('Kakophonie: Familien-Anteil ' + s8.toFixed(3) + ' (8) / ' + s12.toFixed(3) + ' (12)');
+    // Octopus Merge sickert ab 8 mit gedeckeltem Gewicht (3 x mix) in fremde Etagen
+    const ow = BOTA.bossWeightAt(BOTA.BOSSES.octopus_merge, 'latent', 8);
+    if (Math.abs(ow - 0.75) > 1e-9) out.push('Octopus Merge auf Etage 8: Gewicht ' + ow);
+    if (BOTA.bossWeightAt(BOTA.BOSSES.octopus_merge, 'branches', 14) !== 12) out.push('Octopus Merge: Heimat-Gewicht veraendert');
+
+    // 3) Determinismus: gleiche Seeds -> gleiche Raeume; die Begegnungen ziehen nicht aus dem Etagen-RNG
+    for (let i = 0; i < 20; i++) {
+      const d = 8 + (i % 6), seed = 'det' + i;
+      const a = new BOTA.Floor(d, seed), b = new BOTA.Floor(d, seed);
+      const sig = (f) => [...f.cells.values()].map((c) => c.type + ':' + (c.room.layout && c.room.layout.id) + ':' + c.room.plannedEnemies.join('+') + ':' + c.room.encounterBoss).join('|');
+      if (sig(a) !== sig(b)) { out.push('Etage nicht deterministisch (' + seed + ')'); break; }
+      const keep = BOTA.ENCOUNTER_FROM;
+      BOTA.ENCOUNTER_FROM = 99;
+      let c0;
+      try { c0 = new BOTA.Floor(d, seed); } finally { BOTA.ENCOUNTER_FROM = keep; }
+      for (const cell of a.cells.values()) {
+        const other = c0.get(cell.x, cell.y);
+        if (!other || other.type !== cell.type) { out.push('Begegnung aendert die Karte (' + seed + ')'); break; }
+        if (cell.room.encounterBoss) continue;
+        if (other.room.plannedEnemies.join() !== cell.room.plannedEnemies.join() || other.room.layout !== cell.room.layout) { out.push('Begegnung aendert andere Raeume (' + seed + ')'); break; }
+      }
+    }
+
+    // 4) Begegnungen: Anzahl je Tiefe, nur Kampfraeume, nicht neben dem Start, offene Arena, keine Objekte,
+    //    keine normalen Gegner, erlaubte Bosse, nie der Etagen-Boss, auf einer Etage verschiedene Bosse
+    let two = 0, many = 0, nearStart = 0;
+    for (let i = 0; i < 300; i++) {
+      const d = 6 + (i % 10), f = new BOTA.Floor(d, 'enc' + i);
+      const enc = [...f.cells.values()].filter((c) => c.room.encounterBoss);
+      if (enc.length !== f.encounterRooms.length) out.push('enc' + i + ': encounterRooms passt nicht');
+      if (d < 8 && enc.length) out.push('Begegnung auf Etage ' + d);
+      if ((d === 8 || d === 9) && enc.length !== 1) out.push(enc.length + ' Begegnungen auf Etage ' + d);
+      if (d >= 10) { many++; if (enc.length === 2) two++; else if (enc.length !== 1) out.push(enc.length + ' Begegnungen auf Etage ' + d); }
+      const bossId = f.findType('boss').room.bossId;
+      if (enc.length === 2 && enc[0].room.encounterBoss === enc[1].room.encounterBoss) out.push('enc' + i + ': zweimal derselbe Zwischenboss');
+      for (const c of enc) {
+        const rm = c.room;
+        if (c.type !== 'normal') out.push('enc' + i + ': Begegnung in ' + c.type);
+        if (c.dist < 2) nearStart++;
+        if (!BOTA.ENCOUNTER_BOSSES.includes(rm.encounterBoss)) out.push('enc' + i + ': Boss ' + rm.encounterBoss);
+        if (rm.encounterBoss === bossId) out.push('enc' + i + ': Zwischenboss = Etagen-Boss ' + bossId);
+        if (rm.plannedEnemies.length) out.push('enc' + i + ': Begegnung mit normalen Gegnern');
+        if (!rm.layout || !rm.layout.tags.includes('special')) out.push('enc' + i + ': keine offene Arena (' + (rm.layout && rm.layout.id) + ')');
+        if (rm.props.size) out.push('enc' + i + ': Objekte in der Arena');
+        for (let r = 1; r < 8; r++) for (let cc = 1; cc < 14; cc++) if (rm.tileAt(cc, r) === BOTA.TILES.PROP) out.push('enc' + i + ': PROP-Kachel in der Arena');
+        // Raummitte frei (dort startet der Boss)
+        if (rm.tileAt(7, 4) !== BOTA.TILES.FLOOR) out.push('enc' + i + ': Arenamitte blockiert');
+      }
+      // Nachtraegliche Wahl mit dem endgueltigen Etagen-Boss (game.assignFloorBoss) vermeidet auch den
+      for (const avoid of BOTA.ENCOUNTER_BOSSES) {
+        f.pickEncounterBosses(avoid);
+        if (enc.some((c) => c.room.encounterBoss === avoid)) { out.push('pickEncounterBosses vermeidet ' + avoid + ' nicht'); break; }
+      }
+      if (out.length > 20) break;
+    }
+    if (nearStart > 3) out.push(nearStart + ' Begegnungen neben dem Startraum');
+    if (Math.abs(two / Math.max(1, many) - 0.5) > 0.12) out.push('Anteil zweier Begegnungen ab Etage 10: ' + (two / many).toFixed(2));
+    return out;
+  });
+  problems.push(...spawnProblems);
+
+  // --- Zwischenboss-Begegnungen live: jeder der vier Bosse durch eine Tuer betreten -> kein Intro, kein
+  //     Boss-Raum-Zeug, HP x ENCOUNTER_HP, er agiert, raeumt beim Tod den Raum und hinterlaesst nichts ---
+  await page.evaluate(() => { window.__intro = 0; BOTA.bus.on('bossIntro', () => { window.__intro++; }); });
+  for (const id of await page.evaluate(() => BOTA.ENCOUNTER_BOSSES.slice())) {
+    const setup = await page.evaluate((id) => {
+      const out = [];
+      const g = BOTA.game;
+      g.enterFloor(8); g.setState('play');
+      BOTA.debug.god(true);
+      const cell = g.floor.encounterRooms[0];
+      if (!cell) return { out: ['Etage 8 ohne Begegnung'] };
+      cell.room.encounterBoss = id;
+      // Nachbarraum betreten, leeren, dann durch die Tuer in die Arena (wie beim normalen Spielen)
+      const dir = Object.keys(cell.room.doors).find((k) => ['normal', 'start'].includes(cell.room.doors[k].target.type));
+      if (!dir) return { out: [id + ': Arena ohne normalen Nachbarraum'] };
+      const from = cell.room.doors[dir].target.room;
+      g.teleport(from);
+      g.pendingBossIntro = false;
+      for (let i = 0; i < 4; i++) BOTA.debug.killAll();
+      from.enemies.length = 0; from.projectiles.length = 0;
+      g.changeRoom(BOTA.OPPOSITE[dir]);
+      if (g.room !== cell.room) out.push(id + ': Tuer fuehrt nicht in die Arena');
+      const bosses = g.room.enemies.filter((e) => e.isBoss);
+      const want = id === 'rogue_swarm' ? 4 : 1;
+      if (bosses.length !== want) out.push(id + ': ' + bosses.length + ' Boss-Entities statt ' + want);
+      const hp = Math.round(BOTA.BOSSES[id].hp * (1 + 0.3 * 7) * BOTA.ENCOUNTER_HP);
+      for (const b of bosses) {
+        if (!b.encounter) out.push(id + ': nicht als Begegnung markiert');
+        if (b.maxHp !== hp) out.push(id + ': maxHp ' + b.maxHp + ' statt ' + hp);
+      }
+      if (!g.room.combatClosed) out.push(id + ': Tueren bleiben offen');
+      if (g.pendingBossIntro) out.push(id + ': Boss-Intro vorgemerkt');
+      window.__start = bosses.map((b) => [b.x, b.y]);
+      return { out };
+    }, id);
+    problems.push(...setup.out);
+    if (setup.out.length) continue;
+    await page.waitForTimeout(3000);
+    await shot('08-encounter-' + id);
+    problems.push(...await page.evaluate((id) => {
+      const out = [];
+      const g = BOTA.game;
+      if (g.state !== 'play') out.push(id + ': Zustand ' + g.state + ' statt play (Intro?)');
+      if (window.__intro) out.push(id + ': bossIntro ausgeloest');
+      const bosses = g.room.enemies.filter((e) => e.isBoss && !e.dead);
+      const moved = bosses.some((b, i) => window.__start[i] && Math.hypot(b.x - window.__start[i][0], b.y - window.__start[i][1]) > 4);
+      const shots = g.room.projectiles.some((p) => p.team === 'enemy');
+      if (!moved && !shots) out.push(id + ': Zwischenboss tut nichts');
+      return out;
+    }, id));
+    for (let i = 0; i < 6; i++) { await page.evaluate(() => BOTA.debug.killAll()); await page.waitForTimeout(300); }
+    await page.waitForTimeout(1200);
+    problems.push(...await page.evaluate((id) => {
+      const out = [];
+      const g = BOTA.game, room = g.room;
+      if (room.enemies.length) out.push(id + ': ' + room.enemies.length + ' Entities bleiben zurueck (' + [...new Set(room.enemies.map((e) => e.id))].join(',') + ')');
+      if (!room.cleared || room.combatClosed) out.push(id + ': Raum nicht geraeumt');
+      if (room.pickups.some((p) => p instanceof BOTA.Trapdoor)) out.push(id + ': Falltuer im Begegnungsraum');
+      if (room.pickups.some((p) => p instanceof BOTA.Pedestal)) out.push(id + ': Boss-Podest im Begegnungsraum');
+      if (g.state !== 'play') out.push(id + ': Zustand ' + g.state + ' nach dem Kampf');
+      if (window.__intro) out.push(id + ': bossIntro ausgeloest');
+      return out;
+    }, id));
+  }
 
   // Mehrfach toedlicher Schaden, weil Items wie "Retry with Backoff" den ersten Tod abfangen
   await page.evaluate(() => {

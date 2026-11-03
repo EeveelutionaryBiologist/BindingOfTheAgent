@@ -14,6 +14,14 @@
  * themes/themeOnly funktionieren wie bei den Gegnern (B.themeWeight in enemies.js). Ein Boss, der
  * auf einer Etage ausgeschlossen ist, kommt auch nicht in die Abwechslungs-Auswahl (rollBossVaried).
  *
+ * Kakophonie ab Etage 8 (B.MIX_FROM): Wie bei den Gegnern wird ein Etagen-Faktor < 1 angehoben, ein Themen-Boss
+ * (Octopus Merge) sickert also ab Etage 8 auch in andere Etagen. Damit sein hohes Heimat-Gewicht (12) dort nicht
+ * dominiert, zaehlt er ausserhalb seiner Heimat hoechstens mit BOSS_LEAK_WEIGHT (3, wie ein normaler Boss) mal
+ * angehobenem Faktor: Etage 8 0.75, Etage 12 ~2, ab Etage 16 3. Die Abwechslungs-Regeln bleiben unveraendert.
+ *
+ * Zwischenboss-Begegnungen (ab Etage 8, siehe dungeon.js assignEncounters): ENCOUNTER_BOSSES duerfen als
+ * normaler Kampfraum auftauchen (ohne Intro-Karte, Falltuer und Boss-Podest, HP x ENCOUNTER_HP).
+ *
  * HP-Tuning (DESIGN.md §8): Basis-Spieler macht 3.5 Schaden bei ~2.6 Schuss/s = ~9.2 DPS. Mit realistischer
  * Trefferquote (55–75 %, je nach Groesse/Beweglichkeit des Bosses) ergeben die Werte unten auf Etage 1
  * etwa 45–70 s Kampfdauer. Die HP skalieren mit 1 + 0.3 * (Tiefe - 1) — Items gleichen das ungefaehr aus.
@@ -127,18 +135,35 @@
     const last = hist[hist.length - 1];
     const cands = pool.length > 1 ? pool.filter((id) => id !== last) : pool;
     const met = (id) => hist.reduce((n, h) => n + (h === id ? 1 : 0), 0);
-    return rng.weighted(cands, (id) => B.bossWeightAt(B.BOSSES[id], th) / (1 + met(id)));
+    return rng.weighted(cands, (id) => B.bossWeightAt(B.BOSSES[id], th, d) / (1 + met(id)));
   };
 
-  /** Gewicht eines Bosses auf einer Etage mit diesem Thema (Basisgewicht, fehlend = 1, mal Etagen-Faktor) */
-  B.bossWeightAt = function (def, theme) {
-    return (def.weight || 1) * B.themeWeight(def, theme);
+  /** Hoechstgewicht eines Themen-Bosses ausserhalb seiner Heimat (Kakophonie ab Etage 8) */
+  const BOSS_LEAK_WEIGHT = 3;
+
+  /**
+   * Gewicht eines Bosses auf einer Etage mit diesem Thema (Basisgewicht, fehlend = 1, mal Etagen-Faktor).
+   * depth: optional; mit Tiefe gilt die Kakophonie (siehe Kopfkommentar), ohne Tiefe der rohe Faktor wie bisher.
+   */
+  B.bossWeightAt = function (def, theme, depth) {
+    let w = def.weight || 1;
+    if (depth !== undefined && B.themeFactor(def, theme) < 1 && B.mixAt(depth) > 0) w = Math.min(w, BOSS_LEAK_WEIGHT);
+    return w * B.themeWeight(def, theme, depth);
   };
 
   /** Darf der Boss auf Tiefe d mit Thema th auftauchen? (minFloor erreicht, maxFloor nicht ueberschritten, Faktor > 0) */
   B.bossEligible = function (def, d, th) {
-    return (def.minFloor || 1) <= d && (def.maxFloor === undefined || d <= def.maxFloor) && B.bossWeightAt(def, th) > 0;
+    return (def.minFloor || 1) <= d && (def.maxFloor === undefined || d <= def.maxFloor) && B.bossWeightAt(def, th, d) > 0;
   };
+
+  /**
+   * Zwischenboss-Begegnungen ab Etage 8 (dungeon.js: assignEncounters, game.js: populate). Die vier "fruehen"
+   * Bosse; die Infinite Loop darf hier auch nach ihrem Ruhestand als Etagen-Boss (maxFloor 7) auftauchen.
+   * ENCOUNTER_HP: HP-Faktor gegenueber dem Etagen-Boss derselben Tiefe (ein Seitenraum, kein Etagen-Finale).
+   */
+  B.ENCOUNTER_BOSSES = ['monolith', 'rogue_swarm', 'infinite_loop', 'stakeholder'];
+  B.ENCOUNTER_HP = 0.5;
+  B.ENCOUNTER_FROM = 8;
 
   /** Bosse, die auf Tiefe d mit Thema th auftauchen duerfen */
   function bossPool(d, th) {
@@ -150,6 +175,6 @@
     const th = theme === undefined ? B.themeKeyAt(d) : theme;
     const pool = bossPool(d, th);
     if (!pool.length) return Object.keys(B.BOSSES)[0] || null;
-    return rng.weighted(pool, (id) => B.bossWeightAt(B.BOSSES[id], th));
+    return rng.weighted(pool, (id) => B.bossWeightAt(B.BOSSES[id], th, d));
   };
 })(window.BOTA);

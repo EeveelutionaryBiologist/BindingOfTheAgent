@@ -107,6 +107,17 @@
     'Ticket closed', 'Refactored',
   ];
 
+  // Banner-Untertitel einer Zwischenboss-Begegnung ab Etage 8 (Titel = Boss-Name; game.spawnEncounter)
+  B.TEXT.ENCOUNTER_LINES = [
+    'Not the floor boss. Just a boss. On the floor.',
+    'Retired last sprint. Did not stay retired.',
+    'Out of scope, apparently.',
+    'Got lost on the way to its own floor.',
+    'A legacy boss, now deployed as a side room.',
+    'Reopened. Again.',
+    'Previously resolved. Regression confirmed.',
+  ];
+
   // Schwebender Text bei "denied"-Events, nach Grund
   B.TEXT.DENIED = {
     credits: ['Insufficient credits', 'Payment declined', '402 Payment Required', 'Not in budget'],

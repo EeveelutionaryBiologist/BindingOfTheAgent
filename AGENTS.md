@@ -59,7 +59,8 @@ safeguard). No server is needed. If you want one anyway, any static server works
 
 ### Scriptable debug API (works with or without the overlay)
 `BOTA.debug.god(on?)`, `.giveItem(id?)`, `.spawn(enemyId, x?, y?)`, `.spawnBoss(bossId, x?, y?)`, `.killAll()`,
-`.nextFloor()`, `.reveal()`, `.gotoRoom('start'|'treasure'|'shop'|'boss'|'secret')`, `.resources(n)`.
+`.nextFloor()`, `.reveal()`, `.gotoRoom('start'|'treasure'|'shop'|'boss'|'secret'|'encounter')`, `.resources(n)`
+(`'encounter'` = the floor's first side-quest room, floor 8+).
 Live state is under `BOTA.game` (`.player`, `.room`, `.floor`, `.depth`, `.state`, `.rng`, `.followers`).
 
 ### Automated tests
@@ -87,18 +88,30 @@ Live state is under `BOTA.game` (`.player`, `.room`, `.floor`, `.depth`, `.state
   and explosions break it;
 - `themes` / `themeOnly` on enemies and bosses only name existing theme keys with factors ≥ 0, every floor of two full
   theme cycles fills its rooms with allowed enemies and has an allowed boss, and temporary test entries confirm
-  that exclusion, weight factors, bonus chances and the no-repeat boss rule all respect the floor theme;
+  that exclusion (before floor 8), the lift from floor 8, weight factors, bonus chances and the no-repeat boss rule
+  all respect the floor theme;
+- floor rosters (§4): on floors 1–7 the generic enemies at home match the roster table in the test, enemies away from
+  home count exactly `AWAY`, rooms still hold ≥ 3 enemies on average, and the away share stays at 5–45 %;
+- the cacophony: `mixAt` is 0 before floor 8, 0.25 on 8, +0.1 per floor, 1 from 16; `themeWeight` without a depth
+  is unchanged; every family member (incl. the Orphan Commit) appears on floors 8–10 and gets more common by floor 12;
+  the Octopus Merge leaks at weight 3 × mix; floors stay deterministic and encounters don't touch the floor RNG;
+- side quests: none before floor 8, exactly 1 on floors 8–9, 1–2 (about half 2) from 10; only combat rooms, almost
+  never next to the start, an open `special` arena with a free centre, no props, no normal enemies, never the floor
+  boss, never two of the same; each of the four bosses entered through a door spawns (4 Swarm members), has
+  `ENCOUNTER_HP` × its floor-boss HP, triggers no intro, acts, clears the room and leaves no entities, trapdoor or
+  pedestal;
 - breakable objects use the floor's kinds, stay off spawn points, door fronts and the centre, never cut a room in two,
   and break from player shots and explosions but not from enemy shots;
 - the Off-Brand GPU turns about 12 % of shots into duds that deal no damage, and the GPU prices are 30¢ / 20¢;
 - the Forgotten Branches family (see §4):
-  - **Stale Branch** appears only on its floor, ages through its leaf stages, speeds up, counts up its counter,
+  - **Stale Branch** appears only on its floor (before floor 8), ages through its leaf stages, speeds up, counts up its counter,
     and lunges only after the windup (2 damage, then back to 1); leaf effects and family sounds fire on hit and death;
   - **Detached HEAD** spawns as a linked pair; body dies first → head panics, head dies first → body wanders with
     contact damage only; the room clears only when both are dead, and `killAll` leaves nothing behind;
   - **Cherry-Pick** rolls come in pairs that link up; a hit angers the *partner* for about 3 s (it spits a pit),
     a widowed cherry stays angry, the stem never stretches past its leash, and a solo spawn grows a partner;
-  - **Orphan Commit** is a rare bonus only on its floor (at most 1 per room, close to its `bonusChance`), never
+  - **Orphan Commit** is a rare bonus only on its floor before floor 8 (at most 1 per room, close to its `bonusChance` ×
+    the theme factor), never
     holds the doors, flees into a corner, drops 2–3 credits when caught (even while frozen) or shot, and is
     garbage-collected after its warning without loot or a kill;
 - the Sandbox Borders family: Deprecation Warnings weigh ×2.5 and Hallucinations ×2 there; the **Spinlock**'s body
@@ -111,7 +124,8 @@ Live state is under `BOTA.game` (`.player`, `.room`, `.floor`, `.depth`, `.state
   rings of 14 / 9 / 5 parts, only the outermost living ring fires and can be hit, the rings break at 50 % and
   16.67 % (one `bossPhase` each), its shots stay at 165–260 px/s, its parts stay inside the room, and it dies once
   with no parts left over;
-- the **Octopus Merge** is only rolled on Forgotten Branches (at its weight share there on a first visit); it has 8 arms of
+- the **Octopus Merge** is only rolled on Forgotten Branches before floor 8 (at its weight share there, and anywhere from
+  floor 8, on a first visit); it has 8 arms of
   5 segments that pass 60 % of their damage to the knot and stay inside the room; every sweep, slam, tip shot and
   stream has its telegraph first; an arm merges every 12 % of HP (at least one stays), phase 2 starts once at 50 %
   with opposing streams; arms hurt on contact along their whole length; the death is a single boss death and no
@@ -189,7 +203,8 @@ depend on load order.
 | `syncFollowers, Duck, UnitTest` | familiar | followers (Rubber Duck, Unit Tests orbitals) |
 | `FX, Particle, Leaf` | effects | visual effects API (`Leaf` = falling leaf, used by the branches family) |
 | `itemPrice, itemFx` | items | price helper, pop-up text fallback |
-| `themeKeyAt, themeWeight, enemyWeightAt, rollRoomEnemies, bossWeightAt, rollBoss, rollBossVaried, validateLayout` | data | spawn and layout logic (floor themes: §4) |
+| `themeKeyAt, themeFactor, themeWeight, mixAt, AWAY, MIX_FROM, enemyWeightAt, rollRoomEnemies, bossWeightAt, rollBoss, rollBossVaried, validateLayout` | data | spawn and layout logic (floor themes, rosters, cacophony: §4) |
+| `ENCOUNTER_BOSSES, ENCOUNTER_HP, ENCOUNTER_FROM` | bosses | side-quest bosses from floor 8 (§3.6 step 10) |
 | `Renderer, text`, `HUD, pixelText, pixelTextWidth`, `Screens` | render | drawing |
 | `Game`, `game`, `debug` | game, main | state machine instance and debug API |
 | `spriteTools` | sprites-core | `shiftRow, stamp, mirror, padRows` helpers for composing sprites |
@@ -211,7 +226,8 @@ Global keys handled in every state: `M` (mute) and `F2` (debug). Holding `R` for
 
 ### 3.5 World API (`game` is passed to every behaviour and hook)
 `game.player · game.room · game.floor · game.depth · game.rng · game.followers · game.seed · game.runStats`
-- `spawnProjectile(opts)`, `spawnEnemy(id, x, y, room?)`, `spawnBoss(id, x, y, room?)`
+- `spawnProjectile(opts)`, `spawnEnemy(id, x, y, room?)`, `spawnBoss(id, x, y, room?, opts?)` (`opts = {hpMult,
+  encounter}`; kept in `game.bossSpawnOpts` during the constructor, so bosses spawned in `init`, i.e. the Swarm, inherit it)
 - `spawnPickup(type, x, y, opts?, room?)`, `spawnPedestal(itemId, x, y, {price}?, room?)`
 - `explode(x, y, radius, damage, source)`: damages enemies and the player (2 halves), breaks rocks and cacti (8 % loot), reveals
   hidden doors, flings pickups, shakes the screen, emits `explosion`
@@ -246,7 +262,18 @@ Global keys handled in every state: `M` (mute) and `F2` (debug). Holding `R` for
    `placePipe` drops a `B.Pipe` (in `room.pickups`, not near doors or the centre). Walking onto it calls
    `game.pipeWarp`, which teleports to a random room other than boss, secret and the current one (via `game.rng`).
    Pipes only trigger on the step *onto* them, and `game.pipeCooldown` (1 s) blocks all pipes after a jump.
-10. `assignProps` places breakable objects (tile `PROP`, data in `room.props` keyed `"c,r"`) in normal rooms, with kinds,
+10. `assignEncounters` (floor 8+, own stream `':encounter'`, runs after `assignPipes` and before `assignProps`) turns
+   1 combat room (floors 8–9) or 1–2 (from 10, 50 %) into a **side quest**: preferably not next to the start room
+   (`dist ≥ 2`) or another encounter. The room is re-stamped with a `special` layout (`room.stampLayout`, the boss
+   room pool: open centre), `plannedEnemies` is emptied and `room.encounterBoss` is set by `pickEncounterBosses(avoid)`
+   (own stream `':encounter:boss'`, uniform from `B.ENCOUNTER_BOSSES` = Monolith, Swarm, Infinite Loop, Stakeholder,
+   never `avoid`, no duplicates). `game.assignFloorBoss` calls it again with the final floor boss. Props skip these
+   rooms; key, loose loot, README and pipe stay. `game.populate` → `spawnEncounter` spawns the boss in the centre with
+   `hpMult: B.ENCOUNTER_HP` (0.5) and `encounter: true`, plus a banner (boss name, `TEXT.ENCOUNTER_LINES`). There is
+   no intro card and no boss music (`pendingBossIntro` is only set for `type === 'boss'`), no trapdoor or boss
+   pedestal (`onRoomClear` treats it as a normal room, plus one guaranteed random pickup). The HUD boss bar shows
+   "SIDE QUEST: <name>".
+11. `assignProps` places breakable objects (tile `PROP`, data in `room.props` keyed `"c,r"`) in normal rooms, with kinds,
    chance and max count from the floor theme's `props` (`B.PROP_KINDS` in `layouts.js`). Own stream `':props'`. Never
    on spawn points, the centre or the 3 × 3 area in front of a door, and `fullyWalkable` must still hold afterwards
    (all walkable tiles form **one** connected area; the search starts from a single door front, because starting from
@@ -254,7 +281,7 @@ Global keys handled in every state: `M` (mute) and `F2` (debug). Holding `R` for
    Player shots call `game.hitProp` (in `projectile.js`), spectral shots too (once per prop while passing through),
    explosions call `game.breakProp`; enemy shots don't damage them. Breaking drops a random pickup with `B.PROP_LOOT_CHANCE` (10 %). Props are drawn per frame (`drawProps` in
    `renderer.js`), not baked into the background.
-11. `assignCacti` (own stream `':cacti'`) turns each rock in a normal room into a `CACTUS` tile with the theme's
+12. `assignCacti` (own stream `':cacti'`) turns each rock in a normal room into a `CACTUS` tile with the theme's
    `cacti` share (Sandbox Borders: 0.5), never in the 3 × 3 area in front of a door. Cacti are as solid as rocks, so
    walkability is unchanged. `game.checkCactus` (from `updatePlay`, not while flying) pricks the player for half a
    heart with knockback when their circle touches a cactus tile; `explode` breaks cacti like rocks.
@@ -262,7 +289,7 @@ Global keys handled in every state: `M` (mute) and `F2` (debug). Holding `R` for
 **Boss choice:** each room build still pre-rolls `bossId` with `B.rollBoss` (so the floor RNG is unchanged), but
 `game.enterFloor` then calls `assignFloorBoss`, which replaces it with `B.rollBossVaried(rng, depth, game.bossHistory)`.
 The previous floor's boss is excluded, and bosses already met count `weight · theme factor / (1 + times met)`
-(theme factor: §4, Floor themes). Its RNG is seeded with
+(theme factor incl. the floor-8 cacophony: §4, Floor themes). Its RNG is seeded with
 `hashString(seed + ':boss:' + depth)`, and the history only depends on earlier floors, so runs stay reproducible.
 
 **Seeds:**
@@ -273,6 +300,8 @@ The previous floor's boss is excluded, and bosses already met count `weight · t
 
 ### 3.7 Rooms (`world/room.js`)
 - **Tiles:** a `Uint8Array(COLS*ROWS)`. Use `tileAt/setTile` (`setTile` marks `bgDirty` and invalidates the flow field).
+  `stampLayout(layout)` (no RNG) writes walls, a layout and door tiles; `build` uses it, and `assignEncounters`
+  re-stamps side-quest rooms with it.
 - **Collision modes for `isSolid(c, r, mode, isPlayer)`:**
 
   | Tile | walk | fly | shot | spectral |
@@ -340,7 +369,8 @@ The previous floor's boss is excluded, and bosses already met count `weight · t
     telegraphs (`say, drawMark, drawTargetRing, drawRays, drawGlow, drawBody`).
   - **Projectile cap:** `AI.shoot` won't create enemy shots once a room holds `AI.MAX_PROJECTILES` (200).
 - **`Boss`** (`entities/boss.js`) extends Enemy:
-  - HP grows ×(1 + 0.3·(depth−1)); `noKnockback`, `noSeparate`. Behaviours live in `B.BOSS_BEHAVIORS`, with shared
+  - HP grows ×(1 + 0.3·(depth−1)), times `hpMult` from `game.bossSpawnOpts`; `noKnockback`, `noSeparate`.
+    `e.encounter` marks a side-quest boss (§3.6 step 10). Behaviours live in `B.BOSS_BEHAVIORS`, with shared
     helpers in `B.BossHelpers`.
   - Bosses emit `bossPhase / bossStomp / bossBounce`.
   - The Infinite Loop's body is made of separate `loop_segment` enemies (`ignoreForClear`, `proxy` → head).
@@ -471,8 +501,8 @@ Item conventions:
 | spaghetti_code | shooter | 2 | 14 |
 | race_condition | zigzag | 2 | 6 (pack of 2) |
 | graphics_glitch | glitch | 2 | 10 |
-| deprecation_warning | orbit | 3 | 12 |
-| zombie_process | revive | 3 | 14 |
+| deprecation_warning | orbit | 2 (was 3 until 2026-11-03) | 12 |
+| zombie_process | revive | 2 (was 3 until 2026-11-03) | 14 |
 | scope_creep | grow | 4 | 10 |
 | rogue_agent | rogue_agent | 7 | 16 |
 | stale_branch | stale | 3, Forgotten Branches only | 12 |
@@ -487,8 +517,8 @@ with `game.rng`) and its green shots. It strafes at 200–320 px and cuts inward
 something, so it doesn't get stuck shuffling in corners.
 
 The last four are the **Forgotten Branches family** (`themeOnly: ['branches']`, `family: 'branches'`). The first
-three have weight 6 each: on floor 3 they make up about 24 % of enemies, and about 58 % of combat rooms have at least
-one (measured 2026-11-02). The Orphan Commit is a bonus spawn like the Hallucination (`bonusChance` 0.12, about 14 %
+three have weight 6 each: on floor 3 they make up about 54 % of enemies since the floor rosters (2026-11-03; it was
+about 24 % before). The Orphan Commit is a bonus spawn like the Hallucination (`bonusChance` 0.12, about 14 %
 of combat rooms on floor 3); it is the one enemy that drops loot (2–3 credits) and it never attacks.
 
 The **Sandbox Borders family** (`themeOnly: ['sandbox']`, `family: 'sandbox'`, weight 6 each) is the Spinlock and the
@@ -521,6 +551,35 @@ Content without these fields rolls exactly as before (same RNG draws), so **exis
 an enemy or boss a theme field**; say so in that commit. In use by the Forgotten Branches and Sandbox Borders
 families (below).
 
+**Floor rosters** (since 2026-11-03): a third field, `home: ['legacy', 'production']`, lists an enemy's home themes.
+On any other theme its factor is `B.AWAY` (0.2) unless `themes` names that theme (explicit entries win; a `null`
+theme ignores `home`). `B.themeFactor(def, theme)` is this raw factor. Every generic enemy has a home, so floors 1–7
+each have their own crowd (spawn shares measured with 2,000 rooms per floor, 2026-11-03):
+
+| # | theme | at home | away share |
+|---|---|---|---|
+| 1 | backlog | bug, null_pointer, memory_leak (unchanged, floor-1 seeds identical) | 0 % |
+| 2 | legacy | bug, null_pointer, spaghetti_code, jira_ticket, zombie_process, deprecation_warning | 12 % |
+| 3 | branches | merge_conflict + the family (54 % of enemies) | 33 % |
+| 4 | dephell | memory_leak, scope_creep, zombie_process, race_condition | 32 % |
+| 5 | production | race_condition, graphics_glitch, flaky_test, jira_ticket, merge_conflict, null_pointer | 15 % |
+| 6 | sandbox | deprecation_warning (×2.5) + the family | 35 % |
+| 7 | training | rogue_agent (×1.5), spaghetti_code, flaky_test, deprecation_warning | 32 % |
+
+The Hallucination has no home (bonus spawn everywhere; ×2 on sandbox, ×1.5 on training). Floors 4, 6 and 7 have
+the thinnest home crowd and the highest away share; the themed enemies planned for them fill that gap. A new generic
+enemy needs a `home` and an entry in the smoke test's `ROSTER` table.
+
+**Cacophony from floor 8** (`B.MIX_FROM`): `B.mixAt(depth)` is 0 before 8, then 0.25, +0.1 per floor, 1 from 16.
+`B.themeWeight(def, theme, depth)` lifts any factor below 1 (AWAY, `themeOnly` exclusion, explicit 0) to
+`f + (1 − f) · mix`; factors ≥ 1 stay. Without `depth` it returns the raw factor (old behaviour, used by tests).
+`enemyWeightAt`, `rollRoomEnemies` (pool, exclusion and bonus chance) and the boss functions pass the depth, so the
+families show up on every floor from 8 (about 21 % of enemies on floor 8, 27 % on 12; the Orphan Commit too) and
+generic enemies return to equal odds. Floors 8–11 have no home crowd at all. Bosses use the same lift, but a boss
+away from home weighs at most 3 (`BOSS_LEAK_WEIGHT` in `bosses.js`): the Octopus Merge is about 5 % on floor 8 and
+16 % on floor 16 instead of dominating. Check that themed content reads on any floor: dark floors are fine for both
+families (screenshots 2026-11-03); cacti stay a Sandbox Borders floor feature.
+
 **Bosses** (base HP): `monolith` 360, `stakeholder` 250, `friday_deploy` 240 (floor 4+), `infinite_loop` 300
 (floors 2–7), `nested_loop` 450 (floor 8+, replaces the Infinite Loop at the same weight), `rogue_swarm` 4 × 80, `reviewer` 340 (floor 4+), `octopus_merge` 330 (Forgotten Branches only, weight 12: about 52 % on
 floor 3, about 41 % on floors 14, 25, …). Friday Deploy and the Reviewer moved from floors 2 and 3 to floor 4 on
@@ -529,6 +588,9 @@ floor 3, about 41 % on floors 14, 25, …). Friday Deploy and the Reviewer moved
   (`proxy`, 60 %). The knot positions them every tick and draws the arms itself; only the tip (a commit dot) draws
   as a sprite. Arm contact is checked along the drawn line, not per segment. Speed-ups from merges (`state.sm`)
   shorten pauses and swings, never telegraphs.
+- **Side quests** (floor 8+, §3.6 step 10): Monolith, Rogue Agent Swarm, Infinite Loop (also after its `maxFloor`)
+  and Stakeholder can appear as a combat-room encounter at `B.ENCOUNTER_HP` (0.5) × the floor boss HP of that depth,
+  alone (they bring their own minions and segments), with no intro, trapdoor or boss pedestal.
 - **Nested Infinite Loop:** the boss entity is an invisible, intangible controller at the centre that only holds the
   shared HP pool (so the HUD shows one bar). The three rings are `nested_loop_part` enemies with `proxy` to it,
   placed every tick in `afterMove`. Only the outermost living ring is tangible, fires and hurts on contact; the
@@ -551,7 +613,7 @@ a random drop; see §3.6 step 8).
 checks the format and that all 4 door tiles are clear and mutually reachable. `{strict: true}` adds three house rules:
 every floor tile must be reachable, there must be no spikes next to doors, and special rooms need a clear centre.
 
-**Text** (`B.TEXT`): `FLOORS` (11), `EPITAPHS` (25), `TAGLINES`, `SHOP_LINES`, `CLEAR_QUIPS`, `DENIED`, `PICKUP`, `EVENTS`, `RANKS`,
+**Text** (`B.TEXT`): `FLOORS` (11), `EPITAPHS` (25), `TAGLINES`, `SHOP_LINES`, `ENCOUNTER_LINES` (side-quest banner), `CLEAR_QUIPS`, `DENIED`, `PICKUP`, `EVENTS`, `RANKS`,
 plus per-floor extras `THEME_QUIPS` / `THEME_EPITAPHS` keyed by theme `key` (currently `branches` and `sandbox`).
 
 ---
@@ -570,6 +632,7 @@ plus per-floor extras `THEME_QUIPS` / `THEME_EPITAPHS` keyed by theme `key` (cur
 **Add an enemy**
 1. In `src/data/enemies.js`, add a definition with `behavior`, `minFloor`, `weight`, `cost` and `color`. For a
    floor-specific enemy, add `themeOnly` or `themes` (§4, Floor themes); the smoke test rejects unknown theme keys.
+   A generic enemy gets a `home` list and an entry in the smoke test's `ROSTER` table (§4, Floor rosters).
 2. If needed, add a new behaviour in `src/entities/enemy.js` (`B.BEHAVIORS.name = {update(e, dt, game) {…}}`). Use
    the `B.AI` helpers, and **telegraph** every attack (wind-up glow, `!`, target ring).
 3. Add the sprite as `enemy_<id>` in `sprites-enemies.js`, with 2 frames.
@@ -607,7 +670,11 @@ modules rely on these implicitly through the bus.
 ## 6. Known issues and gotchas
 
 - **Boss intro only on door entry.** `pendingBossIntro` is set in `enterRoom` and consumed at the end of a room
-  transition, so debug teleports skip the VS card.
+  transition, so debug teleports skip the VS card. It's only set for `room.type === 'boss'`, which is what keeps
+  side-quest bosses (normal rooms) without intro and boss music; don't widen that check to `isBoss`.
+- **Side quests and the minimap.** Side-quest rooms aren't marked on the minimap on purpose (you find out on entry).
+  Their arena layout comes from the `special` pool, so a new `special` layout must keep the centre free (strict
+  validation already requires it).
 - **Item repeats.** Once every item has been seen in a run, `rollItem` falls back to the full list. Duplicate follower
   items then stack (several ducks or orbitals).
 - **Few-Shot plus Regex** gives a 3-way fan, because the larger `multishot` wins and `parallel` only applies to a count of 2.
@@ -662,7 +729,8 @@ work again, the same file-ownership split works well.
 - Scale item damage with depth.
 - Better item-pool exhaustion handling (e.g. hand out `blockchain` forever).
 - A human balance pass on boss HP and spawn budgets, and on enemy and boss odds per floor (`minFloor`, `weight`,
-  `weightPerFloor`, `themes`). The floor-3/4 boss shuffle on 2026-11-02 was a first step; the rest is untuned.
+  `weightPerFloor`, `themes`, `home`, `AWAY`, the `mixAt` curve, side-quest HP and count). The floor-3/4 boss shuffle
+  on 2026-11-02 and the floor rosters on 2026-11-03 were first steps; the rest is untuned.
 - Ideas from the 2026-11-01 brainstorm, in planned order:
   - ~~Floor-based enemy variety~~: done 2026-11-02 (`themes` / `themeOnly`, see §4, Floor themes). The themed
     content below builds on it.

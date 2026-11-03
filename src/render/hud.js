@@ -544,7 +544,9 @@
     ctx.fillStyle = 'rgba(255,255,255,0.18)';
     ctx.fillRect(x, y, w * ratio, 3);
     ctx.restore();
-    B.pixelText(ctx, (boss.def.name || 'BOSS').toUpperCase(), W / 2, y - 22, { scale: 2, align: 'center', color: '#ffd7cf', shadow: 'rgba(0,0,0,0.8)' });
+    // Zwischenboss-Begegnung (ab Etage 8): kenntlich machen, dass das nicht der Etagen-Boss ist
+    const label = (boss.encounter ? 'SIDE QUEST: ' : '') + (boss.def.name || 'BOSS');
+    B.pixelText(ctx, label.toUpperCase(), W / 2, y - 22, { scale: 2, align: 'center', color: '#ffd7cf', shadow: 'rgba(0,0,0,0.8)' });
   }
 
   /** "R gedrueckt halten"-Fortschrittsring (auch vom Pause-Screen genutzt) */

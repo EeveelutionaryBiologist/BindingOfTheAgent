@@ -53,10 +53,15 @@
     constructor(id, x, y, game) {
       const def = B.BOSSES[id];
       const depth = game.floor ? game.floor.depth : 1;
+      // Spawn-Optionen aus game.spawnBoss (Zwischenboss-Begegnung: { hpMult, encounter }); gelten auch fuer
+      // Bosse, die dieser Boss im init selbst erzeugt (Swarm-Mitglieder), weil sie waehrenddessen gesetzt bleiben
+      const opts = game.bossSpawnOpts || {};
+      const hpMult = Number.isFinite(opts.hpMult) && opts.hpMult > 0 ? opts.hpMult : 1;
       // Verhalten aus BOSS_BEHAVIORS (Enemy-Konstruktor sucht in BEHAVIORS -> hier ueberschreiben)
-      super(Object.assign({}, def, { behavior: '__boss__' }), id, x, y, game, 1 + 0.3 * (depth - 1));
+      super(Object.assign({}, def, { behavior: '__boss__' }), id, x, y, game, (1 + 0.3 * (depth - 1)) * hpMult);
       this.def = def;
       this.isBoss = true;
+      this.encounter = !!opts.encounter; // Zwischenboss in einem normalen Kampfraum (HUD: "SIDE QUEST")
       this.noKnockback = true;
       this.noSeparate = true;   // Bosse lassen sich nicht von Minions herumschubsen
       this.spawnDelay = 0.2;

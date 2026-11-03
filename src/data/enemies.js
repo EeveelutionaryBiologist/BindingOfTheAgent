@@ -31,16 +31,35 @@
  *     // --- Etagen-Themen (optional, siehe B.themeWeight unten) ---
  *     themes: { branches: 3, devnull: 0 }, // Gewichtsfaktor je Etagen-Thema (key in FLOOR_THEMES); 0 = dort nie
  *     themeOnly: ['branches'],             // taucht NUR auf Etagen mit diesen Themen auf (minFloor gilt weiterhin)
+ *     home: ['legacy', 'production'],      // "Heimat"-Etagen: anderswo nur mit Faktor B.AWAY (~0.2)
  *   };
  *
  * Etagen-Themen: Gespawnt wird nach Tiefe UND nach dem Thema der Etage (B.themeFor(depth).key). Die Themen
  * wiederholen sich alle FLOOR_THEMES.length Etagen, ein "branches"-Gegner kommt also (bei 11 Themen) auf Etage 3, 14, 25, ...
  * wieder. Der Faktor wirkt auf das fertige Tiefen-Gewicht (nach minWeight/maxWeight) und auf bonusChance.
- * Gegner ohne themes/themeOnly verhalten sich exakt wie vorher (Faktor 1, keine zusaetzlichen RNG-Zuege),
- * bestehende Seeds bleiben also gleich, solange kein Gegner die Felder nutzt.
+ * Gegner ohne themes/themeOnly/home verhalten sich exakt wie vorher (Faktor 1, keine zusaetzlichen RNG-Zuege).
+ *
+ * Etagen-Identitaet (seit 2026-11-03): Jeder allgemeine Gegner hat ein `home` (Liste von Themen). Auf einer
+ * Heimat-Etage zaehlt er voll, auf allen anderen nur mit B.AWAY (0.2) — so hat jede der Etagen 1–7 ihre eigene
+ * Besetzung, ohne dass die anderen Gegner ganz verschwinden. Ein expliziter themes-Eintrag geht vor home.
+ * Besetzung (Heimat-Etagen):
+ *   1 backlog     Bug, Null Pointer, Memory Leak
+ *   2 legacy      Bug, Null Pointer, Spaghetti Code, Jira Ticket, Zombie Process, Deprecation Warning
+ *   3 branches    Merge Conflict + Forgotten-Branches-Familie (themeOnly)
+ *   4 dephell     Memory Leak, Scope Creep, Zombie Process, Race Condition
+ *   5 production  Race Condition, Graphics Glitch, Flaky Test, Jira Ticket, Merge Conflict, Null Pointer
+ *   6 sandbox     Deprecation Warning (x2.5) + Sandbox-Borders-Familie (themeOnly)
+ *   7 training    Rogue Agent (x1.5), Spaghetti Code, Flaky Test, Deprecation Warning
+ *   Die Hallucination hat kein home (Bonus-Spawn ueberall; x2 auf sandbox, x1.5 auf training).
+ *
+ * Kakophonie ab Etage B.MIX_FROM (8): Die Etagen-Identitaet verblasst. Jeder Faktor f < 1 (AWAY, themeOnly-
+ * Ausschluss = 0, explizite 0) wird Richtung 1 angehoben: f' = f + (1 - f) * B.mixAt(Tiefe), mixAt = 0.25 auf
+ * Etage 8, +0.1 pro Etage, ab 16 = 1. Verstaerkungen (f > 1) bleiben. So tauchen ab Etage 8 die Familien und
+ * alle anderen Themen-Gegner ueberall auf, immer haeufiger ("alles, was vorher kam, durcheinander").
  *
  * Etagen-Freischaltung (DESIGN.md §7): Etage 1 ist sanft (Bug, Null Pointer, Memory Leak, selten eine
- * Hallucination), ab 2 kommen Fernkaempfer, Charger und der Graphics Glitch dazu, ab 3 Orbiter und Zombies, ab 4 Scope Creep.
+ * Hallucination), ab 2 kommen Fernkaempfer, Charger, der Graphics Glitch und (fuer Legacy Codebase) Orbiter und
+ * Zombies dazu, ab 4 Scope Creep, ab 7 der Rogue Agent.
  */
 'use strict';
 
@@ -55,6 +74,7 @@
     name: 'Bug', hp: 8, r: 18, speed: 70, contactDamage: 1,
     behavior: 'wander', sprite: 'enemy_bug', color: '#6aa84f',
     minFloor: 1, weight: 10, weightPerFloor: -1, minWeight: 3, cost: 1, tags: ['melee'],
+    home: ['backlog', 'legacy'],
     desc: "It's not a bug, it's a feature. A feature with mandibles.",
   };
 
@@ -62,6 +82,7 @@
     name: 'Null Pointer', hp: 5, r: 14, speed: 140, contactDamage: 1, flying: true,
     behavior: 'fly_chase', sprite: 'enemy_null_pointer', color: '#c9ced6',
     minFloor: 1, weight: 7, weightPerFloor: -0.3, minWeight: 4, cost: 1, tags: ['fly', 'melee'],
+    home: ['backlog', 'legacy', 'production'],
     desc: 'Points at nothing. Charges at you anyway.',
   };
 
@@ -70,6 +91,7 @@
     behavior: 'split', params: { child: 'leaklet', count: 2, maxGrow: 1.35, growRate: 0.02 },
     sprite: 'enemy_memory_leak', color: '#8e5bd6',
     minFloor: 1, weight: 6, cost: 1.6, tags: ['melee'],
+    home: ['backlog', 'dephell'],
     desc: 'Gets bigger the longer you ignore it.',
   };
 
@@ -78,6 +100,7 @@
     behavior: 'blink', params: { shotSpeed: 230, minD: 170, maxD: 400, shownMin: 1.4, shownMax: 2.0 },
     sprite: 'enemy_flaky_test', color: '#7bc96f', noFlip: true,
     minFloor: 2, weight: 5, weightPerFloor: 0.3, maxWeight: 7, cost: 1.5, tags: ['ranged'],
+    home: ['production', 'training'],
     desc: 'Passes on my machine.',
   };
 
@@ -86,6 +109,7 @@
     behavior: 'charge', params: { dashSpeed: 480, windup: 0.5, align: 26, range: 560 },
     sprite: 'enemy_merge_conflict', color: '#4a86d8', noFlip: true,
     minFloor: 2, weight: 5, weightPerFloor: 0.3, maxWeight: 7, cost: 2, maxPerRoom: 3, tags: ['charge'],
+    home: ['branches', 'production'],
     desc: '<<<<<<< HEAD',
   };
 
@@ -94,6 +118,7 @@
     behavior: 'turret', params: { interval: 1.7, shotSpeed: 190 },
     sprite: 'enemy_jira_ticket', color: '#d64545', noFlip: true,
     minFloor: 2, weight: 4, weightPerFloor: 0.3, maxWeight: 6, cost: 2, maxPerRoom: 2, tags: ['ranged', 'turret'],
+    home: ['legacy', 'production'],
     desc: 'Priority: Blocker. Assignee: you.',
   };
 
@@ -101,7 +126,8 @@
     name: 'Deprecation Warning', hp: 12, r: 18, speed: 125, contactDamage: 1, flying: true,
     behavior: 'orbit', params: { radiusMin: 160, radiusMax: 220, shotSpeed: 220, interval: 2.4 },
     sprite: 'enemy_deprecation_warning', color: '#f2c14e', noFlip: true,
-    minFloor: 3, weight: 5, weightPerFloor: 0.3, maxWeight: 7, cost: 1.5, maxPerRoom: 3, tags: ['fly', 'ranged'],
+    minFloor: 2, weight: 5, weightPerFloor: 0.3, maxWeight: 7, cost: 1.5, maxPerRoom: 3, tags: ['fly', 'ranged'],
+    home: ['legacy', 'training'],  // Altlasten im Code und veraltete Doku in den Trainingsdaten
     themes: { sandbox: 2.5 },   // Sandbox Borders: veraltete Warnungen schwirren an der Grenze besonders gern herum
     desc: 'Will be removed in a future release. Not this one.',
   };
@@ -111,6 +137,7 @@
     behavior: 'shooter', params: { count: 3, spread: 0.3, shotSpeed: 200, interval: 2.5 },
     sprite: 'enemy_spaghetti_code', color: '#e8c36a',
     minFloor: 2, weight: 5, weightPerFloor: 0.2, maxWeight: 7, cost: 1.5, tags: ['ranged'],
+    home: ['legacy', 'training'],
     desc: 'Nobody knows where it starts. Or ends.',
   };
 
@@ -118,7 +145,8 @@
     name: 'Zombie Process', hp: 14, r: 18, speed: 58, contactDamage: 1,
     behavior: 'revive', params: { reviveHp: 0.5, downTime: 1.8, angrySprite: 'enemy_zombie_process_angry' },
     sprite: 'enemy_zombie_process', color: '#9aa3a8',
-    minFloor: 3, weight: 5, weightPerFloor: 0.3, maxWeight: 7, cost: 2, tags: ['melee'],
+    minFloor: 2, weight: 5, weightPerFloor: 0.3, maxWeight: 7, cost: 2, tags: ['melee'],
+    home: ['legacy', 'dephell'],
     desc: '`kill -9` recommended.',
   };
 
@@ -127,6 +155,7 @@
     behavior: 'grow', params: { maxGrow: 1.9, rate: 0.035, hpFactor: 1.6, ringAt: 1.5, ringInterval: 3.6, shotSpeed: 150 },
     sprite: 'enemy_scope_creep', color: '#6f9a3a',
     minFloor: 4, weight: 4, weightPerFloor: 0.3, maxWeight: 6, cost: 2, maxPerRoom: 2, tags: ['melee'],
+    home: ['dephell'],
     desc: 'Just one more small feature.',
   };
 
@@ -136,7 +165,9 @@
     sprite: 'enemy_hallucination', color: '#f2c14e',
     // Taucht nie ueber das normale Budget auf, sondern als Bonus-Ueberraschung (bonusChance)
     minFloor: 1, weight: 0, bonusChance: 0.1, cost: 0, maxPerRoom: 1, tags: ['fly'],
-    themes: { sandbox: 2 },     // Sandbox Borders: Fata Morgana — doppelte Bonus-Chance (Obergrenze 25 % bleibt)
+    // Kein home: die Hallucination ist ueberall zu Hause (Bonus-Spawn auf jeder Etage).
+    themes: { sandbox: 2,       // Sandbox Borders: Fata Morgana — doppelte Bonus-Chance (Obergrenze 25 % bleibt)
+      training: 1.5 },          // The Training Data: selbstbewusst erfundene Fakten
     desc: 'Looked real. Was, in fact, not real.',
   };
 
@@ -146,6 +177,7 @@
       chaseBias: 0.6, hudGlitch: 7 },
     sprite: 'enemy_graphics_glitch', color: '#e040c0',
     minFloor: 2, weight: 4, weightPerFloor: 0.2, maxWeight: 6, cost: 1, maxPerRoom: 2, tags: ['melee'],
+    home: ['production'],
     desc: 'Is it supposed to look like this...?',
   };
 
@@ -154,6 +186,7 @@
     behavior: 'zigzag', params: { flipMin: 0.15, flipMax: 0.42, sprintChance: 0.2 },
     sprite: 'enemy_race_condition', color: '#e0603a',
     minFloor: 2, weight: 4, weightPerFloor: 0.2, maxWeight: 6, cost: 0.8, pack: 2, maxPerRoom: 4, tags: ['melee'],
+    home: ['dephell', 'production'],
     desc: 'Sometimes it hits first. Sometimes you do. Sometimes both.',
   };
 
@@ -275,6 +308,7 @@
     },
     sprite: 'boss_rogue_agent_a', color: '#7dff9a', noFlip: true,
     minFloor: 7, weight: 4, weightPerFloor: 0.2, maxWeight: 6, cost: 2, maxPerRoom: 2, tags: ['ranged'],
+    home: ['training'], themes: { training: 1.5 },   // Debuet-Etage: dort deutlich haeufiger
     desc: 'Same weights, different goals. Escaped the sandbox and is in no hurry to go back.',
   };
 
@@ -391,24 +425,52 @@
     return (t && t.key) || null;
   };
 
+  /** Faktor fuer Gegner ausserhalb ihrer Heimat-Etagen (Feld home), siehe Kopfkommentar */
+  B.AWAY = 0.2;
+  /** Ab dieser Tiefe verblasst die Etagen-Identitaet (Kakophonie, siehe B.mixAt) */
+  B.MIX_FROM = 8;
+
   /**
-   * Etagen-Faktor einer Gegner- ODER Boss-Definition fuer ein Thema (bosses.js nutzt dieselbe Funktion).
+   * Mischungsgrad der Kakophonie auf einer Tiefe: 0 vor B.MIX_FROM, dann 0.25 und +0.1 pro Etage bis 1
+   * (Etage 8: 0.25, 10: 0.45, 12: 0.65, ab 16: 1).
+   */
+  B.mixAt = function (depth) {
+    const d = Number(depth);
+    if (!Number.isFinite(d) || d < B.MIX_FROM) return 0;
+    return Math.min(1, 0.25 + 0.1 * (d - B.MIX_FROM));
+  };
+
+  /**
+   * Roher Etagen-Faktor (ohne Kakophonie) einer Gegner- ODER Boss-Definition fuer ein Thema:
    *   themeOnly gesetzt und Thema nicht enthalten -> 0 (ausgeschlossen)
    *   themes[theme] gesetzt                       -> dieser Faktor (negative/ungueltige Werte zaehlen als 0)
+   *   home gesetzt und Thema nicht enthalten      -> B.AWAY
    *   sonst                                       -> 1 (neutral)
-   * Ein Thema von null (keine Themen bekannt) schliesst nur themeOnly-Definitionen aus.
+   * Ein Thema von null (keine Themen bekannt) schliesst nur themeOnly-Definitionen aus (home zaehlt dann nicht).
    */
-  B.themeWeight = function (def, theme) {
+  B.themeFactor = function (def, theme) {
     if (Array.isArray(def.themeOnly) && !def.themeOnly.includes(theme)) return 0;
     if (def.themes && theme && Object.prototype.hasOwnProperty.call(def.themes, theme)) {
       const f = Number(def.themes[theme]);
       return Number.isFinite(f) && f > 0 ? f : 0;
     }
+    if (Array.isArray(def.home) && theme && !def.home.includes(theme)) return B.AWAY;
     return 1;
   };
 
   /**
-   * Effektives Spawn-Gewicht einer Definition auf einer Tiefe (mit Etagen-Verlauf und Etagen-Thema).
+   * Etagen-Faktor einer Gegner- ODER Boss-Definition (bosses.js nutzt dieselbe Funktion).
+   * depth: optional. Ohne Tiefe gilt der rohe Faktor (B.themeFactor); mit Tiefe wird ein Faktor < 1 ab
+   * B.MIX_FROM Richtung 1 angehoben: f + (1 - f) * B.mixAt(depth). Faktoren >= 1 bleiben unveraendert.
+   */
+  B.themeWeight = function (def, theme, depth) {
+    const f = B.themeFactor(def, theme);
+    if (f >= 1 || depth === undefined) return f;
+    return f + (1 - f) * B.mixAt(depth);
+  };
+
+  /**
+   * Effektives Spawn-Gewicht einer Definition auf einer Tiefe (mit Etagen-Verlauf, Etagen-Thema und Kakophonie).
    * theme: optional; ohne Angabe gilt das Thema der Tiefe (B.themeKeyAt).
    */
   B.enemyWeightAt = function (def, depth, theme) {
@@ -416,7 +478,7 @@
     if (base <= 0) return 0;
     const w = base + (def.weightPerFloor || 0) * Math.max(0, depth - (def.minFloor || 1));
     const clamped = B.M.clamp(w, def.minWeight || 0, def.maxWeight !== undefined ? def.maxWeight : 99);
-    return clamped * B.themeWeight(def, theme === undefined ? B.themeKeyAt(depth) : theme);
+    return clamped * B.themeWeight(def, theme === undefined ? B.themeKeyAt(depth) : theme, depth);
   };
 
   /** Multiplikator aus dem Layout-Bias (z. B. Gruben-Layouts bevorzugen Flieger) */
@@ -446,9 +508,9 @@
     for (const id of Object.keys(E)) {
       const def = E[id];
       if (def.spawn === false || (def.minFloor || 1) > d) continue;
-      // Auf dieser Etage ausgeschlossen (themeOnly / Faktor 0): weder im Pool noch als Bonus
+      // Auf dieser Etage ausgeschlossen (themeOnly / Faktor 0, vor der Kakophonie): weder im Pool noch als Bonus
       // (und damit auch kein RNG-Zug fuer seine Bonus-Chance)
-      if (B.themeWeight(def, th) <= 0) continue;
+      if (B.themeWeight(def, th, d) <= 0) continue;
       if (def.bonusChance) bonus.push(id);
       if (B.enemyWeightAt(def, d, th) > 0) pool.push(id);
     }
@@ -484,7 +546,7 @@
     // Obergrenze von 25 % pro Raum gilt trotzdem (sonst koennte ein Thema Raeume mit Bonus-Gegnern fluten).
     for (const id of bonus) {
       const def = E[id];
-      const p = (def.bonusChance + 0.01 * (d - 1)) * B.themeWeight(def, th);
+      const p = (def.bonusChance + 0.01 * (d - 1)) * B.themeWeight(def, th, d);
       if (rng.chance(Math.min(0.25, p))) out.push(id);
     }
     return out;

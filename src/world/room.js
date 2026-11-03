@@ -46,6 +46,7 @@
       this.looseLoot = [];       // Pickup-Typen, die beim ersten Betreten schon herumliegen (siehe dungeon.js)
       this.hasReadme = false;    // hier liegt das README.md der Etage (siehe dungeon.js: assignReadme)
       this.hasPipe = false;      // hinterlaesst beim Clearing ein Rohr (siehe dungeon.js: assignPipes)
+      this.encounterBoss = null; // Boss-ID einer Zwischenboss-Begegnung (ab Etage 8, dungeon.js: assignEncounters)
       this.props = new Map();    // "c,r" -> { kind, hp, max, hitAt } fuer PROP-Kacheln (dungeon.js: assignProps)
 
       // Render-Cache (Hintergrund); renderer.js setzt/liest das
@@ -63,17 +64,34 @@
 
     /** Baut Waende, Layout und Tueren. rng = Generator-RNG der Etage (deterministisch). */
     build(rng) {
+      // Layout waehlen: Kampfraeume aus 'normal', alles andere aus 'special'
+      const tag = this.type === 'normal' ? 'normal' : 'special';
+      const pool = B.LAYOUTS.filter((l) => l.tags.includes(tag));
+      this.stampLayout(pool.length ? rng.weighted(pool, (l) => l.weight || 1) : null);
+
+      // Gegner/Boss vorab wuerfeln (damit derselbe Seed dieselben Raeume ergibt)
+      if (this.type === 'normal') {
+        this.plannedEnemies = B.rollRoomEnemies ? B.rollRoomEnemies(rng, this.floor.depth, this) : [];
+      } else if (this.type === 'boss') {
+        this.bossId = B.rollBoss ? B.rollBoss(rng, this.floor.depth) : null;
+      }
+      this.bgDirty = true;
+    }
+
+    /**
+     * Setzt Waende, ein Layout (oder null = leer) und die Tuer-Kacheln; Spawnpunkte kommen aus dem Layout.
+     * Zieht keine Zufallszahlen. Auch fuer das nachtraegliche Umbauen eines Raums zur Zwischenboss-Arena
+     * (dungeon.js: assignEncounters).
+     */
+    stampLayout(layout) {
       for (let r = 0; r < ROWS; r++) {
         for (let c = 0; c < COLS; c++) {
           const border = r === 0 || c === 0 || r === ROWS - 1 || c === COLS - 1;
           this.tiles[r * COLS + c] = border ? T.WALL : T.FLOOR;
         }
       }
-
-      // Layout waehlen: Kampfraeume aus 'normal', alles andere aus 'special'
-      const tag = this.type === 'normal' ? 'normal' : 'special';
-      const pool = B.LAYOUTS.filter((l) => l.tags.includes(tag));
-      this.layout = pool.length ? rng.weighted(pool, (l) => l.weight || 1) : null;
+      this.layout = layout || null;
+      this.spawnPoints = [];
       if (this.layout) {
         for (let r = 0; r < 7; r++) {
           const row = this.layout.rows[r] || '';
@@ -84,20 +102,12 @@
           }
         }
       }
-
-      // Tuer-Kacheln setzen
       for (const dir of Object.keys(this.doors)) {
         const d = DOOR_TILES[dir];
         this.tiles[d.row * COLS + d.col] = T.DOOR;
       }
-
-      // Gegner/Boss vorab wuerfeln (damit derselbe Seed dieselben Raeume ergibt)
-      if (this.type === 'normal') {
-        this.plannedEnemies = B.rollRoomEnemies ? B.rollRoomEnemies(rng, this.floor.depth, this) : [];
-      } else if (this.type === 'boss') {
-        this.bossId = B.rollBoss ? B.rollBoss(rng, this.floor.depth) : null;
-      }
       this.bgDirty = true;
+      this.flowTarget = -1;
     }
 
     // -------------------------------------------------------------------------

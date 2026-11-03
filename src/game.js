@@ -42,6 +42,7 @@
       this.bossHistory = []; // Boss-IDs der bisherigen Etagen dieses Runs (siehe assignFloorBoss)
       this.pipeCooldown = 0; // Sperrzeit fuer Rohre nach einem Sprung (siehe pipeWarp)
       this.pendingBossIntro = false;
+      this.bossSpawnOpts = null; // Spawn-Optionen waehrend eines Boss-Konstruktors (siehe spawnBoss)
       this.death = null;
       this.runStats = { kills: 0, rooms: 0, time: 0 };
       this.lockDeniedT = 0;
@@ -132,6 +133,8 @@
       const id = B.rollBossVaried(rng, this.depth, this.bossHistory);
       if (id) cell.room.bossId = id;
       this.bossHistory.push(cell.room.bossId);
+      // Zwischenboss-Begegnungen (ab Etage 8) nie mit dem endgueltigen Etagen-Boss (dungeon.js)
+      if (this.floor.pickEncounterBosses) this.floor.pickEncounterBosses(cell.room.bossId);
     }
 
     /** Grabinschriften: allgemeine Liste plus die der aktuellen Etage (B.TEXT.THEME_EPITAPHS) */
@@ -206,6 +209,7 @@
         case 'normal': {
           const away = { x: p.x, y: p.y, d: 200 };
           const points = rng.shuffle(room.spawnPoints.filter((s) => B.M.dist(s.x, s.y, p.x, p.y) > 180));
+          if (room.encounterBoss) this.spawnEncounter(room);
           for (const id of room.plannedEnemies) {
             // Zuerst die Layout-Spawnpunkte, dann zufaellige freie Kacheln weit weg vom Spieler
             const pos = points.length ? points.pop() : room.randomFreePos(rng, { awayFrom: away });
@@ -272,6 +276,21 @@
       }
     }
 
+    /**
+     * Zwischenboss-Begegnung (ab Etage 8, dungeon.js: assignEncounters): ein frueher Boss als normaler Kampfraum.
+     * Kein Intro (pendingBossIntro gibt es nur im Boss-Raum, also auch keine Boss-Musik), keine Falltuer und
+     * kein Boss-Podest (onRoomClear behandelt den Raum wie jeden Kampfraum). HP x B.ENCOUNTER_HP; der Boss-Balken
+     * im HUD bleibt (mit "SIDE QUEST"-Hinweis, hud.js). Der Boss startet in der Raummitte, seine init-Funktion
+     * schiebt ihn bei Bedarf vom Spieler weg (BossHelpers.placeAwayFromPlayer).
+     */
+    spawnEncounter(room) {
+      const c = room.tileCenter(7, 4);
+      const boss = this.spawnBoss(room.encounterBoss, c.x, c.y, room, { hpMult: B.ENCOUNTER_HP || 0.5, encounter: true });
+      if (!boss) return;
+      const lines = B.TEXT.ENCOUNTER_LINES;
+      this.banner(boss.def.name, lines && lines.length ? this.rng.pick(lines) : 'Uninvited.');
+    }
+
     onEnemyKilled(e) {
       this.runStats.kills++;
     }
@@ -295,6 +314,11 @@
       this.dropGuaranteedKey(room);
       this.placePipe(room);
       const luck = this.player.stats.luck;
+      if (room.encounterBoss) {
+        // Zwischenboss besiegt: ein sicherer Extra-Drop zusaetzlich zum normalen Wurf (eine Kachel rechts der Mitte)
+        const pos = this.nearestFreePos(ROOM_W / 2 + TILE, ROOM_H / 2, room);
+        this.spawnPickup(B.rollRandomPickup(this.rng, luck), pos.x, pos.y, {}, room);
+      }
       if (this.rng.chance(Math.min(0.9, 0.35 + luck * 0.03))) {
         const pos = this.nearestFreePos(ROOM_W / 2, ROOM_H / 2, room);
         this.spawnPickup(B.rollRandomPickup(this.rng, luck), pos.x, pos.y, {}, room);
@@ -431,9 +455,16 @@
       return e;
     }
 
-    spawnBoss(id, x, y, room) {
+    /**
+     * opts (optional): { hpMult, encounter } — gilt auch fuer Bosse, die der neue Boss in seinem init selbst
+     * erzeugt (Rogue Agent Swarm), deshalb waehrend des Konstruktors in this.bossSpawnOpts (boss.js liest das).
+     */
+    spawnBoss(id, x, y, room, opts) {
       if (!B.BOSSES[id]) { console.warn('[game] unknown boss', id); return null; }
-      const e = new B.Boss(id, x, y, this);
+      const outer = this.bossSpawnOpts || null;
+      this.bossSpawnOpts = opts || outer;
+      let e;
+      try { e = new B.Boss(id, x, y, this); } finally { this.bossSpawnOpts = outer; }
       (room || this.room).enemies.push(e);
       B.bus.emit('bossSpawn', { game: this, boss: e });
       return e;
@@ -742,7 +773,13 @@
     killAll() { const g = B.game; for (const e of g.room.enemies.slice()) e.die(g); },
     nextFloor() { const g = B.game; g.setState('play'); g.nextFloor(); },
     reveal() { this.revealMap = !this.revealMap; },
-    gotoRoom(type) { const g = B.game; const c = g.floor.findType(type); if (c) g.teleport(c.room); return !!c; },
+    // type: Zelltyp ('start', 'boss', ...) oder 'encounter' (erste Zwischenboss-Begegnung der Etage, ab Etage 8)
+    gotoRoom(type) {
+      const g = B.game;
+      const c = type === 'encounter' ? (g.floor.encounterRooms || [])[0] || null : g.floor.findType(type);
+      if (c) g.teleport(c.room);
+      return !!c;
+    },
     resources(n) { const p = B.game.player; p.credits = p.pushes = p.approvals = n || 10; p.health = p.maxHealth; },
     handleKeys(game) {
       const inp = B.input;
