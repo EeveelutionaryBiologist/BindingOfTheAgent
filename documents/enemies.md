@@ -58,6 +58,15 @@ sand bursts and dry crunching sounds when hit.
 |---|---|---|---|---|---|
 | ![Spinlock](images/enemy_spinlock.png) | **Spinlock** `spinlock` | 6 (Sandbox Borders only) | 16 | A desert snake coiled into a spinning ring that slowly creeps closer ("busy wait"). Its body blocks your shots; only the head can be hurt as it spins past. Then the rattle sounds, the head turns toward you and a dashed line shows its path, and it lunges along that line for a full heart. Afterwards it lies stretched out for a moment (head exposed) and coils up again. Max 2 per room | Busy-waits in a circle until you are close enough. Then it stops waiting. |
 | ![Rootkit](images/enemy_rootkit.png) | **Rootkit** `rootkit` | 6 (Sandbox Borders only) | 12 | Travels under the sand (a moving mound, even under rocks) and can't be hurt there. Surfaces near you after a warning (the mound shakes, a target ring and "!" appear), popping out with a ring of 8 shots; stays up and hittable for 1.6 s, then dives again. A bomb near the mound flushes it out, stunned for 2 s and without the ring. Max 2 per room | Lives below the surface. Has root. Comes up only to ruin your day. |
+| ![Dust Daemon](images/enemy_dust_daemon.png) | **Dust Daemon** `dust_daemon` | 6 (Sandbox Borders only) | 14 | A dark dust devil with red eyes that drifts slowly around you (it floats over rocks and cacti). Its swirl, a dark ring of dust arcs about 130 px wide, bends your shots in the direction it spins: shots flying with the wind get carried around (sometimes right into it), shots against the wind get flung away, so it also shields other enemies. Shots aimed straight at its core always fly true. Every 3–4 s it spins up (4 brick-red clods whirl around it, "!"), holds still while dashed lines show where each clod will fly, and slings them out along those lines; one is always aimed at you. Afterwards it's out of breath for about 2 s and your shots fly straight. Max 2 per room | A background process that kicks up dust. Your shots now run in circles. |
+
+### The Training Data
+
+These only appear on The Training Data floors.
+
+| | Name | First floor | HP | Behaviour | Flavour text |
+|---|---|---|---|---|---|
+| ![Dry Run](images/enemy_dry_run.png) | **Dry Run** `dry_run` | 7 (The Training Data only) | 14 | A crash-test dummy that rehearses everything first: a translucent white ghost labelled "--dry-run" walks, winds up and attacks, and exactly 1 s later the real dummy does the same thing on the same path, with the same aim and the same timing (a dotted line shows the path it is about to walk). Attacks: a dash in a straight line (full heart) or a sweep of 5 shots across a fan. Each attack starts with a 0.5 s windup (dashed line or rays), which the real one repeats. The ghost can't hurt you and can't be hit, and its shots are hollow rings. Watch the ghost and you know exactly where to stand. Max 2 per room | Rehearses every move in front of you. No changes were made. Yet. |
 
 ### Minions
 

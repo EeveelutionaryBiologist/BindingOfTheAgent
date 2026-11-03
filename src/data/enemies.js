@@ -325,6 +325,65 @@
     desc: 'Lives below the surface. Has root. Comes up only to ruin your day.',
   };
 
+  // --- Sandbox Borders: Dust Daemon ---
+  // Ein dunkler Staubteufel mit roten Augen, der als Hintergrundprozess ueber den Sand treibt (fliegt, auch ueber
+  // Felsen und Kakteen). Sein Wirbel (sichtbarer Kreis aus Staubboegen, Radius swirlR) biegt SPIELERSCHUESSE in
+  // Drehrichtung ab — wer mit dem Wind schiesst, wird um ihn herum getragen (auch in den Kern hinein), wer gegen
+  // den Wind schiesst, wird hinausgeworfen. So schirmt er auch andere Gegner ab. Fair bleibt er durch das ruhige
+  // Auge: ein Schuss, dessen gerade Flugbahn den Kern trifft (Abstand < eye), wird nie abgelenkt.
+  // Angriff: Wirbel dreht hoch (spinup, 4 ziegelrote Brocken kreisen, "!"), haelt kurz an (hold: gestrichelte
+  // Wurflinien), dann schleudert er die Brocken tangential weg — einer davon zielt genau auf den Spieler.
+  // Danach ist er erschoepft (calm: kein Wirbel, Schuesse fliegen gerade) und baut den Wirbel langsam wieder auf.
+  // Verhalten 'dust_daemon' in enemy.js; der Schuss-Hook bendShot wird in projectile.js aufgerufen.
+  E.dust_daemon = {
+    name: 'Dust Daemon', hp: 14, r: 18, speed: 60, contactDamage: 1, flying: true,
+    behavior: 'dust_daemon', params: {
+      swirlR: 130,          // Radius des Wirbels (px), innerhalb davon werden Spielerschuesse abgelenkt
+      eye: 26,              // ruhiges Auge: Schuesse, deren Bahn naeher als das am Kern vorbeigeht, fliegen gerade
+      curve: 0.008,         // maximale Kruemmung (rad pro geflogenem px) direkt am Auge, faellt zum Rand auf 0
+      orbitR: 170,          // treibt auf einem langsam wandernden Punkt in diesem Abstand um den Spieler
+      orbitSpin: 0.35,      // rad/s, wie schnell dieser Punkt wandert
+      spinup: 0.8,          // Telegraph 1: Wirbel dreht hoch, Brocken kreisen (s)
+      hold: 0.35,           // Telegraph 2: Brocken stehen, Wurflinien sichtbar (s)
+      clods: 4, clodR: 34,  // Anzahl Brocken und ihr Kreisradius (px)
+      shotSpeed: 190,       // px/s (skaliert sanft mit der Tiefe, bleibt in 165–260)
+      calm: 1.4,            // nach dem Wurf: kein Wirbel (s) ...
+      rebuild: 0.8,         // ... dann baut er sich in so vielen Sekunden wieder auf
+      cdMin: 2.6, cdMax: 3.6,
+    },
+    sprite: 'enemy_dust_daemon', color: '#5a4028', noFlip: true,
+    minFloor: 5, weight: 5, cost: 1.8, maxPerRoom: 2, tags: ['fly', 'ranged'],
+    themeOnly: ['sandbox'], family: 'sandbox',
+    desc: 'A background process that kicks up dust. Your shots now run in circles.',
+  };
+
+  // --- The Training Data: Dry Run ---
+  // Ein Crashtest-Dummy, der jede Aktion erst als durchscheinender Geist "probt" und sie genau delay Sekunden
+  // spaeter selbst ausfuehrt: gleicher Weg, gleiche Schusswinkel, gleiches Tempo, gleicher Takt. Der Geist ist der
+  // eingebaute Telegraph (harmlos, ungreifbar, kein eigenes Enemy); eine gepunktete Linie zeigt den Weg, den der
+  // Koerper noch nachlaufen wird. Angriffe (je mit Ausholen): 'dash' (Sturmlauf geradeaus, volles Herz) und
+  // 'sweep' (5 Schuesse, die einen Faecher von links nach rechts abfahren). Nur auf The Training Data (Imitation,
+  // Probelauf). Sandbox Borders waere thematisch auch passend (Sandbox = Probelauf), dort hat die Familie aber schon
+  // drei Mitglieder und ein heller Dummy verstoesst gegen die Wuestenregel (Gefaehrliches dunkel auf Sand).
+  // Verhalten 'dry_run' in enemy.js.
+  E.dry_run = {
+    name: 'Dry Run', hp: 14, r: 17, speed: 95, contactDamage: 1,
+    behavior: 'dry_run', params: {
+      delay: 60,            // Ticks (60 = 1.0 s), die der Koerper dem Geist hinterherlaeuft — fest, nicht skaliert
+      near: 170,            // naeher als das: der Geist geht seitlich statt heran
+      windup: 0.5,          // Ausholen vor jedem Angriff (s; der Koerper wiederholt es)
+      dashSpeed: 400, dashTime: 0.55,
+      sweepShots: 5, sweepArc: 0.9, sweepGap: 0.09,   // Faecher: 5 Schuesse ueber 0.9 rad, alle 0.09 s
+      shotSpeed: 200,
+      rest: 0.45,
+      cdMin: 1.6, cdMax: 2.4,
+    },
+    sprite: 'enemy_dry_run', color: '#e8b23a', noFlip: true,
+    minFloor: 7, weight: 6, cost: 2, maxPerRoom: 2, tags: ['melee', 'charge', 'ranged'],
+    themeOnly: ['training'],
+    desc: 'Rehearses every move in front of you. No changes were made. Yet.',
+  };
+
   // ---------------------------------------------------------------------------
   // Minions (spawn: false) — entstehen nur durch andere Gegner oder Bosse
   // ---------------------------------------------------------------------------

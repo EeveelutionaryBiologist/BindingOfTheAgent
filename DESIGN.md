@@ -410,11 +410,11 @@ clearly marked hook additions.
 All milestones done. What shipped, compared with this doc:
 - **Items:** 45 (40 passive, 5 active). There are 9 extras beyond §9, e.g. Ctrl+C Ctrl+V, On-Call Pager,
   Garbage Collector, Feature Flag, Ctrl+Z (active), and the Extra GPU / Off-Brand GPU pair (added 2026-11-02). Locked chests cost an Approval.
-- **Enemies and bosses:** 20 spawnable enemies plus 7 minions (4 of the enemies are the Forgotten Branches family and 2 the Sandbox Borders family, added 2026-11-02). Each of the 8 bosses has phases and telegraphed attacks; the Octopus Merge (2026-11-02) is the floor boss of Forgotten Branches, and the Nested Infinite Loop (2026-11-02) replaces the Infinite Loop from floor 8.
+- **Enemies and bosses:** 22 spawnable enemies plus 7 minions (4 of the enemies are the Forgotten Branches family and 3 the Sandbox Borders family, added 2026-11-02/03; the Dust Daemon bends your shots, and the Dry Run on The Training Data rehearses every move as a ghost before doing it for real, added 2026-11-03). Each of the 8 bosses has phases and telegraphed attacks; the Octopus Merge (2026-11-02) is the floor boss of Forgotten Branches, and the Nested Infinite Loop (2026-11-02) replaces the Infinite Loop from floor 8.
 - **Layouts:** 30 (27 combat, the rest for special rooms), all validated.
 - **Presentation:**
   - 11 floor themes (Sandbox Borders, a desert with cacti and border fences, added 2026-11-02) and an animated avatar with 4 directions plus hurt and item poses.
-  - 48 synthesized SFX and a procedural chiptune loop per floor, with a boss variant.
+  - 51 synthesized SFX and a procedural chiptune loop per floor, with a boss variant.
   - Pixel-font HUD and screens, including the "post-mortem" death report.
 - **QA:** headless-browser tests found zero console errors and held 60 fps with all items, 30 enemies and about 150 bullets.
   They also covered 300+ fuzzed floors, every enemy and boss, and multi-floor runs.

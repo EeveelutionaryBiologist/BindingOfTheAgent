@@ -28,7 +28,8 @@
 
   // Mindestabstand (s) zwischen zwei Wiedergaben desselben Effekts
   const RATE = { propHit: 0.05, propBreak: 0.04, shoot: 0.045, hit: 0.035, splat: 0.07, coin: 0.03, denied: 0.25, enemyDeath: 0.03, rock: 0.05, doorOpen: 0.1, doorClose: 0.1,
-    leafHit: 0.04, branchDeath: 0.03, rustle: 0.2, creak: 0.12, sandHit: 0.04, sandDeath: 0.03, rattle: 0.3, dig: 0.2, sandPop: 0.08 };
+    leafHit: 0.04, branchDeath: 0.03, rustle: 0.2, creak: 0.12, sandHit: 0.04, sandDeath: 0.03, rattle: 0.3, dig: 0.2, sandPop: 0.08,
+    gust: 0.25, rehearse: 0.2, replay: 0.2 };
   // Effekte, die bei vielen gleichzeitigen Stimmen zuerst wegfallen (dauernd feuernde Treffer/Schuesse)
   const SPAMMY = { shoot: true, hit: true, splat: true, leafHit: true, sandHit: true };
   const lastPlay = Object.create(null);
@@ -181,6 +182,14 @@
       noise({ dur: 0.2, vol: 0.09, filter: 'bandpass', f: 1400, f2: 600, q: 1 });
       voice({ f: 220, f2: 420, dur: 0.08, type: 'square', vol: 0.04 });
     },
+    // Dust Daemon dreht hoch (Telegraph): anschwellendes, hoeher werdendes Windrauschen
+    gust() {
+      noise({ dur: 0.75, vol: 0.07, filter: 'bandpass', f: 350, f2: 1600, q: 2.5 });
+      noise({ dur: 0.5, vol: 0.035, filter: 'highpass', f: 2400, delay: 0.2 });
+    },
+    // Dry Run: der Geist probt (leises, hohles Doppel-"Pling") und der Koerper macht ernst (gleiche Toene, kantiger)
+    rehearse() { arp([76, 71], 0.07, 'sine', 0.035); },
+    replay() { arp([76, 71], 0.07, 'square', 0.05); voice({ f: 140, f2: 90, dur: 0.1, type: 'triangle', vol: 0.06 }); },
     // Kaktus gestochen: kurzes, hohes "Pieks" (der Treffer-Sound des Spielers kommt ohnehin dazu)
     prick() {
       voice({ f: 1900, f2: 1300, dur: 0.05, type: 'square', vol: 0.05 });

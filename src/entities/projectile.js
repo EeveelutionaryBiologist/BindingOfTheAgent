@@ -13,6 +13,9 @@
  *   knockback         Stossstaerke beim Treffer (Default 160)
  *   source            Name des Verursachers (fuer "Killed by")
  *   isChild           Abspaltung (spaltet sich nicht weiter)
+ *
+ * Schuss-Felder: Spielerschuesse rufen jeden Tick vor der Bewegung den Verhaltens-Hook bendShot(e, shot, dt, game)
+ * aller lebenden Gegner im Raum auf, die ihn haben (Dust Daemon: Wirbel lenkt Schuesse ab, enemy.js).
  */
 'use strict';
 
@@ -59,6 +62,17 @@
           const sp = this.speed;
           this.vx = Math.cos(cur + turn) * sp;
           this.vy = Math.sin(cur + turn) * sp;
+        }
+      }
+
+      // Schuss-Felder: Gegner, deren Verhalten den Hook bendShot(e, shot, dt, game) hat, duerfen die Richtung
+      // (vx/vy) von Spielerschuessen aendern, bevor diese sich bewegen — z. B. der Wirbel des Dust Daemon.
+      // Gegnerschuesse bleiben unberuehrt. Der Hook muss deterministisch sein (kein Zufall).
+      if (this.team === 'player') {
+        const list = room.enemies;
+        for (let i = 0; i < list.length; i++) {
+          const e = list[i];
+          if (!e.dead && e.behavior && e.behavior.bendShot) e.behavior.bendShot(e, this, dt, game);
         }
       }
 
