@@ -551,7 +551,36 @@
   };
 
   // ---- Context-Familie: Slot 1 (Overflow Buffer) ----
-  // [[SLOT overflow_buffer]]
+  // Overflow Buffer — Glastank auf kurzen Beinen: Metalldeckel mit zwei muede blickenden Augen, Glaswaende,
+  // Bodenplatte. Das INNERE des Tanks ist absichtlich transparent: Fluessigkeit, Fuellstandslinie, Textfetzen und
+  // Glanzstreifen zeichnet das Verhalten (Innenraum relativ zur Sprite-Mitte: x -16..+16, y -14..+14).
+  // Frame 2 = anderer Beinschritt. 12 x 15 Art-Pixel.
+  (function () {
+    const CC = B.CONTEXT_COLORS;
+    const top = [
+      '...kkkkkk...',
+      '..kmmmmmmk..',
+      '..kmwmmwmk..',
+      '.kkkkkkkkkk.',
+      'kg........gk',
+      'kg........gk',
+      'kg........gk',
+      'kg........gk',
+      'kg........gk',
+      'kg........gk',
+      'kg........gk',
+      'kddddddddddk',
+      '.kkkkkkkkkk.',
+    ];
+    B.defineSprite('enemy_overflow_buffer', {
+      palette: { k: CC.outline, m: CC.glassDark, d: CC.glassDark, g: CC.glass, w: '#d6e4ff' },
+      scale: 4,
+      frames: [
+        top.concat(['..kk....kk..', '.kk......kk.']),
+        top.concat(['...kk..kk...', '...kk..kk...']),
+      ],
+    });
+  })();
   // ---- Ende Slot 1 ----
 
   // ---- Context-Familie: Slot 2 (Summarizer) ----

@@ -588,7 +588,43 @@
   // ---------------------------------------------------------------------------
 
   // ---- Context-Familie: Slot 1 (Overflow Buffer) ----
-  // [[SLOT overflow_buffer]]
+  // --- Context Limit: Overflow Buffer ---
+  // Ein Glastank auf kurzen Beinen, in dem leuchtende Textfetzen schwappen; eine Fuellstandslinie zeigt, wie voll
+  // er ist. Der Pegel steigt von selbst (fillTime von leer bis voll) und JEDER Treffer des Spielers schuettet
+  // hitFill zusaetzlich hinein. Ist er voll, springt das Glas ("[OVERFLOW]", Bernstein-Telegraph mit Strahlen in
+  // die spaeteren Schussrichtungen und dem Pfuetzenradius am Boden, Gurgeln ueber enemyWindup), dann platzt er:
+  // ein Ring aus Koralle-Tropfen und eine Pfuetze (Minion 'overflow_puddle'), die laufende Spieler verlangsamt.
+  // Danach beginnt er leer von vorn. Also: schnell kaputt schiessen ODER den Ueberlauf ausloesen und ausweichen —
+  // langsam abnutzen ist das Schlechteste. Verhalten 'overflow_buffer' in entities/enemies-context.js.
+  E.overflow_buffer = {
+    name: 'Overflow Buffer', hp: 18, r: 18, speed: 40, contactDamage: 1,
+    behavior: 'overflow_buffer', params: {
+      fillTime: 7,          // s von leer bis voll ohne Treffer
+      hitFill: 0.07,        // zusaetzlicher Pegel je Treffer (Anteil des Tanks)
+      warn: 0.8,            // Telegraph vor dem Platzen (s)
+      shots: 8,             // Tropfen im Ring
+      shotSpeed: 200,       // px/s (mit Tiefen-Skalierung max. 230)
+      puddleR: 80,          // Pfuetzenradius (px)
+      puddleLife: 4,        // Lebensdauer der Pfuetze (s, inkl. Ausblenden)
+      puddleSlow: 0.6,      // Tempofaktor fuer den Spieler in der Pfuetze
+      rest: 0.6,            // nach dem Platzen leer und still (s)
+      near: 130,            // naeher als das: auf der Stelle schlurfen, weiter weg: auf den Spieler zu (px)
+    },
+    sprite: 'enemy_overflow_buffer', color: '#b9cde6', noFlip: true,
+    minFloor: 8, weight: 5, cost: 1.8, maxPerRoom: 2, tags: ['ranged'],
+    themeOnly: ['context'], family: 'context',
+    desc: 'Nobody checked the bounds. Hit it and it fills up faster.',
+  };
+
+  // Pfuetze des Overflow Buffers: flache Wasserflaeche am Boden (static, intangible, kein Kontaktschaden, zaehlt
+  // nicht fuers Clearing, kein Sprite: zeichnet sich selbst unter allem anderen). Waechst kurz auf, verlangsamt
+  // laufende Spieler (player.slowBy) und blendet zum Ende hin aus; ueberlebt ihren Tank bis zum Ablauf.
+  E.overflow_puddle = {
+    name: 'Overflow Buffer', hp: 1, r: 20, speed: 0, contactDamage: 0, flying: true,
+    behavior: 'overflow_puddle', color: '#9ec5ff', noFlip: true,
+    spawn: false, cost: 0, family: 'context',
+    desc: 'Spilled context. Wading through it takes a while.',
+  };
   // ---- Ende Slot 1 ----
 
   // ---- Context-Familie: Slot 2 (Summarizer) ----

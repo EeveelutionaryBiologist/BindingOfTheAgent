@@ -58,6 +58,9 @@
       this.walkAnim = 0;
       this.holdItem = null;  // { id, t } — Item ueber dem Kopf nach dem Aufheben
       this.killedBy = null;
+      // Verlangsamung von aussen fuer den NAECHSTEN Bewegungsschritt (1 = keine), gesetzt ueber slowBy() —
+      // z. B. von der Pfuetze des Overflow Buffers. update() verbraucht den Wert und setzt ihn auf 1 zurueck.
+      this.slowNext = 1;
 
       this.recalcStats();
     }
@@ -240,6 +243,17 @@
       }
     }
 
+    /**
+     * Verlangsamt den Spieler fuer den naechsten Tick auf factor (0..1) seines Tempos. Mehrere Quellen im selben
+     * Tick stapeln NICHT: es gilt der staerkste einzelne Faktor (Minimum), nie ein Produkt. Fliegende Spieler
+     * (flags.flying, z. B. The Cloud) schweben ueber Pfuetzen und werden nicht verlangsamt.
+     * Wer bremsen will, ruft das jeden Tick auf (z. B. overflow_puddle in enemies-context.js).
+     */
+    slowBy(factor) {
+      if (this.flying || !(factor >= 0 && factor < 1)) return;
+      if (factor < this.slowNext) this.slowNext = factor;
+    }
+
     placeBomb(game) {
       if (this.pushes <= 0) { B.bus.emit('denied', { game, reason: 'bomb' }); return; }
       this.pushes--;
@@ -260,7 +274,10 @@
 
       // Bewegung mit Beschleunigung/Reibung (fuehlt sich "rutschig, aber praezise" an)
       const mv = B.input.moveVector();
-      const maxSpeed = 240 * this.stats.speed;
+      // Aeussere Verlangsamung gilt genau einen Tick (Quellen muessen sie jeden Tick neu setzen) und ist kein Stat
+      const slow = this.slowNext;
+      this.slowNext = 1;
+      const maxSpeed = 240 * this.stats.speed * slow;
       const moving = mv.x !== 0 || mv.y !== 0;
       const k = 1 - Math.exp(-(moving ? 14 : 10) * dt);
       this.vx += (mv.x * maxSpeed - this.vx) * k;

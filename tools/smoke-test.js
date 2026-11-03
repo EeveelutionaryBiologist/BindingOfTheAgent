@@ -95,6 +95,8 @@
  * (keine Admin-Rechte noetig; das Spiel selbst braucht nichts davon)
  *
  * SICHERHEIT: Der Test oeffnet nur die lokale Datei; die CSP des Spiels blockiert ohnehin jedes Netzwerk.
+ *   - Overflow Buffer: nie vor Etage 8, auf The Context Limit haeufiger; Pegel steigt (mit Treffern schneller), Platzen
+ *     nach vollem Telegraph in 8 Koralle-Tropfen (165–260 px/s), Pfuetze bremst x0.6 (nur innen, nicht gestapelt/fliegend)
  */
 'use strict';
 
@@ -1931,7 +1933,213 @@ const URL = 'file://' + path.join(ROOT, 'index.html').replace(/\\/g, '/') + '?se
   }));
 
   // ---- Context-Familie: Slot 1 (Overflow Buffer) ----
-  // [[SLOT overflow_buffer]]
+  // --- Overflow Buffer (Context-Familie, ab Etage 8): nie vor Etage 8, auf The Context Limit haeufiger als auf
+  //     anderen spaeten Etagen; Pegel steigt von selbst und schneller mit Treffern; Platzen erst nach vollem
+  //     Telegraph (Strahlen = Schussrichtungen); 8 Koralle-Tropfen mit 165–260 px/s; Pfuetze bremst laufende Spieler
+  //     (Faktor, nicht gestapelt, nicht ausserhalb, nicht fliegend, nicht nach dem Versickern); danach leer von vorn;
+  //     Tod und killAll hinterlassen nichts ---
+  const overflowProblems = await page.evaluate(() => {
+    const out = [];
+    const g = BOTA.game, AI = BOTA.AI, DT = 1 / 60, def = BOTA.ENEMIES.overflow_buffer;
+    const CX = BOTA.FLOOR_THEMES.findIndex((t) => t.key === 'context') + 1;
+    if (!def || !BOTA.ENEMIES.overflow_puddle) { out.push('Overflow Buffer: Definition fehlt'); return out; }
+    if (def.family !== 'context' || (def.themeOnly || []).join() !== 'context' || def.minFloor !== 8) out.push('Overflow Buffer: Familie/Thema/minFloor falsch');
+    if (BOTA.spriteFrameCount('enemy_overflow_buffer') !== 2) out.push('Overflow Buffer: Sprite ohne 2 Frames');
+    // 1) Wuerfeln: nie vor Etage 8; auf The Context Limit haeufiger als auf einer anderen Etage >= 8
+    const count = (d, n) => {
+      let c = 0;
+      for (let i = 0; i < n; i++) {
+        const list = BOTA.rollRoomEnemies(new BOTA.RNG(BOTA.hashString('ovf' + d + ':' + i)), d);
+        const k = list.filter((x) => x === 'overflow_buffer').length;
+        if (k > (def.maxPerRoom || 99)) out.push('Overflow Buffer: ' + k + ' in einem Raum');
+        c += k;
+      }
+      return c;
+    };
+    for (let d = 1; d <= 7; d++) if (count(d, 150)) out.push('Overflow Buffer: taucht auf Etage ' + d + ' auf');
+    const other = CX === 10 ? 9 : 10;
+    const nCx = count(CX, 400), nOther = count(other, 400);
+    if (!nCx) out.push('Overflow Buffer: taucht auf The Context Limit (Etage ' + CX + ') nie auf');
+    if (!(nCx > nOther)) out.push('Overflow Buffer: auf Etage ' + CX + ' nicht haeufiger als auf Etage ' + other + ' (' + nCx + ' / ' + nOther + ')');
+    if (!(BOTA.enemyWeightAt(def, CX) > BOTA.enemyWeightAt(def, other) && BOTA.enemyWeightAt(def, other) > 0)) out.push('Overflow Buffer: Gewicht Etage ' + CX + ' nicht hoeher als Etage ' + other);
+
+    const d0 = g.depth;
+    const p = g.player;
+    const origMove = BOTA.input.moveVector, origShootDir = BOTA.input.shootDir;
+    const events = [];
+    const offs = ['enemyWindup', 'enemyOverflow'].map((n) => BOTA.bus.on(n, (e) => events.push({ n, enemy: e.enemy, sound: e.sound })));
+    const flying0 = p.flying;
+    try {
+      g.enterFloor(CX); g.setState('play');
+      BOTA.debug.gotoRoom('start'); BOTA.debug.god(true);
+      const clearRoom = () => { for (let i = 0; i < 4; i++) BOTA.debug.killAll(); g.room.enemies = g.room.enemies.filter((en) => !en.dead); g.room.projectiles.length = 0; };
+      const stepAll = (n, each) => {
+        for (let i = 0; i < n; i++) {
+          for (const en of g.room.enemies.slice()) { if (!en.dead) { en.frozen = 0; en.update(DT, g); } }
+          g.room.enemies = g.room.enemies.filter((en) => !en.dead);
+          if (each && each(i) === false) break;
+        }
+      };
+      clearRoom();
+      p.x = 760; p.y = 420;
+      // 2) Pegel ohne Treffer: Zeit bis voll, dann Telegraph, Platzen
+      const O = BOTA.debug.spawn('overflow_buffer', 300, 260);
+      O.spawnDelay = 0;
+      const S = O.state, P = O.params;
+      if (!(P.warn >= 0.6)) out.push('Overflow Buffer: Telegraph kuerzer als 0.6 s');
+      let tFull = -1, ticks = 0, burst = null, prevMode = S.mode, fillAt1 = -1;
+      stepAll(60 * 12, (i) => {
+        ticks++;
+        if (i === 59) fillAt1 = S.fill;
+        if (prevMode === 'fill' && S.mode === 'warn' && tFull < 0) tFull = ticks * DT;
+        prevMode = S.mode;
+        if (S.bursts > 0) return false;
+      });
+      if (!(fillAt1 > 0.1 && fillAt1 < 0.2)) out.push('Overflow Buffer: Pegel nach 1 s ' + fillAt1.toFixed(3));
+      if (!(tFull >= 6 && tFull <= 8)) out.push('Overflow Buffer: ohne Treffer voll nach ' + tFull.toFixed(2) + ' s (erwartet 6–8)');
+      // Platzen untersuchen: zuruecksetzen und den Telegraph Tick fuer Tick verfolgen
+      clearRoom();
+      const O2 = BOTA.debug.spawn('overflow_buffer', 300, 260);
+      O2.spawnDelay = 0;
+      const S2 = O2.state;
+      S2.fill = 0.999;
+      events.length = 0;
+      let warnTicks = 0, shots = null, warnedAtBurst = -1, offAtBurst = 0;
+      stepAll(120, () => {
+        if (S2.mode === 'warn') warnTicks++;
+        if (S2.bursts === 1 && !shots) {
+          shots = g.room.projectiles.filter((pr) => pr.team === 'enemy');
+          warnedAtBurst = S2.warned;
+          offAtBurst = S2.off;
+          return false;
+        }
+      });
+      if (!shots) out.push('Overflow Buffer: platzt nicht');
+      else {
+        if (warnedAtBurst < P.warn - 1e-6) out.push('Overflow Buffer: platzt nach nur ' + warnedAtBurst.toFixed(2) + ' s Telegraph');
+        if (shots.length !== P.shots || P.shots !== 8) out.push('Overflow Buffer: ' + shots.length + ' statt 8 Tropfen');
+        if (shots.some((s) => s.color !== BOTA.CONTEXT_DANGER.shot)) out.push('Overflow Buffer: Tropfen nicht Koralle');
+        const sp = shots.map((s) => Math.hypot(s.vx, s.vy));
+        if (sp.some((v) => v < 165 || v > 260)) out.push('Overflow Buffer: Tropfen mit ' + sp.map((v) => v.toFixed(0)).join('/') + ' px/s');
+        // Schussrichtungen = gezeichnete Strahlen (off + i * 360/8)
+        const angs = shots.map((s) => Math.atan2(s.vy, s.vx));
+        for (let i = 0; i < P.shots; i++) {
+          const want = offAtBurst + (i * Math.PI * 2) / P.shots;
+          if (!angs.some((a) => Math.abs(BOTA.M.angleDiff(a, want)) < 0.01)) { out.push('Overflow Buffer: Tropfen weicht von den Telegraph-Strahlen ab'); break; }
+        }
+        const wind = events.filter((x) => x.n === 'enemyWindup' && x.enemy === O2);
+        if (wind.length !== 1 || wind[0].sound) out.push('Overflow Buffer: Telegraph ohne (Familien-)enemyWindup');
+        if (events.filter((x) => x.n === 'enemyOverflow').length !== 1) out.push('Overflow Buffer: kein enemyOverflow-Event beim Platzen');
+        if (S2.mode !== 'rest' || S2.fill !== 0) out.push('Overflow Buffer: nach dem Platzen nicht leer (' + S2.mode + ', ' + S2.fill + ')');
+        if (!(O2.sayText === null || O2.sayT <= 0)) out.push('Overflow Buffer: [OVERFLOW]-Text bleibt nach dem Platzen stehen');
+      }
+      // Waehrend des Telegraphs keine Schuesse
+      if (warnTicks < Math.round(P.warn * 60) - 1) out.push('Overflow Buffer: nur ' + warnTicks + ' Telegraph-Ticks');
+      const pd = S2.puddle;
+      if (!pd || pd.id !== 'overflow_puddle' || !g.room.enemies.includes(pd)) out.push('Overflow Buffer: keine Pfuetze nach dem Platzen');
+      // Danach beginnt er leer von vorn (Pegel klein, steigt wieder)
+      g.room.projectiles.length = 0;
+      stepAll(Math.ceil((P.rest + 0.5) * 60));
+      if (S2.mode !== 'fill' || !(S2.fill > 0 && S2.fill < 0.15)) out.push('Overflow Buffer: faengt nicht leer von vorn an (' + S2.mode + ', ' + S2.fill.toFixed(3) + ')');
+
+      // 3) Pfuetze: Radius, Bremse (Faktor, nur innen, nicht fliegend, nicht gestapelt, nicht nach dem Versickern)
+      if (pd) {
+        // Die Pfuetze ist inzwischen ~1 s alt (voll aufgebreitet); Restlebenszeit merken
+        if (Math.abs(pd.state.R - P.puddleR) > 1e-6 || P.puddleR < 60 || P.puddleR > 100) out.push('Overflow Buffer: Pfuetzenradius ' + pd.state.R);
+        if (pd.contactDamage !== 0 || !pd.intangible || !pd.ignoreForClear) out.push('Overflow Buffer: Pfuetze nicht harmlos/ungreifbar');
+        O2.hurt(1e6, g, {});                 // Tank weg: die Pfuetze laeuft trotzdem regulaer aus
+        g.room.enemies = g.room.enemies.filter((en) => !en.dead);
+        BOTA.input.moveVector = () => ({ x: 1, y: 0 });
+        BOTA.input.shootDir = () => null;
+        p.flying = false;                    // frueher verteilte Items (The Cloud) lassen ihn sonst schweben
+        // Endgeschwindigkeit nach 40 Ticks Laufen an Position (x, y), Pfuetze(n) laufen mit
+        const speedAt = (x, y, extra) => {
+          p.vx = 0; p.vy = 0;
+          for (let i = 0; i < 40; i++) {
+            for (const en of [pd].concat(extra || [])) if (!en.dead) { en.frozen = 0; en.update(DT, g); }
+            p.x = x; p.y = y;
+            p.update(DT, g);
+          }
+          p.x = x; p.y = y;
+          return p.vx;
+        };
+        // Alter der Pfuetze waehrend der Messungen festhalten (sonst versickert sie mittendrin)
+        const age0 = pd.state.age;
+        const free = speedAt(pd.x + 300 > 900 ? pd.x - 300 : pd.x + 300, pd.y);
+        pd.state.age = age0;
+        const inside = speedAt(pd.x + 10, pd.y);
+        pd.state.age = age0;
+        const outside = speedAt(pd.x, pd.y + P.puddleR + 12);
+        pd.state.age = age0;
+        const pd2 = new BOTA.Enemy(BOTA.ENEMIES.overflow_puddle, 'overflow_puddle', pd.x + 20, pd.y, g, 1);
+        pd2.spawnDelay = 0; pd2.state.R = P.puddleR; pd2.state.slow = P.puddleSlow; pd2.state.age = 1;
+        const both = speedAt(pd.x + 10, pd.y, [pd2]);
+        pd.state.age = age0;
+        p.flying = true;
+        const fly = speedAt(pd.x + 10, pd.y);
+        p.flying = false;
+        pd.state.age = age0;
+        const ratio = (v) => v / free;
+        if (!(free > 100)) out.push('Overflow Buffer: Testspieler laeuft nicht (' + free.toFixed(1) + ')');
+        if (Math.abs(ratio(inside) - P.puddleSlow) > 0.02 || P.puddleSlow > 0.8) out.push('Overflow Buffer: in der Pfuetze Tempo x' + ratio(inside).toFixed(3) + ' statt x' + P.puddleSlow);
+        if (Math.abs(ratio(outside) - 1) > 0.02) out.push('Overflow Buffer: bremst ausserhalb ihres Radius (x' + ratio(outside).toFixed(3) + ')');
+        if (Math.abs(ratio(both) - P.puddleSlow) > 0.02) out.push('Overflow Buffer: zwei Pfuetzen stapeln (x' + ratio(both).toFixed(3) + ')');
+        if (Math.abs(ratio(fly) - 1) > 0.02) out.push('Overflow Buffer: bremst fliegende Spieler (x' + ratio(fly).toFixed(3) + ')');
+        // Versickern: nach Ablauf der Lebensdauer verschwindet sie still und bremst nicht mehr
+        let gone = -1;
+        for (let i = 0; i < 60 * 6 && gone < 0; i++) {
+          pd.frozen = 0; pd.update(DT, g);
+          if (pd.dead) gone = pd.state.age;
+        }
+        g.room.enemies = g.room.enemies.filter((en) => !en.dead);
+        if (gone < 0 || Math.abs(gone - P.puddleLife) > 0.05) out.push('Overflow Buffer: Pfuetze lebt ' + gone.toFixed(2) + ' s statt ' + P.puddleLife);
+        const after = speedAt(pd.x + 10, pd.y);
+        if (Math.abs(ratio(after) - 1) > 0.02) out.push('Overflow Buffer: bremst nach dem Versickern noch (x' + ratio(after).toFixed(3) + ')');
+        if (g.room.enemies.length) out.push('Overflow Buffer: Reste nach Tod + Versickern: ' + g.room.enemies.map((en) => en.id).join(','));
+        BOTA.input.moveVector = origMove;
+        BOTA.input.shootDir = origShootDir;
+      }
+
+      // 4) Treffer fuellen schneller: Treffer alle 0.5 s (winziger Schaden) -> deutlich frueher voll
+      clearRoom();
+      p.x = 760; p.y = 420;
+      const O3 = BOTA.debug.spawn('overflow_buffer', 300, 260);
+      O3.spawnDelay = 0;
+      O3.state.fill = 0.3;
+      const f0 = O3.state.fill;
+      O3.hurt(0.01, g, {});
+      if (Math.abs(O3.state.fill - f0 - O3.params.hitFill) > 1e-9) out.push('Overflow Buffer: Treffer hebt den Pegel nicht um hitFill');
+      O3.state.fill = 0;
+      let tHit = -1, n = 0;
+      stepAll(60 * 12, (i) => {
+        n++;
+        if (i % 30 === 29 && O3.state.mode === 'fill') O3.hurt(0.01, g, {});
+        if (O3.state.mode === 'warn') { tHit = n * DT; return false; }
+      });
+      if (!(tHit > 0 && tHit < tFull - 1)) out.push('Overflow Buffer: mit Treffern voll nach ' + tHit.toFixed(2) + ' s (ohne: ' + tFull.toFixed(2) + ' s)');
+      // Treffer im Telegraph heben nichts und loesen nichts frueher aus
+      const t3 = O3.state.t;
+      O3.hurt(0.01, g, {});
+      if (O3.state.mode !== 'warn' || O3.state.t !== t3) out.push('Overflow Buffer: Treffer im Telegraph veraendert den Ablauf');
+
+      // 5) killAll mitten im Ablauf (Tank + frische Pfuetze) laesst nichts zurueck
+      stepAll(60);
+      if (!g.room.enemies.some((en) => en.id === 'overflow_puddle')) out.push('Overflow Buffer: keine Pfuetze fuer den killAll-Test');
+      BOTA.debug.killAll();
+      g.room.enemies = g.room.enemies.filter((en) => !en.dead);
+      if (g.room.enemies.length) out.push('Overflow Buffer: killAll laesst ' + g.room.enemies.map((en) => en.id).join(',') + ' zurueck');
+      g.room.projectiles.length = 0;
+    } finally {
+      BOTA.input.moveVector = origMove;
+      BOTA.input.shootDir = origShootDir;
+      p.flying = flying0;
+      p.slowNext = 1;
+      for (const off of offs) off();
+      g.enterFloor(d0); g.setState('play');
+    }
+    return out;
+  });
+  problems.push(...overflowProblems);
   // ---- Ende Slot 1 ----
 
   // ---- Context-Familie: Slot 2 (Summarizer) ----

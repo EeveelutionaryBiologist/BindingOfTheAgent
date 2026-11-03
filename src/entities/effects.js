@@ -693,6 +693,15 @@
     FX.later(e.game, 0.16, (g) => FX.tint(g, '200,215,255', 0.06, 0.5));
   });
 
+  // Overflow Buffer (Context-Familie): der Tank platzt — Wasserschwall, Glassplitter, Ring bis zum Pfuetzenrand
+  on('enemyOverflow', (e) => {
+    const g = e.game, col = e.color || '#9ec5ff';
+    FX.flash(g, e.x, e.y, 30, '#e6f0ff', 0.08);
+    FX.ring(g, e.x, e.y, (e.r || 80) * 0.9, col, 0.4, 4);
+    FX.burst(g, e.x, e.y, col, 16, 260, { vary: true, lifeMin: 0.2, lifeMax: 0.45, drag: 4 });
+    FX.burst(g, e.x, e.y, '#ffffff', 4, 300, { streak: true, lifeMin: 0.08, lifeMax: 0.16, sizeMin: 3, sizeMax: 4 });
+    FX.debris(g, e.x, e.y, 7, ['#b9cde6', '#eef4ff', '#6f86a6'], 4);
+  });
   // Megalith: Suchtreffer ersetzt (gelber Blitz), Modul wieder eingemergt ("+1 import")
   on('bossReplace', (e) => {
     FX.ring(e.game, e.x, e.y, 54, e.color || '#ffe14d', 0.3, 4);

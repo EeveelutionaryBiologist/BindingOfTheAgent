@@ -429,6 +429,17 @@
   });
   Object.assign(RATE, { whisper: 1, thunder: 5 });
 
+  // Overflow Buffer (Context-Familie): Glas springt (heller Knack) und ein Schwall Wasser klatscht auf den Boden
+  Object.assign(SOUNDS, {
+    overflowBurst() {
+      noise({ dur: 0.07, vol: 0.08, filter: 'highpass', f: 3200 });
+      voice({ f: 2600, f2: 1800, dur: 0.05, type: 'triangle', vol: 0.04 });
+      noise({ dur: 0.45, vol: 0.09, filter: 'lowpass', f: 1600, f2: 250, delay: 0.03 });
+      for (let i = 0; i < 4; i++) voice({ f: rnd(700, 1300), f2: rnd(300, 500), dur: 0.06, type: 'sine', vol: 0.04, delay: 0.12 + i * 0.07 });
+    },
+  });
+  Object.assign(RATE, { overflowBurst: 0.08 });
+
   // Context-Familie (2026-11-03): Tropfen (Treffer), nasses Papier faellt in sich zusammen (Tod), Gurgeln (Warnton)
   Object.assign(SOUNDS, {
     dripHit() {
@@ -762,6 +773,7 @@
   on('enemyRevive', () => p('charged'));
   on('hudGlitch', () => p('glitch'));
   on('bossBeam', () => p('beam'));            // Reviewer-Laser, Shareholder-Monokel
+  on('enemyOverflow', () => p('overflowBurst'));   // Overflow Buffer platzt
   on('ambientWhisper', () => p('whisper'));    // The Context Limit: Satzfetzen huscht vorbei
   on('ambientThunder', () => p('thunder'));    // ... und fernes Wetterleuchten
   on('bossSearch', () => p('search'));         // Megalith: Ctrl+F
