@@ -485,6 +485,24 @@
     },
   };
 
+  // Legacy Codebase (Stack Trace): alter Staub statt Funken, beim Tod flattert Endlospapier davon.
+  // Eigener Block (nachtraeglich eingetragen), damit parallele Familien-Erweiterungen sich nicht in die Quere kommen.
+  const LEGACY_PAPER = ['#eef0e2', '#a6cf98', '#d8dccb'];
+  FAMILY_FX.legacy = {
+    hit(e) {
+      FX.burst(e.game, e.x, e.y, '#ffffff', 2, 240, { streak: true, lifeMin: 0.08, lifeMax: 0.16, sizeMin: 3, sizeMax: 4 });
+      FX.burst(e.game, e.x, e.y, '#9aa6ab', 3, 120, { vary: true, lifeMin: 0.2, lifeMax: 0.4, sizeMin: 3, sizeMax: 5 });
+      FX.burst(e.game, e.x, e.y, e.color || '#cfc4a0', 2, 160, { vary: true, lifeMin: 0.12, lifeMax: 0.25, sizeMin: 3, sizeMax: 4 });
+    },
+    death(e) {
+      FX.flash(e.game, e.x, e.y, 20, '#fff4d0', 0.08);
+      FX.leaves(e.game, e.x, e.y - 10, 8, LEGACY_PAPER, { speedMin: 60, speedMax: 200, lifeMin: 1.0, lifeMax: 1.6, sizeMin: 5, sizeMax: 7 });
+      FX.debris(e.game, e.x, e.y, 6, ['#d8cda8', '#a99d78', '#14181a'], 4);
+      FX.ring(e.game, e.x, e.y, 40, '#7fb0c9', 0.3, 4);
+      FX.smoke(e.game, e.x, e.y, 3, 12, '#6c767a');
+    },
+  };
+
   // Rootkit taucht auf (Sandfontaene + Ring) oder ab (Staubwolke)
   on('enemyBurrow', (e) => {
     if (e.up) {

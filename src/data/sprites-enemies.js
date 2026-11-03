@@ -1356,6 +1356,98 @@
   });
 
   // ===========================================================================
+  // Legacy Codebase: Stack Trace
+  // ===========================================================================
+  // Ein Skorpion aus einem alten Rechnergehaeuse (Neunziger-Beige, Lueftungsfugen, bernsteinfarbene Monochrom-
+  // Augen in einem dunklen Sichtfenster), Blick nach unten, Scheren vorn. Den Schwanz zeichnet das Verhalten aus
+  // einzelnen Blaettern Endlospapier (Lochrand + gruene Balken) und dem Stachel (entities/enemy.js 'stack_trace').
+  // Auf dem dunklen Blaugrau der Legacy-Etage muss er hell sein, mit kraeftiger dunkler Kontur.
+  // Zeichen: k Kontur, b Beige, l Lichtkante, s Schatten-Beige, d Fuge/Sichtfenster, e/E Auge (Bernstein/hell),
+  // c Schere, C Scheren-Licht
+  const ST_PAL = { k: '#14181a', b: '#d8cda8', l: '#f1e9cf', s: '#a99d78', d: '#4a4a40', e: '#ffb347', E: '#fff0b8',
+    c: '#bfb28c', C: '#e9dfbf' };
+  // Halbe Zeilen, gespiegelt mit sym() (18 px breit). Frame 1: Beine eine Zeile versetzt (Krabbeln), Scheren zu.
+  const ST_BODY = sym([
+    '.........',
+    '......kkk',
+    '....kklll',
+    'k..kllbbb',
+    '.k.kbbbdb',
+    '..kkbbbbb',
+    'k..kbbbdb',
+    '.kkksbbbb',
+    'k..ksdddd',
+    '.kkkddeEd',
+    '...ksdddd',
+    '..kksbbbb',
+    '.kckkssbb',
+    'kcck.kkkk',
+    'kCcck....',
+    'kc.kk....',
+    'kcck.....',
+    '.kk......',
+  ]);
+  const ST_BODY_B = sym([
+    '.........',
+    '......kkk',
+    '....kklll',
+    '...kllbbb',
+    'kk.kbbbdb',
+    '..kkbbbbb',
+    '...kbbbdb',
+    'kkkksbbbb',
+    '...ksdddd',
+    'kkkkddeEd',
+    '...ksdddd',
+    '..kksbbbb',
+    '..kckssbb',
+    '.kcck.kkk',
+    '.kCcck...',
+    '.kc.kk...',
+    '.kcck....',
+    '..kk.....',
+  ]);
+  B.defineSprite('enemy_stack_trace', { palette: ST_PAL, scale: 4, frames: [ST_BODY, ST_BODY_B] });
+
+  // Ein Blatt Endlospapier (ein Stack-Frame), Laengsrichtung = x (so dreht es das Verhalten entlang des Schwanzes):
+  // Lochrand oben und unten, gruene Balken quer dazu. Frame 1 = vom Trace-Puls markiert
+  // (Bernstein statt Gruen) — so laeuft der Telegraph sichtbar den Stapel hinauf.
+  // Zeichen: k Kontur, m Rand, h Loch, w Papier, g Balken; a/y = markierte Varianten von g/w
+  const ST_FRAME_PAL = { k: '#14181a', m: '#d8dccb', h: '#5d666a', w: '#eef0e2', g: '#a6cf98',
+    a: '#ffb347', y: '#ffe3a8' };
+  const ST_FRAME = [
+    'kkkkkkkkk',
+    'khmhmhmhk',
+    'kwggwggwk',
+    'kwggwggwk',
+    'kwggwggwk',
+    'khmhmhmhk',
+    'kkkkkkkkk',
+  ];
+  B.defineSprite('enemy_stack_trace_frame', {
+    palette: ST_FRAME_PAL, scale: 4,
+    frames: [ST_FRAME, ST_FRAME.map((r) => r.replace(/g/g, 'a').replace(/w/g, 'y'))],
+  });
+
+  // Stachel: Giftblase links (dort haengt das letzte Blatt), gebogene Spitze rechts (das Verhalten dreht ihn).
+  // Frame 1 = scharf (Blase gluehend rot, Spitze bernsteinfarben) waehrend Einrasten und Stich.
+  // Zeichen: k Kontur, b Blase, B Glanz, r Spitze; Frame 1: r Blase gluehend, y Glanz, a Spitze
+  const ST_STING_PAL = { k: '#14181a', b: '#8c2a2a', B: '#e07a6a', r: '#d64545', y: '#ffd9b0', a: '#ffb347' };
+  const ST_STING = [
+    '..kkkk....',
+    '.kbBbbk...',
+    'kbBbbbbkk.',
+    'kbbbbbbrrk',
+    '.kbbbkkkrk',
+    '..kkk..krk',
+    '.......kk.',
+  ];
+  B.defineSprite('enemy_stack_trace_stinger', {
+    palette: ST_STING_PAL, scale: 4,
+    frames: [ST_STING, ST_STING.map((r) => r.replace(/r/g, 'a').replace(/b/g, 'r').replace(/B/g, 'y'))],
+  });
+
+  // ===========================================================================
   // The Nested Infinite Loop (Boss ab Etage 8)
   // ===========================================================================
   // Die drei Ringe nutzen Kopf und Glied der Infinite Loop in drei Farben: aussen Tuerkis (wie das Original),

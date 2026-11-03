@@ -293,6 +293,31 @@
     floorEnter() { arp([60, 67, 72], 0.1, 'square', 0.05, 0.2); voice({ f: mtof(79), dur: 0.6, type: 'triangle', vol: 0.08, delay: 0.3 }); },
   };
 
+  // --- Legacy Codebase (Stack Trace, Familie 'legacy'): Alt-Hardware statt Holz oder Sand ---
+  // Eigener Block, damit parallele Erweiterungen von SOUNDS/RATE nicht in denselben Zeilen landen.
+  Object.assign(SOUNDS, {
+    // Treffer: hohles Plastik-"Klack" eines alten Gehaeuses
+    legacyHit() {
+      voice({ f: 620 * rnd(0.92, 1.08), f2: 340, dur: 0.035, type: 'square', vol: 0.045 });
+      noise({ dur: 0.05, vol: 0.06, filter: 'bandpass', f: 2600, q: 2 });
+    },
+    // Tod: Papier reisst (Rauschen faellt), dazu ein absteigendes Nadeldrucker-Stottern
+    legacyDeath() {
+      noise({ dur: 0.3, vol: 0.09, filter: 'bandpass', f: 3400, f2: 900, q: 1 });
+      for (let i = 0; i < 4; i++) voice({ f: 900 - i * 140, dur: 0.03, type: 'square', vol: 0.04, delay: 0.04 + i * 0.05 });
+      voice({ f: 150, f2: 70, dur: 0.12, type: 'triangle', vol: 0.09, delay: 0.02 });
+    },
+    // Warnton (Trace): Nadeldrucker rattert eine Zeile — schnelle, leicht schwankende Klicks
+    dotMatrix() {
+      for (let i = 0; i < 12; i++) {
+        voice({ f: 1300 + (i % 3) * 170, dur: 0.018, type: 'square', vol: 0.03, delay: i * 0.045 });
+        noise({ dur: 0.02, vol: 0.03, filter: 'bandpass', f: 4200, q: 3, delay: i * 0.045 });
+      }
+    },
+  });
+  Object.assign(RATE, { legacyHit: 0.04, legacyDeath: 0.03, dotMatrix: 0.3 });
+  SPAMMY.legacyHit = true;
+
   // ===========================================================================
   // Prozedurale Chiptune-Schleife (eine pro Etage, deterministisch aus der Tiefe)
   // ===========================================================================
@@ -504,6 +529,8 @@
     branches: { hit: 'leafHit', death: 'branchDeath', windup: 'creak' },
     sandbox: { hit: 'sandHit', death: 'sandDeath' },
   };
+  // Legacy Codebase (Stack Trace): Plastik-Klack, reissendes Papier, Nadeldrucker als Warnton (eigener Block)
+  FAMILY_SOUNDS.legacy = { hit: 'legacyHit', death: 'legacyDeath', windup: 'dotMatrix' };
   const famSound = (e, kind) => {
     const fam = e && e.enemy && e.enemy.def && FAMILY_SOUNDS[e.enemy.def.family];
     return (fam && fam[kind]) || null;

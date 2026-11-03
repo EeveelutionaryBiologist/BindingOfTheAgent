@@ -418,6 +418,43 @@
     desc: 'Rehearses every move in front of you. No changes were made. Yet.',
   };
 
+  // --- Legacy Codebase: Stack Trace ---
+  // Ein beiger Alt-Rechner-Skorpion (Gehaeuse-Beige der Neunziger, bernsteinfarbene Monochrom-Augen). Sein Schwanz
+  // ist ein Stapel Endlospapier (Leporello mit Lochrand und gruenen Balken): jedes Blatt ist ein Stack-Frame, ganz
+  // oben sitzt der rote Stachel. In Ruhe liegt der Stapel zusammengefaltet auf seinem Ruecken.
+  // Angriff ("Trace"): bleibt stehen, eine gestrichelte Ziellinie folgt dem Spieler (track), rastet ein (lock, "!",
+  // Linie wird hell) — dabei laeuft ein bernsteinfarbener Puls Blatt fuer Blatt den Stapel hinauf. Dann faltet sich
+  // das Papier blitzschnell entlang der Linie auseinander: der Stachel sticht (volles Herz), das ausgerollte Papier
+  // brennt bei Beruehrung (halbes Herz), Waende/Felsen stoppen es. Steht der Spieler beim Einrasten weiter weg als
+  // die Reichweite, wirft der Stachel am Ende eine "uncaught exception" weiter (ein Schuss entlang derselben Linie).
+  // Danach liegt der Schwanz kurz am Boden (hold) und faltet sich wieder ein (harmlos).
+  // Stack-Abbau: bei 2/3 und 1/3 der HP fliegt das oberste Blatt weg (5 -> 4 -> 3 Frames), die Reichweite sinkt.
+  // Stirbt er, verpuffen seine noch fliegenden Exceptions (der Stack ist abgewickelt). Kein Gegner-Gefolge,
+  // der Schwanz ist reine Zeichnung (keine eigenen Entities). Verhalten 'stack_trace' in entities/enemy.js.
+  // family: 'legacy' = rein optisch/akustisch (Staub- und Papier-Effekte, Nadeldrucker-Rattern als Warnton).
+  E.stack_trace = {
+    name: 'Stack Trace', hp: 14, r: 17, speed: 95, contactDamage: 1,
+    behavior: 'stack_trace', params: {
+      frames: 5, minFrames: 3,  // Blaetter (Stack-Frames) bei vollen HP / Untergrenze nach dem Abbau
+      spacing: 30,              // Abstand der Blaetter im ausgerollten Schwanz (px); Reichweite = r + 4 + frames * spacing
+      near: 110, far: 230,      // Wunschabstand zum Spieler (px)
+      range: 380,               // greift nur an, wenn der Spieler naeher und in Sichtlinie ist
+      track: 0.5,               // Ziellinie folgt dem Spieler (s) ...
+      lock: 0.35,               // ... dann steht sie fest (s); Telegraph gesamt 0.85 s
+      extendSpeed: 760,         // Ausrollen des Schwanzes (px/s)
+      hold: 0.4,                // Schwanz bleibt ausgerollt liegen (s)
+      retract: 0.45,            // Einfalten (s, harmlos)
+      stingDamage: 2,           // Stachel: volles Herz (lang angekuendigt); ausgerolltes Papier: contactDamage
+      shotSpeed: 200,           // "uncaught exception" ueber die Reichweite hinaus (px/s, skaliert sanft mit der Tiefe)
+      cdMin: 1.7, cdMax: 2.5,   // Pause zwischen zwei Angriffen (game.rng, AI.cooldown)
+      scuttle: 0.45, pause: 0.25, // Krabbeln in Schueben: so lange laufen / so lange stehen
+    },
+    sprite: 'enemy_stack_trace', color: '#cfc4a0', noFlip: true,
+    minFloor: 2, weight: 6, cost: 1.8, maxPerRoom: 2, tags: ['ranged', 'melee'],
+    themeOnly: ['legacy'], family: 'legacy',
+    desc: 'Traceback (most recent call last): you.',
+  };
+
   // ---------------------------------------------------------------------------
   // Minions (spawn: false) — entstehen nur durch andere Gegner oder Bosse
   // ---------------------------------------------------------------------------

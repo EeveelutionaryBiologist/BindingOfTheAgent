@@ -85,6 +85,16 @@ These only appear on The Training Data floors.
 |---|---|---|---|---|---|
 | ![Dry Run](images/enemy_dry_run.png) | **Dry Run** `dry_run` | 7 (The Training Data only) | 14 | A crash-test dummy that rehearses everything first: a translucent white ghost labelled "--dry-run" walks, winds up and attacks, and exactly 1 s later the real dummy does the same thing on the same path, with the same aim and the same timing (a dotted line shows the path it is about to walk). Attacks: a dash in a straight line (full heart) or a sweep of 5 shots across a fan. Each attack starts with a 0.5 s windup (dashed line or rays), which the real one repeats. The ghost can't hurt you and can't be hit, and its shots are hollow rings. Watch the ghost and you know exactly where to stand. Max 2 per room | Rehearses every move in front of you. No changes were made. Yet. |
 
+### Legacy Codebase family
+
+These only appear on Legacy Codebase floors (floor 2, 13, 24, …). Old beige hardware with amber monochrome eyes,
+so they stand out on the dusty blue-grey stone. Hits puff up dust and click like old plastic; the warning sound is a
+dot-matrix printer.
+
+| | Name | First floor | HP | Behaviour | Flavour text |
+|---|---|---|---|---|---|
+| ![Stack Trace](images/enemy_stack_trace.png) | **Stack Trace** `stack_trace` | 2 (Legacy Codebase only) | 14 | A scorpion built from an old beige computer case. Its tail is a strip of fan-fold printer paper, one sheet per stack frame, with a red stinger on top. It scuttles sideways in short bursts and keeps 110–230 px away. **Trace:** it stops, a dashed amber line follows you for 0.5 s, then locks in (brighter, "!") for 0.35 s while an amber pulse runs up the tail sheet by sheet. Then the paper unfolds along the line in a flash: the stinger hits for a full heart, the unrolled paper for half a heart while it lies there; folding back up is harmless. Walls and rocks stop the tail (it reaches over pits). If you stood beyond its reach when the line locked, the stinger also throws an **uncaught exception**, a single shot that flies on along the dotted part of the line. The stack unwinds as it takes damage: at 2/3 and 1/3 HP the top sheet flies off ("pop()"), so the tail and its reach shrink from 5 sheets to 4 and then 3. When it dies, its exceptions still in flight vanish. Max 2 per room | Traceback (most recent call last): you. |
+
 ### Minions
 
 These are only spawned by other enemies or bosses.

@@ -2991,6 +2991,298 @@
     },
   };
 
+  // ===========================================================================
+  // Legacy Codebase: Stack Trace ('stack_trace')
+  // ===========================================================================
+  //
+  // Ein Skorpion mit einem Schwanz aus Endlospapier: jedes Blatt ist ein Stack-Frame (state.n Stueck), oben der
+  // Stachel. Der Schwanz ist KEINE eigene Entity — das Verhalten berechnet die Blatt-Positionen (stLayout), zeichnet
+  // sie und prueft den Kontakt mit dem Spieler selbst. So bleibt beim Tod nichts zurueck und killAll braucht nichts
+  // Besonderes. Nur der Koerper ist trefferbar (normale HP), der Schwanz laesst Schuesse durch.
+  //
+  // Zustaende (state.mode):
+  //   move     krabbelt in Schueben (scuttle/pause): zu weit weg -> per Flow-Field heran, zu nah -> zurueck,
+  //            sonst seitwaerts (Richtung wechselt bei Wandkontakt). Abklingzeit cd laeuft.
+  //   trace    Telegraph (track + lock Sekunden): steht still, gestrichelte Ziellinie + Zielring am Ende der
+  //            Reichweite; die Linie folgt dem Spieler track Sekunden lang, dann rastet sie ein ("!", hell, dick).
+  //            Ein bernsteinfarbener Puls laeuft Blatt fuer Blatt den Stapel hinauf. 'enemyWindup' beim Start
+  //            (Familien-Warnton: Nadeldrucker).
+  //   sting    der Schwanz faltet sich entlang der festen Richtung aus (extendSpeed); Waende/Felsen begrenzen ihn
+  //            (Schuss-Kollision, Gruben nicht). Stachel = stingDamage, Papier = contactDamage.
+  //            Am Ende: stand der Spieler beim Einrasten jenseits der Reichweite und war der Weg frei, fliegt eine
+  //            "uncaught exception" (ein Schuss) entlang derselben Linie weiter.
+  //   hold     Schwanz liegt ausgerollt (weiterhin Kontaktschaden)
+  //   retract  faltet sich wieder ein (harmlos), dann neue Abklingzeit
+  // Stack-Abbau: bei <= 2/3 und <= 1/3 HP verliert er je ein Blatt (5 -> 4 -> 3), 'enemyShed' mit Papierfarben.
+  // Tod: noch fliegende Exceptions verpuffen (projectile.die), Papier flattert ('enemyShed').
+
+  const ST_SHOT = { color: '#ff7a45', r: 8, range: 560 };             // Orange-Rot: liest auf Stein UND auf Sand
+  const ST_PAPER = ['#eef0e2', '#a6cf98', '#d8dccb'];                  // Papierschnipsel (Endlospapier)
+  const ST_TRACE = '#ffb347';                                          // Bernstein: Ziellinie, Puls, Augen
+  // Spruch beim Treffer (der Reihe nach, kein RNG noetig): klassische Stack-Trace-Zeilen
+  const ST_QUIPS = ['at line 2009', 'caused by: you', '... 47 more', 'at legacy.main()'];
+
+  /** Anzahl Blaetter fuer die aktuellen HP: 5 bei vollen HP, je eins weniger ab 2/3 und 1/3 */
+  function stFramesFor(e) {
+    const P = e.params, span = P.frames - P.minFrames;
+    const ratio = B.M.clamp(e.hp / e.maxHp, 0, 1);
+    return P.frames - Math.min(span, Math.floor((1 - ratio) * (span + 1) + 1e-9));
+  }
+
+  /** Reichweite des Stachels ab Koerpermitte bei n Blaettern */
+  function stReach(e, n) { return e.r + 4 + n * e.params.spacing; }
+
+  /** Freie Strecke (px) ab (x, y) in Richtung dir bis maxLen — Schuss-Kollision (Waende, Felsen, Tueren; Gruben frei) */
+  function stFreeLen(room, x, y, dir, maxLen) {
+    const c = Math.cos(dir), s = Math.sin(dir);
+    for (let d = 6; d <= maxLen; d += 6) {
+      if (room.isSolidAt(x + c * d, y + s * d, 'shot', false)) return d - 6;
+    }
+    return maxLen;
+  }
+
+  /**
+   * Positionen und Drehwinkel der Blaetter (0..n-1) und des Stachels (Index n) in state.pts ({ x, y, a }).
+   * ext = 0: eingerollt — der Schwanz steigt hinter dem Ruecken auf und kruemmt sich wie ein "?" nach vorn
+   * (Kreisbogen um einen Punkt ueber dem Koerper, Seite state.curl); pro Blatt ein Achtelkreis, weniger Blaetter
+   * ergeben also einen sichtbar kuerzeren Schwanz (= kuerzere Reichweite). ext > 0: entlang state.dir ausgerollt
+   * (ext = Anteil der vollen Reichweite). Der Uebergang mischt beide Lagen (Position und Winkel), damit das Auf- und
+   * Zufalten fluessig aussieht.
+   */
+  function stLayout(e) {
+    const s = e.state, P = e.params, n = s.n, curl = s.curl || 1;
+    if (!s.pts) s.pts = [];
+    const dir = s.dir || 0, c = Math.cos(dir), sn = Math.sin(dir);
+    const u = B.M.clamp((s.ext || 0) * 4, 0, 1);   // 0 = eingerollt, 1 = ganz in der Linie
+    const reach = stReach(e, n);
+    const R = 22, cy = e.y - 50;                    // Bogen ueber dem Ruecken
+    for (let i = 0; i <= n; i++) {
+      const phi = Math.PI / 2 - i * (Math.PI / 4);
+      const px = e.x + curl * R * Math.cos(phi), py = cy + R * Math.sin(phi);
+      const pa = Math.atan2(-Math.cos(phi), curl * Math.sin(phi));          // Tangente in Laufrichtung des Schwanzes
+      // Linie: Blatt i im Abstand r + 8 + i * spacing, der Stachel am Ende der Reichweite
+      const dist = (i === n ? reach : e.r + 8 + i * P.spacing) * (s.ext || 0);
+      const lx = e.x + c * dist, ly = e.y + sn * dist;
+      const pt = s.pts[i] || (s.pts[i] = { x: 0, y: 0, a: 0 });
+      pt.x = px + (lx - px) * u;
+      pt.y = py + (ly - py) * u;
+      pt.a = pa + B.M.angleDiff(pa, dir) * u;
+    }
+    s.pts.length = n + 1;
+    return s.pts;
+  }
+
+  /** Kontakt Schwanz <-> Spieler (nur sting/hold): Stachel = stingDamage, Papier ausserhalb des Koerpers = contactDamage */
+  function stTouch(e, game) {
+    const p = game.player, s = e.state, P = e.params;
+    if (!p || p.dead) return;
+    const pts = stLayout(e), pr = p.r * 0.8;
+    let dmg = 0;
+    const tip = pts[s.n];
+    if (Math.hypot(tip.x - p.x, tip.y - p.y) < 13 + pr) dmg = P.stingDamage;
+    else {
+      for (let i = 0; i < s.n; i++) {
+        const q = pts[i];
+        if (Math.hypot(q.x - e.x, q.y - e.y) < e.r) continue;          // steckt noch im Koerper
+        if (Math.hypot(q.x - p.x, q.y - p.y) < 12 + pr) { dmg = e.def.contactDamage; break; }
+      }
+    }
+    if (dmg && p.hurt(dmg, e.def.name, game)) {
+      p.knockback(Math.cos(s.dir), Math.sin(s.dir), 340);
+      AI.say(e, ST_QUIPS[(s.quip = (s.quip || 0) + 1) % ST_QUIPS.length], 1.3, ST_TRACE);
+    }
+  }
+
+  B.BEHAVIORS.stack_trace = {
+    init(e, game) {
+      const s = e.state, P = e.params;
+      s.mode = 'move';
+      s.n = P.frames;
+      s.ext = 0;
+      s.dir = Math.PI / 2;
+      s.t = 0;
+      s.cd = game && game.rng ? game.rng.float(1.0, 1.8) : 1.4;   // erster Angriff nicht sofort nach dem Spawn
+      s.side = game && game.rng && game.rng.chance(0.5) ? -1 : 1;
+      s.curl = s.side;   // Kruemmung des eingerollten Schwanzes (nur Optik, bleibt fest)
+      s.going = true;
+      s.walk = P.scuttle;
+      s.bolts = [];
+      s.quip = -1;
+      e.sayOffset = 44;   // Sprueche ueber dem eingerollten Schwanz anzeigen, nicht darin
+    },
+
+    update(e, dt, game) {
+      const s = e.state, P = e.params, p = game.player, room = game.room;
+      // Stack-Abbau: Blaetter gehen verloren, wenn die HP Schwellen unterschreiten
+      const want = stFramesFor(e);
+      if (want < s.n) {
+        const top = stLayout(e)[s.n - 1];
+        s.n = want;
+        B.bus.emit('enemyShed', { game, enemy: e, x: top.x, y: top.y, colors: ST_PAPER, count: 5, big: true });
+        AI.say(e, 'pop()', 0.9, '#7fb0c9');
+      }
+      if (s.bolts.length) s.bolts = s.bolts.filter((b) => !b.dead);
+      const dx = p.x - e.x, dy = p.y - e.y, d = Math.hypot(dx, dy) || 1;
+      switch (s.mode) {
+        case 'move': {
+          s.cd -= dt;
+          s.walk -= dt;
+          if (s.walk <= 0) { s.going = !s.going; s.walk = s.going ? P.scuttle : P.pause; }
+          if (s.bumped) { s.side = -s.side; s.bumped = false; }
+          if (!s.going) AI.stop(e);
+          else if (d > P.far) AI.pathToward(e, game, p.x, p.y, e.speed);
+          else {
+            // seitwaerts krabbeln, zu nah: schraeg zurueck
+            const back = d < P.near ? -1 : 0;
+            const vx = -dy / d * s.side + dx / d * back, vy = dx / d * s.side + dy / d * back;
+            const m = Math.hypot(vx, vy) || 1;
+            e.vx = vx / m * e.speed * 0.8;
+            e.vy = vy / m * e.speed * 0.8;
+          }
+          if (s.cd <= 0 && d < P.range && room.lineOfSight(e.x, e.y, p.x, p.y)) {
+            AI.stop(e);
+            s.mode = 'trace';
+            s.t = 0;
+            s.dir = Math.atan2(dy, dx);
+            s.aimDist = d;
+            B.bus.emit('enemyWindup', { game, enemy: e, x: e.x, y: e.y });
+          }
+          break;
+        }
+        case 'trace':
+          AI.stop(e);
+          s.t += dt;
+          if (s.t < P.track) { s.dir = Math.atan2(dy, dx); s.aimDist = d; }   // Linie folgt noch dem Spieler
+          if (s.t >= P.track + P.lock) {
+            const reach = stReach(e, s.n);
+            const free = stFreeLen(room, e.x, e.y, s.dir, reach);
+            s.extMax = B.M.clamp(free / reach, 0.1, 1);   // Fels direkt davor: Schwanz zuckt nur kurz an
+            s.throws = free >= reach && s.aimDist > reach + 20;   // nur ueber die volle Reichweite hinaus
+            s.mode = 'sting';
+            s.ext = 0;
+          }
+          break;
+        case 'sting':
+          AI.stop(e);
+          s.ext = Math.min(s.extMax, s.ext + (P.extendSpeed / stReach(e, s.n)) * dt);
+          stTouch(e, game);
+          if (s.ext >= s.extMax) {
+            s.mode = 'hold';
+            s.t = P.hold;
+            game.shake(2, 0.08);
+            if (s.throws) {
+              const tip = stLayout(e)[s.n];
+              const b = AI.shoot(game, e, s.dir, AI.shotSpeed(game, P.shotSpeed), Object.assign({ x: tip.x, y: tip.y }, ST_SHOT));
+              if (b) s.bolts.push(b);
+            }
+          }
+          break;
+        case 'hold':
+          AI.stop(e);
+          stTouch(e, game);
+          s.t -= dt;
+          if (s.t <= 0) { s.mode = 'retract'; s.t = P.retract; s.ext0 = s.ext; }
+          break;
+        case 'retract':
+          AI.stop(e);
+          s.t -= dt;
+          s.ext = s.ext0 * Math.max(0, s.t / P.retract);
+          if (s.t <= 0) {
+            s.ext = 0;
+            s.mode = 'move';
+            s.cd = AI.cooldown(game, game.rng.float(P.cdMin, P.cdMax));
+            s.going = true;
+            s.walk = P.scuttle;
+          }
+          break;
+      }
+    },
+
+    onDeath(e, game) {
+      // Stack abgewickelt: eigene Exceptions in der Luft verpuffen, das Papier flattert davon
+      for (const b of e.state.bolts) if (!b.dead) b.die(game, false);
+      e.state.bolts.length = 0;
+      B.bus.emit('enemyShed', { game, enemy: e, x: e.x, y: e.y - 12, colors: ST_PAPER, count: 4 + e.state.n * 2, big: true });
+    },
+
+    draw(e, ctx, game) {
+      const s = e.state, P = e.params, n = s.n;
+      const tele = P.track + P.lock;   // Telegraph-Dauer gesamt
+      // --- Telegraph (unter dem Koerper): Ziellinie, Zielring, Gluehen ---
+      if (s.mode === 'trace' && game && game.room) {
+        const k = B.M.clamp(s.t / tele, 0, 1), locked = s.t >= P.track;
+        const reach = stReach(e, n);
+        const free = stFreeLen(game.room, e.x, e.y, s.dir, reach);
+        const c = Math.cos(s.dir), sn = Math.sin(s.dir);
+        AI.drawGlow(ctx, e.x, e.y, e.r + 8, k, ST_TRACE);
+        ctx.save();
+        ctx.strokeStyle = ST_TRACE;
+        ctx.lineCap = 'round';
+        ctx.globalAlpha = locked ? 0.95 : 0.35 + 0.4 * k;
+        ctx.lineWidth = locked ? 4 : 2;
+        ctx.setLineDash(locked ? [12, 5] : [6, 8]);
+        ctx.beginPath();
+        ctx.moveTo(e.x + c * e.r, e.y + sn * e.r);
+        ctx.lineTo(e.x + c * free, e.y + sn * free);
+        ctx.stroke();
+        // Fortsetzung: dorthin fliegt die "uncaught exception", falls der Spieler ausser Reichweite steht
+        if (free >= reach && s.aimDist > reach + 20) {
+          const far = stFreeLen(game.room, e.x, e.y, s.dir, reach + 220);
+          ctx.globalAlpha *= 0.7;
+          ctx.lineWidth = 2;
+          ctx.setLineDash([2, 7]);
+          ctx.beginPath();
+          ctx.moveTo(e.x + c * reach, e.y + sn * reach);
+          ctx.lineTo(e.x + c * far, e.y + sn * far);
+          ctx.stroke();
+        }
+        ctx.restore();
+        AI.drawTargetRing(ctx, e.x + c * free, e.y + sn * free + 6, 18, k, '#ff7a45');
+      }
+      // --- Schwanz: Papierstreifen-Schatten, Blaetter, Stachel ---
+      // Zusammengefaltet steht der Stapel HINTER dem Koerper (vorher zeichnen), ausgerollt liegt er darueber.
+      const pts = stLayout(e);
+      const out = (s.ext || 0) > 0.02;
+      const appear = e.spawnDelay > 0 ? 0.3 + 0.7 * (1 - e.spawnDelay / 0.5) : 1;
+      const alpha = e.alpha * appear;
+      const moving = Math.hypot(e.vx, e.vy) > 5;
+      const drawTorso = () => AI.drawBody(e, ctx, { frame: moving ? Math.floor(e.t * 10) % 2 : 0 });
+      if (out) drawTorso();
+      if (out) {
+        ctx.save();
+        ctx.globalAlpha = 0.22 * alpha;
+        ctx.strokeStyle = '#000';
+        ctx.lineWidth = 18;
+        ctx.lineCap = 'round';
+        ctx.beginPath();
+        ctx.moveTo(e.x, e.y + 10);
+        ctx.lineTo(pts[n].x, pts[n].y + 10);
+        ctx.stroke();
+        ctx.restore();
+      }
+      const pulse = s.mode === 'trace' ? B.M.clamp(s.t / tele, 0, 1) * (n + 1) : -1;
+      const hot = s.mode === 'sting' || s.mode === 'hold';
+      for (let i = 0; i < n; i++) {
+        B.drawSprite(ctx, 'enemy_stack_trace_frame', pts[i].x, pts[i].y, {
+          frame: (pulse > i || hot) ? 1 : 0,
+          rotation: pts[i].a,
+          flash: e.flash > 0,
+          alpha,
+        });
+      }
+      const armed = (s.mode === 'trace' && s.t >= P.track) || hot;
+      B.drawSprite(ctx, 'enemy_stack_trace_stinger', pts[n].x, pts[n].y, {
+        frame: armed ? 1 : 0,
+        rotation: pts[n].a + (out ? 0 : Math.sin(e.t * 3) * 0.15),   // eingerollt wippt der Stachel leicht
+        flash: e.flash > 0,
+        alpha,
+      });
+      if (!out) drawTorso();
+      if (s.mode === 'trace' && s.t >= P.track) AI.drawMark(ctx, '!', e.x, pts[n].y - 16, e.t, '#ff4d4d', 22);
+      AI.drawSay(e, ctx);
+    },
+  };
+
   B.AI = AI;
   B.Enemy = Enemy;
 })(window.BOTA);
