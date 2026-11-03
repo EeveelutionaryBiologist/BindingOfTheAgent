@@ -279,6 +279,21 @@
     }
   }
 
+  /**
+   * Swap File: kleine Leiste unter den Herzen (4 Segmente = 2 Herzen bis zum naechsten Container). Verschwindet,
+   * sobald alle Container aus dem Swap vergeben sind.
+   */
+  function drawSwap(ctx, p, x0, y0) {
+    const st = p.itemState && p.itemState.swap_file;
+    if (!st || !p.items.includes('swap_file') || st.made >= 3) return;
+    B.pixelText(ctx, 'SWAP', x0, y0, { scale: 1, color: '#ffb0b0', shadow: 'rgba(0,0,0,0.7)' });
+    for (let i = 0; i < 4; i++) {
+      ctx.fillStyle = 'rgba(0,0,0,0.55)';
+      ctx.fillRect(x0 + 26 + i * 12, y0, 10, 7);
+      if (i < st.bank) { ctx.fillStyle = '#e04848'; ctx.fillRect(x0 + 27 + i * 12, y0 + 1, 8, 5); }
+    }
+  }
+
   /** Zaehler mit Icon; Zahl springt kurz hoch und leuchtet, wenn sie sich aendert */
   function drawCounter(ctx, x, y, key, icons, color, value) {
     const k = Math.max(0, 1 - since(key) / 0.5);
@@ -662,6 +677,7 @@
       drawActive(ctx, p, 8, 6);
       if (glitchFor(game, 'items')) drawStatic(ctx, 5, 3, 74, 58, 1);         // Aktiv-Item + Ladebalken
       drawHearts(ctx, p, 86, 6);
+      drawSwap(ctx, p, 90, 54);
       if (glitchFor(game, 'hearts')) drawStatic(ctx, 83, 3, 134, 58, 2);       // beide Herzreihen
       drawCounter(ctx, 222, 4, 'credits', ['pickup_credit', 'hud_credit'], B.COLORS.credit, p.credits);
       drawCounter(ctx, 222, 23, 'pushes', ['pickup_push', 'hud_push'], '#c9c9c9', p.pushes);

@@ -37,10 +37,20 @@
   // Gewichte (Summe ~100) grob BoI-artig: Credits am haeufigsten, dann Herzen, Pushes, Approvals.
   // Seltene Typen (Gewicht <= 4) profitieren von Glueck, siehe rollRandomPickup.
   // ---------------------------------------------------------------------------
+  /**
+   * Herz-Pickup: heilt um halves; der Teil, der ueber volle HP hinausgeht, geht an den Item-Hook onOverheal
+   * (Swap File). Genommen wird das Herz, wenn es heilt oder ein Item den Ueberlauf auffaengt.
+   */
+  function healPickup(p, halves, game) {
+    const over = Math.max(0, halves - (p.maxHealth - p.health));
+    const healed = p.heal(halves);
+    const banked = over > 0 && typeof p.fireHook === 'function' && p.fireHook('onOverheal', over, game).some((r) => r === true);
+    return healed || banked;
+  }
   PT.heart_half = { name: 'Half Heart', sprite: 'pickup_heart_half', color: '#e04848', r: 12, weight: 11,
-    collect: (p) => p.heal(1) };
+    collect: (p, game) => healPickup(p, 1, game) };
   PT.heart = { name: 'Heart', sprite: 'pickup_heart', color: '#e04848', r: 14, weight: 7, price: 3,
-    collect: (p) => p.heal(2) };
+    collect: (p, game) => healPickup(p, 2, game) };
   PT.guardrail = { name: 'Guardrail', sprite: 'pickup_guardrail', color: '#5b8def', r: 14, weight: 4, price: 6,
     collect: (p) => p.addGuardrails(2) };
   PT.credit = { name: 'Credit', sprite: 'pickup_credit', color: '#f2c14e', r: 11, weight: 34,

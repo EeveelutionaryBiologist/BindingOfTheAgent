@@ -23,6 +23,10 @@
  *   - Zerstoerbare Objekte: richtige Arten je Etage, erlaubte Plaetze, Raeume bleiben begehbar; Spielerschuss und
  *     Explosion zerbrechen sie, Gegnerschuss nicht
  *   - Off-Brand GPU: ~12 % Blindgaenger ohne Schaden; GPU-Preise 30/20
+ *   - Herz-Items: Long-Term Support +1 sofort, +1 je 2 Etagen tiefer (hoechstens 3 dazu); Swap File nimmt Herzen
+ *     bei voller HP, 2 Herzen im Swap = +1 Container (auch Ueberlauf eines halb genutzten Herzens), nach 3 Containern
+ *     wieder normal; Electron App +2 und Tempo -0.15; Reserved Instances nur im Shop fuer 30; Graceful Degradation
+ *     +2, -0.2 Schaden je fehlendem vollen Herzen
  *   - Rohre: ~10 % der Kampfraeume, erscheinen nach dem Clearing (nicht vor Tueren), Ziel nie Boss/Geheim/selbst,
  *     Sperrzeit verhindert Ping-Pong
  *   - Stale Branch: nur auf Forgotten Branches; altert gruen -> gelb -> braun -> kahl (Laub faellt), wird schneller,
@@ -601,6 +605,68 @@ const URL = 'file://' + path.join(ROOT, 'index.html').replace(/\\/g, '/') + '?se
     return out;
   });
   problems.push(...gpuProblems);
+
+  // --- Herz-Items (2026-11-03): an einem frischen Spieler, damit die vorher vergebenen Items nicht mitspielen ---
+  const heartProblems = await page.evaluate(() => {
+    const out = [];
+    const g = BOTA.game, PT = BOTA.PICKUP_TYPES;
+    const fresh = () => { const pl = new BOTA.Player(480, 300); pl.recalcStats(); return pl; };
+    const realDepth = g.depth;
+    try {
+      // Long-Term Support: +1 sofort, dann +1 je 2 Etagen, hoechstens 3 dazu
+      let pl = fresh();
+      pl.giveItem('long_term_support', g);
+      if (pl.maxHealth !== 8 || pl.health !== 8) out.push('LTS: sofort ' + pl.maxHealth + '/' + pl.health + ' statt 8/8');
+      const st = pl.itemState.long_term_support;
+      const tick = () => BOTA.ITEMS.long_term_support.update(pl, 1 / 60, g);
+      g.depth = st.from + 1; tick();
+      if (pl.maxHealth !== 8) out.push('LTS: Patch schon nach 1 Etage');
+      g.depth = st.from + 2; tick(); tick();
+      if (pl.maxHealth !== 10 || pl.health !== 10) out.push('LTS: nach 2 Etagen ' + pl.maxHealth + '/' + pl.health + ' statt 10/10');
+      g.depth = st.from + 20; for (let i = 0; i < 10; i++) tick();
+      if (pl.maxHealth !== 14) out.push('LTS: nach vielen Etagen ' + pl.maxHealth + ' statt 14 (1 + 3 Container)');
+      g.depth = realDepth;
+      // Swap File: volle HP -> Herz wird genommen und gebankt; 2 Herzen = +1 Container; Ueberlauf zaehlt; nach 3 Schluss
+      pl = fresh();
+      pl.giveItem('swap_file', g);
+      const sw = pl.itemState.swap_file;
+      if (!PT.heart.collect(pl, g)) out.push('Swap File: Herz bei voller HP nicht genommen');
+      if (sw.bank !== 2 || pl.maxHealth !== 6) out.push('Swap File: nach 1 Herz bank ' + sw.bank + ', max ' + pl.maxHealth);
+      PT.heart.collect(pl, g);
+      if (pl.maxHealth !== 8 || pl.health !== 8 || sw.bank !== 0) out.push('Swap File: nach 2 Herzen ' + pl.maxHealth + '/' + pl.health + ', bank ' + sw.bank);
+      pl.health = 7;
+      if (!PT.heart.collect(pl, g) || pl.health !== 8 || sw.bank !== 1) out.push('Swap File: Ueberlauf nicht gebankt (' + pl.health + ', bank ' + sw.bank + ')');
+      for (let i = 0; i < 12; i++) PT.heart_half.collect(pl, g);
+      if (sw.made !== 3 || pl.maxHealth !== 12) out.push('Swap File: ' + sw.made + ' Container, max ' + pl.maxHealth + ' statt 3 / 12');
+      if (PT.heart.collect(pl, g)) out.push('Swap File: nimmt nach 3 Containern weiter Herzen bei voller HP');
+      const plain = fresh();
+      if (PT.heart.collect(plain, g)) out.push('Herz wird ohne Swap File bei voller HP genommen');
+      // Electron App: +2, Tempo -0.15
+      pl = fresh();
+      const sp0 = pl.stats.speed;
+      pl.giveItem('electron_app', g);
+      if (pl.maxHealth !== 10 || pl.health !== 10) out.push('Electron App: ' + pl.maxHealth + '/' + pl.health + ' statt 10/10');
+      if (Math.abs(pl.stats.speed - (sp0 - 0.15)) > 1e-6) out.push('Electron App: Tempo ' + pl.stats.speed + ' statt ' + (sp0 - 0.15));
+      // Reserved Instances: nur Shop, 30 Credits, +2
+      const ri = BOTA.ITEMS.reserved_instances;
+      if (ri.pools.join() !== 'shop' || BOTA.itemPrice('reserved_instances') !== 30) out.push('Reserved Instances: Pools ' + ri.pools + ', Preis ' + BOTA.itemPrice('reserved_instances'));
+      pl = fresh(); pl.giveItem('reserved_instances', g);
+      if (pl.maxHealth !== 10 || pl.health !== 10) out.push('Reserved Instances: ' + pl.maxHealth + '/' + pl.health);
+      // Graceful Degradation: +2, -0.2 Schaden je fehlendem vollen Herzen (halbe zaehlen nicht)
+      pl = fresh();
+      const d0 = pl.stats.damage;
+      pl.giveItem('graceful_degradation', g);
+      if (pl.maxHealth !== 10 || Math.abs(pl.stats.damage - d0) > 1e-6) out.push('Graceful Degradation: bei voller HP ' + pl.maxHealth + ', Schaden ' + pl.stats.damage);
+      pl.health = 5; pl.recalcStats();   // 5 von 10 halben: 2 volle Herzen fehlen (das halbe zaehlt nicht)
+      if (Math.abs(pl.stats.damage - (d0 - 0.4)) > 1e-6) out.push('Graceful Degradation: Schaden ' + pl.stats.damage.toFixed(2) + ' statt ' + (d0 - 0.4).toFixed(2));
+      pl.heal(5);
+      if (Math.abs(pl.stats.damage - d0) > 1e-6) out.push('Graceful Degradation: Schaden nach Heilung ' + pl.stats.damage);
+    } finally {
+      g.depth = realDepth;
+    }
+    return out;
+  });
+  problems.push(...heartProblems);
 
   // --- Graphics Glitch: Kontakt -> HUD-Stoerung; jeder Stoerungsbereich rendert; Spruenge landen auf Boden ---
   const glitchProblems = await page.evaluate(() => {

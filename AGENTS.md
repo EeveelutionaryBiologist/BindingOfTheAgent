@@ -378,7 +378,7 @@ The previous floor's boss is excluded, and bosses already met count `weight · t
   - **Flags:** booleans are OR'ed (`piercing, homing, spectral, bounce, wobble, split, flying, parallel, showHp`),
     `multishot` takes the max, and other numbers are summed (`duck, unitTests`).
   - **Hooks:** `fireHook(name, …)` calls `onPickup, onShoot, onHitEnemy, onRoomEnter, onRoomClear, onHurt, onLethal,
-    update` on all passive items and the active item, and catches errors per item.
+    onOverheal, update` on all passive items and the active item, and catches errors per item.
   - **Shooting:** 4-directional (the last arrow key pressed wins); shots inherit 30 % of the player's velocity.
     `multishot` fires a fan (`spread`, default 12°), or a parallel pair when `parallel` is set and the count is 2.
   - **Getting hurt:** `hurt()` sets 1 s of invulnerability (i-frames) and emits `playerHurt`. On lethal damage the
@@ -523,13 +523,14 @@ are game state.
 
 ## 4. Content registries (current state)
 
-**Items:** 45 in total, 40 passive and 5 active (marked `*`). Pools: t = treasure, s = shop, b = boss, s/s = shop+secret.
+**Items:** 50 in total, 45 passive and 5 active (marked `*`). Pools: t = treasure, s = shop, b = boss, s/s = shop+secret.
 ```
 cold_brew mech_keyboard stack_overflow context_window prompt_caching tab_completion max_effort monorepo
 kubernetes blockchain technical_debt temperature few_shot regex chain_of_thought confident_hallucination
 linter dark_mode microservices vibe_coding the_cloud rlhf constitutional_guardrails retry_backoff code_review
 daily_standup lgtm off_by_one yaml_config git_blame rubber_duck unit_tests copy_paste on_call_pager
-garbage_collector seed_funding benchmark_overfitting feature_flag extra_gpu offbrand_gpu
+garbage_collector seed_funding benchmark_overfitting feature_flag extra_gpu offbrand_gpu long_term_support
+swap_file electron_app reserved_instances graceful_degradation
 regenerate_response* stop_generating* rm_rf* compact* ctrl_z*
 ```
 Item conventions:
@@ -538,6 +539,10 @@ Item conventions:
 - A player shot with `damage <= 0` is a dud (Off-Brand GPU): it fizzles on enemies and breakable objects without
   damage, knockback or `onHitEnemy` hooks (`projectile.js`).
 - The default price is 15 (`B.itemPrice(id)`).
+- **Heart containers** (2026-11-03): besides RLHF, five items add max health (Long-Term Support, Swap File, Electron
+  App, Reserved Instances, Graceful Degradation; see `documents/items.md`). Heart pickups go through `healPickup` in
+  `pickup.js`: healing beyond full health is offered to the item hook `onOverheal(player, halves, game)`, and the
+  pickup is taken if it healed or a hook returned `true` (Swap File banks it; its bar is `drawSwap` in `hud.js`).
 
 **Enemies** (id: behaviour, minFloor, base HP):
 

@@ -24,6 +24,8 @@
  *     onRoomClear(player, room, game) {},
  *     onHurt(player, game) {},
  *     onLethal(player, game) { return true; },   // true = Tod verhindern
+ *     onOverheal(player, halves, game) { return true; }, // Herz-Pickup bei (fast) voller HP: halves gingen
+ *                                                // ueber das Maximum; true = aufgefangen (Pickup wird genommen)
  *     update(player, dt, game) {},
  *
  *     // Aktive Items:
@@ -31,7 +33,8 @@
  *   };
  *
  * Inhalt: 32 passive + 4 aktive Items aus DESIGN.md §9, dazu 7 eigene Items im selben Geist
- * (6 passiv, 1 aktiv). Begleiter-Flags (duck, unitTests) wertet BOTA.syncFollowers in familiar.js aus.
+ * (6 passiv, 1 aktiv) und 5 Herz-Items (2026-11-03: Long-Term Support, Swap File, Electron App,
+ * Reserved Instances, Graceful Degradation). Begleiter-Flags (duck, unitTests) wertet BOTA.syncFollowers in familiar.js aus.
  *
  * Konventionen:
  *  - Pro Run gewuerfelte / dauerhafte Werte (Off-by-One, YAML Config, Retry with Backoff) landen in
@@ -122,6 +125,12 @@
     },
   };
   const fx = B.itemFx;
+
+  // Herz-Items (Long-Term Support, Swap File)
+  const LTS_EVERY = 2;   // Etagen pro Patch
+  const LTS_MAX = 3;     // Patches insgesamt (zusaetzlich zum ersten Container beim Aufheben)
+  const SWAP_COST = 4;   // halbe Herzen im Swap pro neuem Container (= 2 Herzen)
+  const SWAP_MAX = 3;    // hoechstens so viele Container aus dem Swap
 
   /** Alle lebenden Gegner im aktuellen Raum (inkl. Bossen und Gegnern, die nicht fuers Clearing zaehlen) */
   function livingEnemies(game) {
@@ -348,6 +357,90 @@
       // +1 Herzcontainer und volle Heilung
       player.addHeartContainers(1);
       player.health = player.maxHealth;
+    },
+  };
+
+  // --- Mehr Herzcontainer (2026-11-03): lange Runs, harte spaete Bosse, bisher nur RLHF ---------------------
+
+  /** +n Herzcontainer und volle Heilung (wie RLHF) */
+  function moreHearts(player, n) {
+    player.addHeartContainers(n);
+    player.health = player.maxHealth;
+  }
+
+  I.long_term_support = {
+    name: 'Long-Term Support', tagline: 'HP up, and up, and up',
+    desc: 'Supported for years. Every couple of floors it ships a patch: one more heart, up to three.',
+    pools: ['treasure', 'boss'], sprite: 'item_long_term_support',
+    onPickup(player, game) {
+      const g = G(game);
+      const st = player.itemState.long_term_support || (player.itemState.long_term_support = {});
+      st.from = g ? g.depth : 1;  // ab dieser Etage zaehlen
+      st.given = 0;
+      moreHearts(player, 1);
+    },
+    update(player, dt, game) {
+      // Alle LTS_EVERY Etagen tiefer ein weiterer Container (hoechstens LTS_MAX); prueft nur die Tiefe, kein Zufall
+      const g = G(game);
+      const st = player.itemState.long_term_support;
+      if (!g || !st || st.given >= LTS_MAX) return;
+      const due = Math.min(LTS_MAX, Math.floor((g.depth - st.from) / LTS_EVERY));
+      if (st.given >= due) return;
+      st.given++;
+      player.addHeartContainers(1);   // neuer Container kommt gefuellt
+      fx.popText(g, player.x, player.y - 60, 'LTS patch: +1 heart', '#ff8a8a');
+    },
+  };
+
+  I.swap_file = {
+    name: 'Swap File', tagline: 'Spare hearts become HP',
+    desc: 'When memory is full, write it to disk. Hearts picked up at full health are banked; every 2 hearts banked become a new heart container (up to 3).',
+    pools: ['treasure', 'secret'], sprite: 'item_swap_file',
+    onPickup(player) {
+      const st = player.itemState.swap_file || (player.itemState.swap_file = {});
+      st.bank = st.bank || 0;   // halbe Herzen im "Swap"
+      st.made = st.made || 0;   // daraus entstandene Container
+    },
+    /** Vom Herz-Pickup aufgerufen (pickup.js): halves = Heilung, die ueber volle HP hinausging. true = aufgefangen */
+    onOverheal(player, halves, game) {
+      const st = player.itemState.swap_file;
+      if (!st || st.made >= SWAP_MAX || player.maxHealth >= 24) return false;
+      st.bank += halves;
+      while (st.bank >= SWAP_COST && st.made < SWAP_MAX && player.maxHealth < 24) {
+        st.bank -= SWAP_COST;
+        st.made++;
+        player.addHeartContainers(1);
+        fx.popText(G(game), player.x, player.y - 60, 'swapped in: +1 heart', '#ff8a8a');
+      }
+      if (st.made >= SWAP_MAX) st.bank = 0;
+      return true;
+    },
+  };
+
+  I.electron_app = {
+    name: 'Electron App', tagline: 'HP up, speed down',
+    desc: 'Ships a whole browser. Heavy, but surprisingly hard to kill.',
+    pools: ['treasure', 'boss'], sprite: 'item_electron_app',
+    add: { speed: -0.15 },
+    onPickup(player) { moreHearts(player, 2); },
+  };
+
+  I.reserved_instances = {
+    name: 'Reserved Instances', tagline: 'HP up. Paid upfront.',
+    desc: 'Cheaper per hour, as long as you stay. Two more hearts, billed in advance.',
+    pools: ['shop'], sprite: 'item_reserved_instances', price: 30,
+    onPickup(player) { moreHearts(player, 2); },
+  };
+
+  I.graceful_degradation = {
+    name: 'Graceful Degradation', tagline: 'HP up, damage down when hurt',
+    desc: 'Keeps running when things break. Just worse: -0.2 damage for every missing heart.',
+    pools: ['treasure', 'boss'], sprite: 'item_graceful_degradation',
+    onPickup(player) { moreHearts(player, 2); },
+    dynamic(player) {
+      // Gegenstueck zu git blame: je fehlendem vollen Herzen 0.2 Schaden weniger (recalcStats laeuft bei Treffer/Heilung)
+      const missing = Math.floor(Math.max(0, player.maxHealth - player.health) / 2);
+      return missing ? { add: { damage: -0.2 * missing } } : null;
     },
   };
 

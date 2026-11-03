@@ -365,6 +365,97 @@
     '......k......',
   ]);
 
+  // Long-Term Support — Abreisskalender mit Herz, darunter schon das naechste Blatt
+  spr('item_long_term_support', [
+    '..k.......k..',
+    '.kkkkkkkkkkk.',
+    'kRRRRRRRRRRRk',
+    'kRRRRRRRRRRRk',
+    'kkkkkkkkkkkkk',
+    'kwwwwwwwwwwGk',
+    'kwwrrwwwrrwGk',
+    'kwrrrrwrrrrGk',
+    'kwrWrrrrrrrGk',
+    'kwwrrrrrrrwGk',
+    'kwwwrrrrrwwGk',
+    'kwwwwrrrwwwGk',
+    'kwwwwwrwwwwGk',
+    'kGGGGGGGGGGGk',
+    'kkkkkkkkkkkkk',
+    '.kgggggggggk.',
+    '..kkkkkkkkk..',
+  ]);
+
+  // Swap File — ein Herz faellt in ein Laufwerk (Festplatte mit blauem Etikett und gruener LED)
+  spr('item_swap_file', [
+    '...kk.kk.....',
+    '..krrkrrk....',
+    '..krWrrrk....',
+    '...krrrk.....',
+    '....krk......',
+    '.....k.......',
+    '.kkkkkkkkkkk.',
+    'kGGGGGGGGGGdk',
+    'kGDDDDDDDDGdk',
+    'kGddddddddGdk',
+    'kGdbbbbbbdGdk',
+    'kGddddddddGdk',
+    'kGGGGGGGGnGdk',
+    'kddddddddddDk',
+    '.kkkkkkkkkkk.',
+  ]);
+
+  // Electron App — klobiges App-Fenster (Titelleiste mit drei Punkten) mit dickem Herz und schwerem Sockel
+  spr('item_electron_app', [
+    'kkkkkkkkkkkkkk',
+    'kbbbbbbbbrbynk',
+    'kkkkkkkkkkkkkk',
+    'kwwwwwwwwwwwGk',
+    'kwwrrwwwrrwwGk',
+    'kwrrrrwrrrrwGk',
+    'kwrWrrrrrrrwGk',
+    'kwwrrrrrrrwwGk',
+    'kwwwrrrrrwwwGk',
+    'kwwwwrrrwwwwGk',
+    'kwwwwwrwwwwwGk',
+    'kGGGGGGGGGGGGk',
+    'kkkkkkkkkkkkkk',
+    'kddddddddddddk',
+    '.kkkkkkkkkkkk.',
+  ]);
+
+  // Reserved Instances — Server mit drei Einschueben (rote Status-LEDs) und einer Goldmuenze davor
+  spr('item_reserved_instances', [
+    '.kkkkkkkkkk...',
+    'kddddddddddk..',
+    'kdGGGGGGnrdk..',
+    'kddddddddddk..',
+    'kdGGGGGGnrdk..',
+    'kddddddddddk..',
+    'kdGGGGGGnrdk..',
+    'kdddddkkkkk...',
+    '.kkkkkyyyyyk..',
+    '.....kyyWyyYk.',
+    '.....kyYyyyYk.',
+    '.....kyyYyyYk.',
+    '......kYYYYk..',
+    '.......kkkk...',
+  ]);
+
+  // Graceful Degradation — Herz mit Riss, die rechte Haelfte ist schon ausgeblichen (laeuft noch, nur schlechter)
+  spr('item_graceful_degradation', [
+    '..kkk...kkk..',
+    '.krrrk.kRRRk.',
+    'krrWrrkRRRRRk',
+    'krrrrrkkRRRRk',
+    'krrrrrrkRRRRk',
+    '.krrrrkRRRRk.',
+    '..krrrrkRRk..',
+    '...krrkRRk...',
+    '....krkRk....',
+    '.....kkk.....',
+  ]);
+
   // Constitutional Guardrails — blaues Schild mit Saeulen-Gebaeude
   spr('item_constitutional_guardrails', [
     'kkkkkkkkkkkkk',
