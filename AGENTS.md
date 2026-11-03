@@ -860,3 +860,14 @@ work again, the same file-ownership split works well.
   - ~~More Sandbox Borders enemies~~ (brainstorm 2026-11-02): all seven built on 2026-11-03 and spread over several
     floors (§4): Stack Trace (Legacy Codebase), Honeypot and Rolling Release (Dependency Hell), Rate Limiter and
     Port Scanner (Production), Dust Daemon (Sandbox Borders), Dry Run (The Training Data).
+  - **Next enemy ideas per floor** (from the 2026-11-03 build agents, not built yet; reuse the floor's family look):
+    - Legacy Codebase: **Deprecated API** (crumbling statue, invulnerable from the front, blocks doorways, mutters
+      "use v2 instead"); **Goto** (punch card that teleports between visible `LABEL:` tiles in a fixed order and fires a
+      line of shots between old and new tile).
+    - Dependency Hell: **Peer Dependency** (two tethered crates, only hurtable while both are in tether range);
+      **Lockfile** (padlocked package that seals a door and lays slow version-pin mines on your path until killed).
+    - Production: **Hotfix** (welder who rushes to patch injured enemies back to full; telegraphed weld beam);
+      **Load Balancer** (hovering scale that splits caught shots and reflects half; core exposed while the pans tip).
+    - Sandbox Borders: **Mirage Oasis** (pool that heals enemies in it; shooting it boils it into telegraphed steam shots).
+    - The Training Data: **Overfit** (remembers your last 3 dodge directions and, after a glow, fires where repeating
+      them would put you).

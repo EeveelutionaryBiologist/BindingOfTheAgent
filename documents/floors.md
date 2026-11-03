@@ -148,13 +148,12 @@ amber shots, so check contrast with screenshots before settling on a bright pale
 
 - **Look:** industrial grey checker plate with diagonal studs and riveted seams; dark red walls; yellow-black hazard
   stripes in front of the doors and cables across the floor. Accent: signal red `#e05a4f`.
-- **Gameplay, enemies:** an own family found only here (since 2026-11-03), the Rate Limiter (fires three shots, then
-  sits out a "429" pause; also on The Context Limit) and the Port Scanner (pops out of numbered floor ports in a
-  fixed order). Steel bodies, cyan shots: red would vanish on this floor.
 - **Breakables:** packages and cartons in 70 % of combat rooms, up to 4 per room.
 - **Music:** A harmonic minor, 138 bpm, square lead.
 - **Gameplay, enemies:** everything that breaks at runtime: Race Conditions, Graphics Glitches, Flaky Tests, Jira
-  Tickets, Merge Conflicts and Null Pointers, plus the Production family above.
+  Tickets, Merge Conflicts and Null Pointers. Its own family (since 2026-11-03): the Rate Limiter (fires three shots,
+  then sits out a "429" pause; also on The Context Limit) and the Port Scanner (pops out of numbered floor ports in a
+  fixed order). Steel bodies, cyan shots: red would vanish on this floor.
 
 ### 6. Sandbox Borders
 
