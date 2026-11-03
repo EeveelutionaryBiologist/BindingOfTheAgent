@@ -330,6 +330,46 @@
   }
 
   /**
+   * Fluestern (The Context Limit): ein Satzfetzen tippt sich blass ins Bild, flackert, verliert dann Buchstabe fuer
+   * Buchstabe (abgeschnittener Kontext) und verblasst, waehrend er langsam mit dem Wind treibt. Rein optisch.
+   */
+  class Whisper {
+    constructor(x, y, text) {
+      this.x = x; this.y = y; this.text = String(text).slice(0, 40);
+      this.life = 2.8; this.max = this.life; this.dead = false; this.important = false;
+      // Reihenfolge, in der die Buchstaben wegfallen (zufaellig, nur Optik)
+      this.order = this.text.split('').map((_, i) => [Math.random(), i]).sort((a, b) => a[0] - b[0]).map((p) => p[1]);
+      this.italic = Math.random() < 0.6;
+    }
+    update(dt) {
+      this.life -= dt;
+      if (this.life <= 0) { this.dead = true; return; }
+      this.x += 7 * dt;
+      this.y += 2 * dt;
+    }
+    draw(ctx) {
+      const age = this.max - this.life, n = this.text.length;
+      const shown = Math.min(n, Math.floor(age / 0.035));               // eintippen
+      const lost = Math.max(0, Math.floor((age - 1.1) / (1.5 / n)));    // dann wegfallen
+      const gone = new Set(this.order.slice(0, Math.min(n, lost)));
+      let s = '';
+      for (let i = 0; i < shown; i++) s += gone.has(i) ? ' ' : this.text[i];
+      const fade = Math.min(1, age / 0.3) * Math.min(1, this.life / 0.6);
+      const flicker = Math.random() < 0.08 ? 0.35 : 0.85 + 0.15 * Math.sin(age * 37);
+      ctx.save();
+      ctx.globalAlpha = 0.42 * fade * flicker;
+      ctx.font = (this.italic ? 'italic ' : '') + '15px ' + (B.FONT || 'monospace');
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillStyle = '#0a0f18';
+      ctx.fillText(s, this.x + 1, this.y + 1);
+      ctx.fillStyle = '#d6e4ff';
+      ctx.fillText(s, this.x, this.y);
+      ctx.restore();
+    }
+  }
+
+  /**
    * Goldener Fallschirm (Tod des Shareholder): ein kleiner Zylinder-Schatten schwebt unter einem gestreiften
    * Goldschirm schaukelnd nach oben davon und verblasst. Rein optisch.
    */
@@ -631,6 +671,13 @@
     FX.ring(e.game, e.x, e.y, 46, '#ffcf4d', 0.35, 5);
     FX.leaves(e.game, e.x, e.y, 6, leafMix(), { speedMin: 40, speedMax: 160 });
     FX.text(e.game, e.x, e.y - 24, 'Merged!', '#ffcf4d');
+  });
+
+  // The Context Limit: Fluestern und fernes Wetterleuchten (zwei kurze, schwache Aufheller; bewusst sanft)
+  on('ambientWhisper', (e) => { add(e.game, new Whisper(e.x, e.y, e.text)); });
+  on('ambientThunder', (e) => {
+    FX.tint(e.game, '200,215,255', 0.09, 0.35);
+    FX.later(e.game, 0.16, (g) => FX.tint(g, '200,215,255', 0.06, 0.5));
   });
 
   // Megalith: Suchtreffer ersetzt (gelber Blitz), Modul wieder eingemergt ("+1 import")

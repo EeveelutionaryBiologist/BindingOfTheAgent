@@ -417,7 +417,7 @@ All milestones done. What shipped, compared with this doc:
 - **Layouts:** 30 (27 combat, the rest for special rooms), all validated.
 - **Presentation:**
   - 11 floor themes (Sandbox Borders, a desert with cacti and border fences, added 2026-11-02) and an animated avatar with 4 directions plus hurt and item poses.
-    - 73 synthesized SFX and a procedural chiptune loop per floor, with a boss variant.
+    - 75 synthesized SFX (plus a rain bed on The Context Limit) and a procedural chiptune loop per floor, with a boss variant.
   - Pixel-font HUD and screens, including the "post-mortem" death report.
 - **QA:** headless-browser tests found zero console errors and held 60 fps with all items, 30 enemies and about 150 bullets.
   They also covered 300+ fuzzed floors, every enemy and boss, and multi-floor runs.
@@ -442,6 +442,9 @@ All milestones done. What shipped, compared with this doc:
   trapdoor. Details in AGENTS.md §3.6 and §4.
 - **Late bosses (2026-11-03):** The Megalith and The Shareholder replace The Monolith and The Stakeholder as floor
   bosses from floor 7 (both stay side quests); the Octopus Merge drops from 330 to 300 HP. See §8 and AGENTS.md §4.
+- **The Context Limit in the rain (2026-11-03):** the last floor of the cycle got a mood of its own: a constant
+  downpour with puddles, ripples and wet walls, rare distant lightning, a rain sound, and fragments of earlier
+  context that flicker through the room as barely audible whispers. Purely cosmetic (no `game.rng` use).
 - **More hearts (2026-11-03):** five items add heart containers (Long-Term Support, Swap File, Electron App, Reserved
   Instances, Graceful Degradation), because RLHF was the only one and runs are long. README.md (the map pickup) now
   lies on half of all floors instead of 30 %.

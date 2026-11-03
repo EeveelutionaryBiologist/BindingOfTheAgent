@@ -407,6 +407,27 @@
     },
   });
   Object.assign(RATE, { search: 0.15, replace: 0.04, coinDrop: 0.04, cash: 0.2 });
+
+  // The Context Limit (2026-11-03): Fluestern und fernes Grollen; der Regen selbst ist ein Dauerteppich (rain unten)
+  Object.assign(SOUNDS, {
+    // Kaum hoerbares Fluestern: 3–6 "Silben" aus schmalbandigem Rauschen mit wandernder Formantlage, darunter ein Hauch
+    whisper() {
+      const n = 3 + Math.floor(Math.random() * 4);
+      let t = 0;
+      for (let i = 0; i < n; i++) {
+        const d = rnd(0.06, 0.13);
+        noise({ dur: d, vol: rnd(0.009, 0.016), filter: 'bandpass', f: rnd(1600, 3200), f2: rnd(1300, 2600), q: 4, delay: t });
+        t += d + rnd(0.02, 0.07);
+      }
+      noise({ dur: t + 0.1, vol: 0.005, filter: 'highpass', f: 4200 });
+    },
+    // Fernes Grollen nach dem Wetterleuchten: tiefes, langsam abklingendes Rauschen, leicht verzoegert
+    thunder() {
+      noise({ dur: 2.2, vol: 0.05, filter: 'lowpass', f: 260, f2: 50, delay: 0.35 });
+      noise({ dur: 1.4, vol: 0.03, filter: 'lowpass', f: 600, f2: 120, delay: 0.5 });
+    },
+  });
+  Object.assign(RATE, { whisper: 1, thunder: 5 });
   SPAMMY.coinDrop = true;
 
   // ===========================================================================
@@ -462,10 +483,50 @@
     return { steps, bpm: (m.bpm || 110) * (boss ? 1.12 : 1), lead: boss ? 'sawtooth' : (m.lead || 'square') };
   }
 
+  /**
+   * Regen-Teppich (The Context Limit): zwei Schichten gefiltertes Rauschen (hell: Prasseln, dunkel: Rauschen) in
+   * Dauerschleife auf dem sfxBus, leicht verstimmt gegeneinander, damit die 1-s-Schleife nicht auffaellt. An/aus
+   * mit der Etagenmusik (music.start/stop); stumm schalten erledigt der Master.
+   */
+  const rain = {
+    nodes: null,
+    set(on) {
+      if (!ctx || !noiseBuf || !sfxBus) return;
+      const t = ctx.currentTime;
+      if (on && !this.nodes) {
+        this.nodes = [['highpass', 1300, 0.016, 1.03], ['lowpass', 520, 0.02, 0.97]].map(([type, f, vol, rate]) => {
+          const src = ctx.createBufferSource();
+          src.buffer = noiseBuf;
+          src.loop = true;
+          src.playbackRate.value = rate;
+          const filt = ctx.createBiquadFilter();
+          filt.type = type;
+          filt.frequency.value = f;
+          const g = ctx.createGain();
+          g.gain.setValueAtTime(0, t);
+          g.gain.linearRampToValueAtTime(vol, t + 1.5);
+          src.connect(filt); filt.connect(g); g.connect(sfxBus);
+          src.start(t, Math.random());
+          return { src, g };
+        });
+      } else if (!on && this.nodes) {
+        for (const n of this.nodes) {
+          n.g.gain.cancelScheduledValues(t);
+          n.g.gain.setValueAtTime(n.g.gain.value, t);
+          n.g.gain.linearRampToValueAtTime(0, t + 0.8);
+          n.src.stop(t + 0.9);
+        }
+        this.nodes = null;
+      }
+    },
+  };
+  const rainyFloor = (depth) => !!(B.themeFor && depth > 0 && B.themeFor(depth).ambient === 'rain');
+
   const music = {
     song: null, step: 0, nextT: 0, depth: 0, boss: false, timer: null,
     start(depth, boss) {
       this.depth = depth; this.boss = !!boss;
+      try { rain.set(rainyFloor(depth)); } catch (e) { /* Regen ist optional */ }
       this.song = makeSong(depth, boss);
       this.step = 0;
       this.nextT = ctx ? ctx.currentTime + 0.12 : 0;
@@ -473,6 +534,7 @@
     },
     stop(fadeS) {
       this.fade(0, fadeS || 0.5);
+      try { rain.set(false); } catch (e) { /* Regen ist optional */ }
       const s = this.song;
       setTimeout(() => { if (this.song === s && this.target === 0) this.song = null; }, ((fadeS || 0.5) + 0.1) * 1000);
     },
@@ -679,6 +741,8 @@
   on('enemyRevive', () => p('charged'));
   on('hudGlitch', () => p('glitch'));
   on('bossBeam', () => p('beam'));            // Reviewer-Laser, Shareholder-Monokel
+  on('ambientWhisper', () => p('whisper'));    // The Context Limit: Satzfetzen huscht vorbei
+  on('ambientThunder', () => p('thunder'));    // ... und fernes Wetterleuchten
   on('bossSearch', () => p('search'));         // Megalith: Ctrl+F
   on('bossReplace', () => p('replace'));       // Megalith: Suchtreffer ersetzt
   on('bossAbsorb', () => p('merge'));          // Megalith: Modul wieder eingemergt

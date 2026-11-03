@@ -169,14 +169,16 @@
       light: 'rgba(255,255,255,0.03)', vignette: '0,0,0',
       music: { root: 43, mode: 'minor', bpm: 80, lead: 'triangle' },
     },
-    { // 11 The Context Limit — bleiches Nebelblau, verblassender Text, Deja-vu
+    { // 11 The Context Limit — bleiches Nebelblau, verblassender Text, Deja-vu; seit 2026-11-03 trist und verregnet:
+      // Platzregen ueber dem Raum, Pfuetzen mit Ringen, Wasserspuren an den Waenden, fernes Wetterleuchten und
+      // Satzfetzen, die als Fluestern durch den Raum huschen (ambient 'rain', siehe renderer.js / game.updateAmbience)
       key: 'context',
       props: { kinds: ['crate', 'bush', 'package', 'carton'], chance: 0.8, max: 5 },
-      floor: '#2d3542', floorAlt: '#323b49', grout: 'rgba(0,0,0,0.2)',
-      wall: '#1c2230', wallLight: '#3d4a62', wallDark: '#0e121a', wallTop: '#242c3c',
-      door: '#4a5a78', accent: '#9ec5ff',
-      pattern: 'tiles', decor: 'fog',
-      light: 'rgba(200,225,255,0.07)', vignette: '4,8,16',
+      floor: '#2a323f', floorAlt: '#2e3745', grout: 'rgba(0,0,0,0.24)',
+      wall: '#1a202d', wallLight: '#38455c', wallDark: '#0c1018', wallTop: '#222a39',
+      door: '#465674', accent: '#9ec5ff',
+      pattern: 'tiles', decor: 'fog', wallDecor: 'rain', ambient: 'rain',
+      light: 'rgba(190,215,250,0.05)', vignette: '2,5,12',
       music: { root: 49, mode: 'mixolydian', bpm: 108, lead: 'square' },
     },
   ];

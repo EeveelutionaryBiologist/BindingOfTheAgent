@@ -103,6 +103,10 @@ Live state is under `BOTA.game` (`.player`, `.room`, `.floor`, `.depth`, `.state
   pedestal;
 - breakable objects use the floor's kinds, stay off spawn points, door fronts and the centre, never cut a room in two,
   and break from player shots and explosions but not from enemy shots;
+- The Context Limit is the only theme with `ambient: 'rain'`; there `updateAmbience` emits whispers (texts from
+  `TEXT.CONTEXT_WHISPERS`, shown as a room effect) and lightning without touching `game.rng`, other floors get
+  neither, and rooms bake their puddle list and draw rain and ripples without console errors (screenshot
+  `08-context-rain`);
 - the heart items (on a fresh player): Long-Term Support gives +1 at once and +1 every 2 floors down (at most 3
   more), Swap File takes hearts at full health and turns every 2 banked hearts (overflow included) into a container,
   up to 3, then stops taking them; Electron App +2 and speed −0.15, Reserved Instances is shop-only at 30, Graceful
@@ -238,7 +242,7 @@ depend on load order.
 | `input` | input | `down(code)`, `pressed(code)` (edge since the last sim step), `moveVector()`, `shootDir()`, `_simulate()` |
 | `defineSprite, drawSprite, hasSprite, spriteSize, spriteFrameCount` | sprites | ASCII sprite registry; unknown names draw a magenta placeholder |
 | `audio` | audio | `unlock, play(name), toggleMute, tone, names(), music.start/stop` |
-| `FONT, COLORS, FLOOR_THEMES, themeFor(depth)` | palette | colours and 11 floor themes (`gen`, `props`, `cacti` are read by the map generator; `tiles` swaps tile sprites) |
+| `FONT, COLORS, FLOOR_THEMES, themeFor(depth)` | palette | colours and 11 floor themes (`gen`, `props`, `cacti` are read by the map generator; `tiles` swaps tile sprites; `ambient` / `wallDecor` add per-frame or baked atmosphere, e.g. `rain`) |
 | `floorInfo(depth)`, `TEXT.*` | text | floor names/subtitles (cycling with roman numerals) and all snark lists; `TEXT.pick(list)` |
 | `Room`, `Floor` | world | room model and floor generator |
 | `Entity, Projectile, Bomb, Player, Enemy, Boss, AI, BossHelpers` | entities | gameplay classes and AI helpers |
@@ -486,6 +490,7 @@ Payloads usually include `game, x, y` and often `color`.
 | `portScan` (`kind`: open/filtered) | Port Scanner | audio (`denied` when filtered), effects (cyan ring / "FILTERED") |
 | `orphanCaught` (`count`), `enemyVanish` (`color, text`) | Orphan Commit; Dry Run's ghost on death | audio (`rescue`, `gcSweep`), effects (sparkles / puff and text) |
 | `hudGlitch` (`kind`) | game (`glitchHud`) | audio |
+| `ambientWhisper` (`text, x, y`), `ambientThunder` | game (`updateAmbience`, only on themes with `ambient: 'rain'`; uses `Math.random`, never `game.rng`) | audio (`whisper`, `thunder`), effects (`Whisper` text, soft room tint) |
 | `pipeAppear`, `pipeWarp`, `pipeArrive` (`to`) | game | audio, effects |
 | `propHit`, `propBreak` (`kind, color`) | game | audio, effects |
 | `bossSpawn`, `bossIntro`, `bossPhase`, `bossStomp`, `bossBounce`, `bossBeam`, `bossMerge` (`left`) | game, boss | audio (boss music, `merge`), effects ("Merged!" pop) |
@@ -506,7 +511,8 @@ Rule: audio and effects **only listen**. Game logic never calls them directly, e
 are game state.
 
 ### 3.12 Audio (`core/audio.js`) and effects (`entities/effects.js`)
-- **Audio:** 73 synthesized SFX in total. Every sound has a name; `audio.names()` lists them.
+- **Audio:** 75 synthesized SFX in total, plus a looping rain bed (two filtered noise layers) that `music.start` switches
+  on for themes with `ambient: 'rain'` and `music.stop` switches off. Every sound has a name; `audio.names()` lists them.
   - Bus routing: voices → sfx/music bus → master → compressor.
   - Per-name rate limits (`RATE`) and a 40-voice cap keep it from getting noisy.
   - There is a procedural chiptune loop per floor plus a boss variant. Mute is persisted in storage; there's no
@@ -766,7 +772,8 @@ checks the format and that all 4 door tiles are clear and mutually reachable. `{
 every floor tile must be reachable, there must be no spikes next to doors, and special rooms need a clear centre.
 
 **Text** (`B.TEXT`): `FLOORS` (11), `EPITAPHS` (25), `TAGLINES`, `SHOP_LINES`, `ENCOUNTER_LINES` (side-quest banner), `CLEAR_QUIPS`, `DENIED`, `PICKUP`, `EVENTS`, `RANKS`,
-plus per-floor extras `THEME_QUIPS` / `THEME_EPITAPHS` keyed by theme `key` (currently `branches` and `sandbox`).
+plus per-floor extras `THEME_QUIPS` / `THEME_EPITAPHS` keyed by theme `key` (currently `branches`, `sandbox` and `context`),
+and `CONTEXT_WHISPERS` (The Context Limit's floor fragments and whispers).
 
 ---
 

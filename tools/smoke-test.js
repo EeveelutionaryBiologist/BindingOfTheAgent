@@ -23,6 +23,9 @@
  *   - Zerstoerbare Objekte: richtige Arten je Etage, erlaubte Plaetze, Raeume bleiben begehbar; Spielerschuss und
  *     Explosion zerbrechen sie, Gegnerschuss nicht
  *   - Off-Brand GPU: ~12 % Blindgaenger ohne Schaden; GPU-Preise 30/20
+ *   - The Context Limit: nur dieses Thema hat ambient 'rain'; dort kommen Fluestern und Wetterleuchten als Events
+ *     (Fluestern landet als Effekt im Raum), das Run-RNG bleibt dabei unberuehrt; auf anderen Etagen nichts davon;
+ *     Raeume backen Pfuetzen, Regen/Ringe zeichnen ohne Konsolenfehler (Screenshot 08-context-rain)
  *   - Herz-Items: Long-Term Support +1 sofort, +1 je 2 Etagen tiefer (hoechstens 3 dazu); Swap File nimmt Herzen
  *     bei voller HP, 2 Herzen im Swap = +1 Container (auch Ueberlauf eines halb genutzten Herzens), nach 3 Containern
  *     wieder normal; Electron App +2 und Tempo -0.15; Reserved Instances nur im Shop fuer 30; Graceful Degradation
@@ -1881,6 +1884,51 @@ const URL = 'file://' + path.join(ROOT, 'index.html').replace(/\\/g, '/') + '?se
     return out;
   });
   problems.push(...lateProblems);
+
+  // --- The Context Limit: Regen-Stimmung (rein kosmetisch) ---
+  const rainSetup = await page.evaluate(() => {
+    const out = [];
+    const g = BOTA.game;
+    const rainy = BOTA.FLOOR_THEMES.filter((t) => t.ambient === 'rain').map((t) => t.key);
+    if (rainy.join() !== 'context') out.push('ambient rain auf: ' + rainy.join());
+    window.__rainD0 = g.depth;
+    const ev = [];
+    const offs = ['ambientWhisper', 'ambientThunder'].map((n) => BOTA.bus.on(n, (x) => ev.push({ n, text: x.text })));
+    try {
+      // Andere Etage: nichts
+      g.enterFloor(10); g.setState('play');
+      for (let i = 0; i < 120; i++) g.updateAmbience(1);
+      if (ev.length || g.ambience) out.push('Stimmung auf Etage 10: ' + ev.length + ' Events');
+      // The Context Limit: Fluestern (Text aus CONTEXT_WHISPERS) und Wetterleuchten, Run-RNG unberuehrt
+      g.enterFloor(11); g.setState('play');
+      const cell = [...g.floor.cells.values()].find((c) => c.type === 'normal');
+      g.teleport(cell.room);
+      BOTA.debug.god(true);
+      const st = g.rng.state;
+      const fx0 = g.room.effects.length;
+      for (let i = 0; i < 120; i++) g.updateAmbience(1);
+      if (g.rng.state !== st) out.push('Stimmung zieht aus dem Run-RNG');
+      const wh = ev.filter((x) => x.n === 'ambientWhisper');
+      if (wh.length < 10) out.push('Context Limit: nur ' + wh.length + ' Fluestern in 120 s');
+      if (wh.some((x) => !BOTA.TEXT.CONTEXT_WHISPERS.includes(x.text))) out.push('Fluestern mit fremdem Text');
+      if (!ev.some((x) => x.n === 'ambientThunder')) out.push('Context Limit: kein Wetterleuchten in 120 s');
+      if (!(g.room.effects.length > fx0) || !g.room.effects.some((f) => typeof f.text === 'string' && f.order)) out.push('Fluestern erscheint nicht als Effekt');
+      g.ambience.whisper = 0.01;
+    } finally {
+      for (const off of offs) off();
+    }
+    return out;
+  });
+  problems.push(...rainSetup);
+  await page.waitForTimeout(600);
+  await shot('08-context-rain');
+  problems.push(...await page.evaluate(() => {
+    const out = [];
+    const g = BOTA.game;
+    if (!Array.isArray(g.room.puddles)) out.push('Context Limit: Raum ohne Pfuetzen-Liste nach dem Zeichnen');
+    g.enterFloor(window.__rainD0); g.setState('play');
+    return out;
+  }));
 
   // --- Rogue Agent (ab Etage 7): haelt Abstand, Salven nur nach Gluehen; zwei 3er-Faecher oder drei Einzelschuesse ---
   const rogueProblems = await page.evaluate(() => {

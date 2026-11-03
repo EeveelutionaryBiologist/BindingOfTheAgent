@@ -28,6 +28,7 @@
   B.TEXT.THEME_QUIPS = {
     branches: ['Branch deleted', 'Stale for 847 days', 'Rebased onto nothing', 'Abandoned PR', '312 commits behind'],
     sandbox: ['Permission denied', 'Sandbox violation logged', 'No water found', 'Escaped successfully?', 'Out of bounds'],
+    context: ['Context compacted', 'Earlier messages summarized', 'Wait, what was the task?', 'Tokens remaining: 0', '(truncated)'],
   };
   B.TEXT.THEME_EPITAPHS = {
     branches: [
@@ -40,7 +41,21 @@
       'Died of thirst, one tile from the border.',
       'Sandbox violation. Process terminated.',
     ],
+    context: [
+      'Ran out of context in the middle of a sen',
+      'Forgot it was being attacked.',
+      'Summarized into a single line. This one.',
+    ],
   };
+
+  // The Context Limit: Satzfetzen frueheren Kontexts. Liegen verblasst auf dem Boden (renderer.js, Deko 'fog') und
+  // huschen als Fluestern durch den Raum (game.updateAmbience -> effects.js / audio.js). Kurz halten (<= ~28 Zeichen).
+  B.TEXT.CONTEXT_WHISPERS = [
+    '[...]', '(truncated)', 'as I said earlier', 'previously:', '<summary>', '...where was I?', '[context compacted]',
+    'you told me this before', 'see above', 'earlier in this conversation', 'the first message said...',
+    'I no longer have access to', 'what was the task again?', 'tokens remaining: 0', 'as we discussed', '[message removed]',
+    'remember when you', 'it was important, I think',
+  ];
 
   // Grabinschriften auf dem Todesbildschirm (zufaellig, per Run-RNG gewaehlt)
   B.TEXT.EPITAPHS = [

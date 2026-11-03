@@ -475,6 +475,35 @@
      * ('hearts' | 'items' | 'stats' | 'minimap'; gezeichnet in hud.js). Laeuft schon eine Stoerung,
      * wird nur ihr Timer neu gestartet (kein Stapeln, kein neuer Bereich). Die Wahl laeuft ueber game.rng.
      */
+    /**
+     * Stimmung der Etage, rein kosmetisch (nur auf Themen mit ambient 'rain', also The Context Limit): alle 4–9 s
+     * huscht ein Satzfetzen als Fluestern durch den Raum ('ambientWhisper'), alle 25–55 s wetterleuchtet es
+     * ('ambientThunder'). Effekte und Audio hoeren nur auf diese Events. Bewusst Math.random statt game.rng:
+     * Die Stimmung darf das Run-RNG nie anfassen, sonst waeren Seeds nicht mehr reproduzierbar.
+     */
+    updateAmbience(dt) {
+      const theme = B.themeFor ? B.themeFor(this.depth) : null;
+      if (!theme || theme.ambient !== 'rain') { this.ambience = null; return; }
+      const a = this.ambience || (this.ambience = { whisper: 2 + Math.random() * 3, thunder: 15 + Math.random() * 20 });
+      a.whisper -= dt;
+      a.thunder -= dt;
+      if (a.whisper <= 0) {
+        a.whisper = 4 + Math.random() * 5;
+        const list = (B.TEXT && B.TEXT.CONTEXT_WHISPERS) || [];
+        const text = list[Math.floor(Math.random() * list.length)];
+        const I = B.C.INNER, p = this.player;
+        let x = I.x0 + 110 + Math.random() * (I.x1 - I.x0 - 220);
+        let y = I.y0 + 40 + Math.random() * (I.y1 - I.y0 - 80);
+        // Nicht direkt auf den Spieler fluestern (dort lenkt es nur ab): an die Raummitte spiegeln
+        if (p && Math.hypot(x - p.x, y - p.y) < 130) { x = ROOM_W - x; y = ROOM_H - y; }
+        if (text) B.bus.emit('ambientWhisper', { game: this, text, x, y });
+      }
+      if (a.thunder <= 0) {
+        a.thunder = 25 + Math.random() * 30;
+        B.bus.emit('ambientThunder', { game: this });
+      }
+    }
+
     glitchHud(seconds) {
       const dur = Math.max(0.5, Math.min(30, +seconds || 7));
       if (this.hudGlitch) {
@@ -669,6 +698,7 @@
 
       this.runStats.time += dt;
       if (this.hudGlitch && (this.hudGlitch.t -= dt) <= 0) this.hudGlitch = null;
+      this.updateAmbience(dt);
       if (this.pipeCooldown > 0) this.pipeCooldown -= dt;
       p.update(dt, this);
 

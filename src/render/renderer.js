@@ -11,6 +11,9 @@
  *      Steuerungshinweise im Startraum von Etage 1. Alles Teure gehoert hierher.
  *  - Pro Frame: Tueren (animiert: Fluegel schliessen/oeffnen sich), Schatten, Entities, Projektile,
  *      Effekte, danach (nur einmal pro Frame, ohne Screen-Shake) Vignette + optionale Dunkelheit.
+ *  - Stimmung je Thema (theme.ambient / theme.wallDecor): Gluehwuermchen (branches), Steppenlaeufer (sandbox),
+ *      Regen (context: Pfuetzen + Wasserspuren gebacken, Regenringe unter den Entities, Platzregen ueber dem Raum
+ *      ohne Screen-Shake). Zeit aus performance.now(), Orte per tileNoise: nie Math.random im Frame, nie game.rng.
  *  - Etagenwechsel: Iris-Blende auf den Spieler.
  *
  * Kachel-Sprites (aus sprites-core.js): tile_rock (3 Frames), tile_block, tile_pit, tile_spikes.
@@ -582,8 +585,28 @@
         break;
       }
       case 'fog': {
+        // Pfuetzen (The Context Limit regnet seit 2026-11-03): dunkle, unregelmaessige Wasserflaechen mit hellem
+        // Rand. Die Positionen merkt sich der Raum (room.puddles, reine Optik), damit dort Regenringe landen.
+        room.puddles = [];
+        if (theme.ambient === 'rain') {
+          const n = 2 + Math.floor(rnd() * 3);
+          for (let i = 0; i < n; i++) {
+            const p = decoPos(room, rnd, 30);
+            if (!p) continue;
+            const rx = 22 + rnd() * 18, ry = 8 + rnd() * 5;
+            g.fillStyle = 'rgba(8,14,26,0.34)';
+            g.beginPath(); g.ellipse(p.x, p.y, rx, ry, 0, 0, Math.PI * 2); g.fill();
+            g.beginPath(); g.ellipse(p.x + rx * 0.45, p.y + ry * 0.3, rx * 0.6, ry * 0.8, 0, 0, Math.PI * 2); g.fill();
+            g.strokeStyle = 'rgba(170,200,240,0.16)';
+            g.lineWidth = 2;
+            g.beginPath(); g.ellipse(p.x, p.y, rx - 3, ry - 2, 0, Math.PI * 1.05, Math.PI * 1.7); g.stroke();
+            g.fillStyle = 'rgba(190,215,250,0.08)';
+            g.fillRect(p.x - rx * 0.4, p.y - 2, rx * 0.5, 2);
+            room.puddles.push({ x: p.x, y: p.y, rx, ry });
+          }
+        }
         // Verblassende Erinnerungen an frueheren Kontext
-        const lines = ['[...]', '(truncated)', 'as I said earlier', 'previously:', '<summary>', '...where was I?', '[context compacted]'];
+        const lines = (B.TEXT && B.TEXT.CONTEXT_WHISPERS) || ['[...]', '(truncated)', 'previously:'];
         g.textAlign = 'center'; g.textBaseline = 'middle';
         for (let i = 0; i < 5; i++) {
           const p = decoPos(room, rnd, 24);
@@ -805,6 +828,106 @@
    * Efeu (Forgotten Branches): Ranken haengen von der oberen Mauerkrone, kleinere Buesche an den
    * Seitenwaenden. Deterministisch pro Raum; Tueroeffnungen bleiben frei.
    */
+  /**
+   * Wasserspuren an den Waenden (The Context Limit): senkrechte nasse Streifen mit hellem Glanz und einem Tropfen
+   * am Ende, auf der oberen Wand dichter als an den Seiten. Deterministisch pro Raum (tileNoise), wird mitgebacken.
+   */
+  function drawWallStreaks(g, room) {
+    const salt = room.cell ? room.cell.x * 41 + room.cell.y * 23 : 0;
+    const streak = (x, y0, len, k) => {
+      g.fillStyle = 'rgba(0,0,0,0.18)';
+      g.fillRect(x + 1, y0, 2, len);
+      g.fillStyle = 'rgba(140,175,225,' + (0.12 + 0.1 * tileNoise(k, salt, 73)) + ')';
+      g.fillRect(x, y0, 1, len);
+      g.fillStyle = 'rgba(170,200,240,0.28)';
+      g.fillRect(x - 1, y0 + len, 3, 3);
+    };
+    // Obere Wand: von der Kante herunter
+    for (let i = 0; i < 26; i++) {
+      const x = 10 + tileNoise(i, salt, 71) * (ROOM_W - 20);
+      if (Math.abs(x - ROOM_W / 2) < TILE * 0.7) continue;   // Tuerbereich frei
+      streak(Math.round(x), 4 + Math.round(tileNoise(i, salt, 72) * 10), 14 + Math.round(tileNoise(salt, i, 74) * 34), i);
+    }
+    // Seitenwaende: kurze Laeufe an der Innenkante
+    for (let i = 0; i < 18; i++) {
+      const left = i % 2 === 0;
+      const y = TILE + tileNoise(i, salt, 75) * (ROOM_H - 2 * TILE - 40);
+      if (Math.abs(y - ROOM_H / 2) < TILE * 0.8) continue;
+      const x = left ? 18 + Math.round(tileNoise(i, salt, 76) * 34) : ROOM_W - 20 - Math.round(tileNoise(i, salt, 76) * 34);
+      streak(x, Math.round(y), 10 + Math.round(tileNoise(salt, i, 77) * 26), i + 40);
+    }
+  }
+
+  /**
+   * Regenringe auf dem Boden (The Context Limit): ~12 gleichzeitige Tropfen-Einschlaege, bevorzugt in den Pfuetzen
+   * (room.puddles), sonst auf freien Bodenkacheln. Nur Optik; Zeit aus performance.now(), Orte per tileNoise.
+   */
+  function drawRipples(ctx, room) {
+    const t = performance.now() / 1000;
+    const salt = room.cell ? room.cell.x * 19 + room.cell.y * 11 : 0;
+    const puddles = room.puddles || [];
+    ctx.save();
+    ctx.lineWidth = 1.5;
+    for (let i = 0; i < 12; i++) {
+      const period = 0.9 + tileNoise(i, salt, 81) * 0.6;
+      const ph = t / period + tileNoise(salt, i, 82);
+      const cyc = Math.floor(ph), k = ph - cyc;          // k: 0..1 Lebenslauf dieses Rings
+      if (k > 0.75) continue;
+      const kk = k / 0.75;
+      let x, y, big = 1;
+      if (puddles.length && tileNoise(i, cyc, salt + 83) < 0.55) {
+        const pd = puddles[Math.floor(tileNoise(cyc, i, salt + 84) * puddles.length)];
+        const a = tileNoise(i, cyc, salt + 85) * Math.PI * 2, d = tileNoise(cyc, i, salt + 86) * 0.6;
+        x = pd.x + Math.cos(a) * pd.rx * d; y = pd.y + Math.sin(a) * pd.ry * d; big = 1.4;
+      } else {
+        x = TILE + 8 + tileNoise(i, cyc, salt + 87) * (ROOM_W - 2 * TILE - 16);
+        y = TILE + 8 + tileNoise(cyc, i, salt + 88) * (ROOM_H - 2 * TILE - 16);
+        const c = Math.floor(x / TILE), r = Math.floor(y / TILE);
+        if (room.tileAt(c, r) !== T.FLOOR) continue;
+      }
+      ctx.strokeStyle = 'rgba(190,215,250,' + (0.32 * (1 - kk)) + ')';
+      ctx.beginPath();
+      ctx.ellipse(x, y, (2 + 10 * kk) * big, (1 + 4 * kk) * big, 0, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  /**
+   * Platzregen (The Context Limit): kalter Grauschleier und zwei Schichten schraeger Regenstriche (fern: kurz und
+   * blass, nah: laenger und heller), im Bildschirmraum ueber dem Raum, ohne Screen-Shake. Duenn und blass genug,
+   * dass Kugeln und Telegraphen lesbar bleiben. Nur Optik; jeder Strich ist eine Funktion von Index und Zeit.
+   */
+  const RAIN_LAYERS = [
+    { n: 120, speed: 520, len: 10, width: 1, alpha: 0.15, slant: 0.22 },
+    { n: 64, speed: 820, len: 22, width: 1.5, alpha: 0.25, slant: 0.26 },
+  ];
+  function drawRain(ctx) {
+    const t = performance.now() / 1000;
+    ctx.save();
+    ctx.fillStyle = 'rgba(26,36,54,0.12)';
+    ctx.fillRect(0, 0, ROOM_W, ROOM_H);
+    ctx.strokeStyle = '#a9c4e8';
+    ctx.lineCap = 'round';
+    RAIN_LAYERS.forEach((L, li) => {
+      ctx.globalAlpha = L.alpha;
+      ctx.lineWidth = L.width;
+      ctx.beginPath();
+      const span = ROOM_H + L.len;
+      for (let i = 0; i < L.n; i++) {
+        const sp = L.speed * (0.85 + 0.3 * tileNoise(i, li, 91));
+        const y = ((t * sp + tileNoise(li, i, 92) * span) % span) - L.len;
+        // waagerecht mitwandern (Wind), am Rand umbrechen
+        let x = (tileNoise(i, li, 93) * (ROOM_W + 80) + y * L.slant) % (ROOM_W + 80) - 40;
+        if (x < -40) x += ROOM_W + 80;
+        ctx.moveTo(x, y);
+        ctx.lineTo(x + L.len * L.slant, y + L.len);
+      }
+      ctx.stroke();
+    });
+    ctx.restore();
+  }
+
   function drawIvy(g, room) {
     const salt = room.cell ? room.cell.x * 31 + room.cell.y * 17 : 0;
     const cols = ['#4f7a30', '#6f9a3c', '#3e6426', '#86ad4a'];
@@ -1145,6 +1268,7 @@
 
     drawWalls(g, theme, room);
     if (theme.wallDecor === 'ivy') drawIvy(g, room);
+    if (theme.wallDecor === 'rain') drawWallStreaks(g, room);
 
     // Hindernisse (nach den Waenden, damit Wand-Schatten darunter liegen)
     for (let r = 1; r < ROWS - 1; r++) {
@@ -1186,6 +1310,7 @@
     for (const dir of Object.keys(room.doors)) drawDoor(ctx, room, dir, room.doors[dir], theme, k);
 
     drawProps(ctx, room);
+    if (theme.ambient === 'rain') drawRipples(ctx, room);
 
     const list = [];
     for (const p of room.pickups) list.push(p);
@@ -1413,6 +1538,7 @@
       const theme = B.themeFor(game.depth);
       ctx.translate(0, HUD_H);
       if (game.state !== 'roomTransition') drawDarkness(ctx, game, theme);
+      if (theme.ambient === 'rain') drawRain(ctx);
       ctx.drawImage(getVignette(theme), 0, 0, ROOM_W, ROOM_H);
       ctx.restore();
 
