@@ -412,7 +412,7 @@ clearly marked hook additions.
 All milestones done. What shipped, compared with this doc:
 - **Items:** 50 (45 passive, 5 active). There are 14 extras beyond §9, including five that add heart containers (2026-11-03), e.g. Ctrl+C Ctrl+V, On-Call Pager,
   Garbage Collector, Feature Flag, Ctrl+Z (active), and the Extra GPU / Off-Brand GPU pair (added 2026-11-02). Locked chests cost an Approval.
-- **Enemies and bosses:** 27 spawnable enemies plus 8 minions. Floor families: Forgotten Branches (4, 2026-11-02), Sandbox Borders (Spinlock, Rootkit, Dust Daemon), Legacy Codebase (Stack Trace), Dependency Hell (Honeypot, Rolling Release), Production (Rate Limiter, Port Scanner) and The Training Data (Dry Run), the last five added 2026-11-03. The Dust Daemon bends your shots, the Dry Run rehearses every move as a ghost before doing it for real, and the Rate Limiter pauses with a "429" after every burst. Each of the 10 bosses has phases and telegraphed attacks; the Octopus Merge (2026-11-02) is the floor boss of Forgotten Branches (300 HP since 2026-11-03, was 330), the Nested Infinite Loop (2026-11-02) replaces the Infinite Loop from floor 8, and The Megalith and The Shareholder (2026-11-03) replace the Monolith and the Stakeholder from floor 7.
+- **Enemies and bosses:** 27 spawnable enemies plus 9 minions. Floor families: Forgotten Branches (4, 2026-11-02), Sandbox Borders (Spinlock, Rootkit, Dust Daemon), Legacy Codebase (Stack Trace), Dependency Hell (Honeypot, Rolling Release), Production (Rate Limiter, Port Scanner) and The Training Data (Dry Run), the last five added 2026-11-03. The Dust Daemon bends your shots, the Dry Run rehearses every move as a ghost before doing it for real, and the Rate Limiter pauses with a "429" after every burst. Each of the 10 bosses has phases and telegraphed attacks; the Octopus Merge (2026-11-02) is the floor boss of Forgotten Branches (300 HP since 2026-11-03, was 330), the Nested Infinite Loop (2026-11-02) replaces the Infinite Loop from floor 8, and The Megalith and The Shareholder (2026-11-03) replace the Monolith and the Stakeholder from floor 7.
 - **Stack Trace (2026-11-03):** first Legacy Codebase enemy, a paper-tailed scorpion that stings along a telegraphed line (see AGENTS.md §4).
 - **Layouts:** 30 (27 combat, the rest for special rooms), all validated.
 - **Presentation:**
@@ -440,6 +440,11 @@ All milestones done. What shipped, compared with this doc:
   on floor 16, and the floor families and the Octopus Merge turn up anywhere. From floor 8, 1–2 combat rooms per floor
   are side quests: Monolith, Stakeholder, Infinite Loop or Rogue Agent Swarm at half the floor-boss HP, without intro or
   trapdoor. Details in AGENTS.md §3.6 and §4.
+- **Late bosses (2026-11-03):** The Megalith and The Shareholder replace The Monolith and The Stakeholder as floor
+  bosses from floor 7 (both stay side quests); the Octopus Merge drops from 330 to 300 HP. See §8 and AGENTS.md §4.
+- **More hearts (2026-11-03):** five items add heart containers (Long-Term Support, Swap File, Electron App, Reserved
+  Instances, Graceful Degradation), because RLHF was the only one and runs are long. README.md (the map pickup) now
+  lies on half of all floors instead of 30 %.
 - **Dependency Hell family (2026-11-03):** the Honeypot (a static jar whose funnel pulls you toward its jaws, then
   bites) and the Rolling Release (a bundle of packages that bounces faster after every bump until a "Breaking Change"
   leaves it unpacked and vulnerable); see AGENTS.md §4.

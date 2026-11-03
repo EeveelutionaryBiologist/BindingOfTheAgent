@@ -103,6 +103,10 @@ Live state is under `BOTA.game` (`.player`, `.room`, `.floor`, `.depth`, `.state
   pedestal;
 - breakable objects use the floor's kinds, stay off spawn points, door fronts and the centre, never cut a room in two,
   and break from player shots and explosions but not from enemy shots;
+- the heart items (on a fresh player): Long-Term Support gives +1 at once and +1 every 2 floors down (at most 3
+  more), Swap File takes hearts at full health and turns every 2 banked hearts (overflow included) into a container,
+  up to 3, then stops taking them; Electron App +2 and speed −0.15, Reserved Instances is shop-only at 30, Graceful
+  Degradation +2 with −0.2 damage per missing full heart; without Swap File hearts at full health stay on the floor;
 - the Off-Brand GPU turns about 12 % of shots into duds that deal no damage, and the GPU prices are 30¢ / 20¢;
 - the Forgotten Branches family (see §4):
   - **Stale Branch** appears only on its floor (before floor 8), ages through its leaf stages, speeds up, counts up its counter,
@@ -466,7 +470,7 @@ The previous floor's boss is excluded, and bosses already met count `weight · t
     `prop_{crate,bush,package,carton}` (frame 1 = damaged)
   - `item_<id>`, `pickup_<type>`, `pedestal`, `trapdoor`, `bomb`, `familiar_duck`, `orbital_test`
   - `enemy_<id>`, `boss_<id>`
-  - **Count:** about 165 sprites. All of them are original pixel art written as ASCII in code.
+  - **Count:** about 170 sprites. All of them are original pixel art written as ASCII in code.
 
 ### 3.11 Event bus (who emits → who listens)
 Payloads usually include `game, x, y` and often `color`.
