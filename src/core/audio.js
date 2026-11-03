@@ -428,6 +428,25 @@
     },
   });
   Object.assign(RATE, { whisper: 1, thunder: 5 });
+
+  // Context-Familie (2026-11-03): Tropfen (Treffer), nasses Papier faellt in sich zusammen (Tod), Gurgeln (Warnton)
+  Object.assign(SOUNDS, {
+    dripHit() {
+      voice({ f: 1400 * rnd(0.9, 1.1), f2: 500, dur: 0.06, type: 'sine', vol: 0.06 });
+      noise({ dur: 0.04, vol: 0.04, filter: 'bandpass', f: 2800, q: 2 });
+    },
+    soggyDeath() {
+      noise({ dur: 0.3, vol: 0.07, filter: 'lowpass', f: 1400, f2: 300 });
+      voice({ f: 220, f2: 90, dur: 0.18, type: 'sine', vol: 0.09 });
+      voice({ f: 900, f2: 300, dur: 0.08, type: 'sine', vol: 0.04, delay: 0.12 });
+    },
+    gurgle() {
+      for (let i = 0; i < 5; i++) voice({ f: rnd(160, 320), f2: rnd(300, 520), dur: 0.07, type: 'sine', vol: 0.05, delay: i * 0.08 });
+      noise({ dur: 0.45, vol: 0.03, filter: 'lowpass', f: 700 });
+    },
+  });
+  Object.assign(RATE, { dripHit: 0.04, soggyDeath: 0.03, gurgle: 0.3 });
+  SPAMMY.dripHit = true;
   SPAMMY.coinDrop = true;
 
   // ===========================================================================
@@ -688,6 +707,8 @@
   };
   // Legacy Codebase (Stack Trace): Plastik-Klack, reissendes Papier, Nadeldrucker als Warnton (eigener Block)
   FAMILY_SOUNDS.legacy = { hit: 'legacyHit', death: 'legacyDeath', windup: 'dotMatrix' };
+  // The Context Limit: Tropfen, nasses Papier, Gurgeln als Warnton
+  FAMILY_SOUNDS.context = { hit: 'dripHit', death: 'soggyDeath', windup: 'gurgle' };
   const famSound = (e, kind) => {
     const fam = e && e.enemy && e.enemy.def && FAMILY_SOUNDS[e.enemy.def.family];
     return (fam && fam[kind]) || null;

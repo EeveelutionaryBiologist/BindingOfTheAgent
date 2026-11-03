@@ -583,6 +583,22 @@
   };
 
   // ---------------------------------------------------------------------------
+  // ---------------------------------------------------------------------------
+  // The Context Limit family (family: 'context', themeOnly: ['context']; Verhalten in entities/enemies-context.js)
+  // ---------------------------------------------------------------------------
+
+  // ---- Context-Familie: Slot 1 (Overflow Buffer) ----
+  // [[SLOT overflow_buffer]]
+  // ---- Ende Slot 1 ----
+
+  // ---- Context-Familie: Slot 2 (Summarizer) ----
+  // [[SLOT summarizer]]
+  // ---- Ende Slot 2 ----
+
+  // ---- Context-Familie: Slot 3 (Lost in the Middle) ----
+  // [[SLOT lost_in_the_middle]]
+  // ---- Ende Slot 3 ----
+
   // Minions (spawn: false) — entstehen nur durch andere Gegner oder Bosse
   // ---------------------------------------------------------------------------
 

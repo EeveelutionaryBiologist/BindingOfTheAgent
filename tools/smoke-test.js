@@ -1930,6 +1930,18 @@ const URL = 'file://' + path.join(ROOT, 'index.html').replace(/\\/g, '/') + '?se
     return out;
   }));
 
+  // ---- Context-Familie: Slot 1 (Overflow Buffer) ----
+  // [[SLOT overflow_buffer]]
+  // ---- Ende Slot 1 ----
+
+  // ---- Context-Familie: Slot 2 (Summarizer) ----
+  // [[SLOT summarizer]]
+  // ---- Ende Slot 2 ----
+
+  // ---- Context-Familie: Slot 3 (Lost in the Middle) ----
+  // [[SLOT lost_in_the_middle]]
+  // ---- Ende Slot 3 ----
+
   // --- Rogue Agent (ab Etage 7): haelt Abstand, Salven nur nach Gluehen; zwei 3er-Faecher oder drei Einzelschuesse ---
   const rogueProblems = await page.evaluate(() => {
     const out = [];

@@ -620,6 +620,19 @@
   // Legacy Codebase (Stack Trace): alter Staub statt Funken, beim Tod flattert Endlospapier davon.
   // Eigener Block (nachtraeglich eingetragen), damit parallele Familien-Erweiterungen sich nicht in die Quere kommen.
   const LEGACY_PAPER = ['#eef0e2', '#a6cf98', '#d8dccb'];
+  // The Context Limit: Wasserspritzer und aufgeweichte Papierfetzen
+  FAMILY_FX.context = {
+    hit(e) {
+      FX.burst(e.game, e.x, e.y, '#ffffff', 2, 220, { streak: true, lifeMin: 0.08, lifeMax: 0.16, sizeMin: 3, sizeMax: 4 });
+      FX.burst(e.game, e.x, e.y, '#9ec5ff', 4, 150, { vary: true, lifeMin: 0.15, lifeMax: 0.35, sizeMin: 2, sizeMax: 4 });
+    },
+    death(e) {
+      FX.flash(e.game, e.x, e.y, 20, '#e6f0ff', 0.08);
+      FX.ring(e.game, e.x, e.y, 44, '#9ec5ff', 0.35, 4);
+      FX.burst(e.game, e.x, e.y, '#9ec5ff', 14, 240, { vary: true, lifeMin: 0.25, lifeMax: 0.55, drag: 5 });
+      FX.debris(e.game, e.x, e.y, 5, ['#d8d2c2', '#a39b88', '#6f86a6'], 4);
+    },
+  };
   FAMILY_FX.legacy = {
     hit(e) {
       FX.burst(e.game, e.x, e.y, '#ffffff', 2, 240, { streak: true, lifeMin: 0.08, lifeMax: 0.16, sizeMin: 3, sizeMax: 4 });
