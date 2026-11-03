@@ -431,6 +431,12 @@ All milestones done. What shipped, compared with this doc:
 - **Floor themes for spawns (2026-11-02):** enemies and bosses can be weighted per floor theme (`themes`) or limited
   to certain themes (`themeOnly`), so a floor like Forgotten Branches can get its own enemy family. Details in
   AGENTS.md §4. First users: Stale Branch, Detached HEAD, Cherry-Pick and Orphan Commit, which only appear on Forgotten Branches.
+- **Floor rosters, cacophony and side quests (2026-11-03):** every generic enemy has home floors (`home`); elsewhere it
+  spawns at a fifth of its odds, so floors 1–7 each have their own crowd (Zombie Process and Deprecation Warning now
+  start on floor 2, for Legacy Codebase). From floor 8 the floor identity fades step by step until everything mixes
+  on floor 16, and the floor families and the Octopus Merge turn up anywhere. From floor 8, 1–2 combat rooms per floor
+  are side quests: Monolith, Stakeholder, Infinite Loop or Rogue Agent Swarm at half the floor-boss HP, without intro or
+  trapdoor. Details in AGENTS.md §3.6 and §4.
 
 ## 14. Stretch goals
 Gamepad support · procedural chiptune loop · seed entry on the title screen · trinkets · curse rooms

@@ -10,8 +10,20 @@ The Backlog again, floor 14 is Forgotten Branches again, and so on. Repeated flo
 card ("The Backlog II").
 
 **Depth vs. theme.** Difficulty follows the **depth** (floor number), never the theme: enemy unlocks, room budgets, HP
-scaling and boss pools all go by depth. The theme decides the look, the music, the breakable objects and a few
-theme-specific extras (marked *Gameplay* below).
+scaling and boss pools all go by depth. The theme decides the look, the music, the breakable objects, which enemies
+are common there, and a few theme-specific extras (marked *Gameplay* below).
+
+**Who lives where.** On floors 1–7 every enemy has one or more home floors. At home it spawns at full odds;
+elsewhere it still turns up, but at only a fifth of its usual odds. Each floor's residents are listed under
+*Gameplay, enemies* below. The floor families (Forgotten Branches, Sandbox Borders) live only on their own floor.
+
+**Floor 8 and deeper: everything at once.** From floor 8 the floor identity fades. The odds of every enemy that is
+rare or absent on a floor are raised toward normal (a quarter of the way on floor 8, about a tenth more per floor,
+completely from floor 16). The floor families now turn up on every floor, more and more often, and the Octopus Merge
+can be the floor boss anywhere (at most as likely as a regular boss). The home floors still get their bonus (for example
+Deprecation Warnings on Sandbox Borders). Some combat rooms on these floors also hold a **side quest**: one of the early
+bosses (The Monolith, The Stakeholder, The Infinite Loop or the Rogue Agent Swarm) at half the floor boss's HP, in an
+open arena, without the intro card or the trapdoor. There's one on floors 8 and 9 and one or two from floor 10.
 
 **What a theme controls** (`B.FLOOR_THEMES` in `src/data/palette.js`, names in `B.TEXT.FLOORS` in `src/data/text.js`):
 - **Colours:** floor checkerboard, walls, doors, an accent colour (floor card, HUD floor name, minimap frame), a soft
@@ -76,6 +88,8 @@ amber shots, so check contrast with screenshots before settling on a bright pale
   blue, green) and paper scraps on the floor. Accent: coral `#d97757` (the avatar's colour).
 - **Breakables:** crates in 60 % of combat rooms, up to 3 per room.
 - **Music:** D dorian, 104 bpm, square lead.
+- **Gameplay, enemies:** gentle on purpose: only Bugs, Null Pointers and Memory Leaks (plus the occasional
+  Hallucination).
 
 ### 2. Legacy Codebase
 
@@ -87,6 +101,8 @@ amber shots, so check contrast with screenshots before settling on a bright pale
   steel blue `#7fb0c9`.
 - **Breakables:** crates in 65 % of combat rooms, up to 3 per room.
 - **Music:** A minor, 92 bpm, triangle lead.
+- **Gameplay, enemies:** the old-code crowd: Bugs, Null Pointers, Spaghetti Code, Jira Tickets, Zombie Processes and
+  Deprecation Warnings (the last two arrive here a floor earlier than they used to).
 
 ### 3. Forgotten Branches
 
@@ -100,8 +116,9 @@ amber shots, so check contrast with screenshots before settling on a bright pale
 - **Breakables:** bushes in 80 % of combat rooms, up to 4 per room.
 - **Music:** G dorian, 98 bpm, triangle lead, with an occasional bird call (never during the boss fight).
 - **Gameplay, maps:** branchier, with at least 7 dead ends per floor instead of 3 (`gen.minDeadEnds`).
-- **Gameplay, enemies:** an own family found only here: Stale Branch, Detached HEAD, Cherry-Pick and the Orphan
-  Commit (see the enemies list). They share a woody look, leaf effects and wood-knock sounds.
+- **Gameplay, enemies:** an own family found only here (until floor 8): Stale Branch, Detached HEAD, Cherry-Pick and
+  the Orphan Commit (see the enemies list). They share a woody look, leaf effects and wood-knock sounds. Merge
+  Conflicts are at home here too. Together they make up about three quarters of the enemies on floor 3.
 - **Gameplay, boss:** the Octopus Merge, about 52 % on floor 3 and 41 % on floors 14, 25, … on a first visit.
 - **Extra text:** room-clear quips ("Branch deleted", "Stale for 847 days", "Rebased onto nothing", …) and epitaphs
   ("Died on a branch nobody remembers.", …) mixed into the general lists.
@@ -116,6 +133,8 @@ amber shots, so check contrast with screenshots before settling on a bright pale
   all floors (orange). Accent: amber `#f0a03c`.
 - **Breakables:** packages and cartons in 70 % of combat rooms, up to 4 per room.
 - **Music:** B phrygian, 128 bpm, sawtooth lead.
+- **Gameplay, enemies:** things that multiply and won't stay dead: Memory Leaks, Scope Creep, Zombie Processes and
+  Race Conditions.
 
 ### 5. Production
 
@@ -127,6 +146,8 @@ amber shots, so check contrast with screenshots before settling on a bright pale
   stripes in front of the doors and cables across the floor. Accent: signal red `#e05a4f`.
 - **Breakables:** packages and cartons in 70 % of combat rooms, up to 4 per room.
 - **Music:** A harmonic minor, 138 bpm, square lead.
+- **Gameplay, enemies:** everything that breaks at runtime: Race Conditions, Graphics Glitches, Flaky Tests, Jira
+  Tickets, Merge Conflicts and Null Pointers.
 
 ### 6. Sandbox Borders
 
@@ -141,9 +162,9 @@ amber shots, so check contrast with screenshots before settling on a bright pale
   fences with barbed wire where blocks line up, striped concrete barriers where they stand alone.
 - **Gameplay, cacti:** half of the rocks in combat rooms are cacti instead. They are solid like rocks but prick you
   on contact (half a heart and a push back); bombs blow them up. Never right in front of a door.
-- **Gameplay, enemies:** an own family found only here, the Spinlock (a coiled desert snake that lunges) and the
-  Rootkit (burrows under the sand and pops up next to you). Deprecation Warnings are 2.5× as common, and
-  Hallucinations twice as likely (mirages).
+- **Gameplay, enemies:** an own family found only here (until floor 8), the Spinlock (a coiled desert snake that
+  lunges) and the Rootkit (burrows under the sand and pops up next to you). Deprecation Warnings live here too and
+  are 2.5× as common, and Hallucinations twice as likely (mirages).
 - **Breakables:** sandcastles in 75 % of combat rooms, up to 4 per room; when damaged, a tower collapses.
 - **Music:** D phrygian, 100 bpm, triangle lead.
 - **Extra text:** room-clear quips ("Permission denied", "Sandbox violation logged", "No water found", …) and
@@ -159,6 +180,8 @@ amber shots, so check contrast with screenshots before settling on a bright pale
   "training data": `0`, `1`, `{`, `}`, `;`, `+1`, `lol`, `?!`, `tl;dr`, `nan`, … Accent: lime `#8bc34a`.
 - **Breakables:** cartons and crates in 70 % of combat rooms, up to 4 per room.
 - **Music:** E major, 116 bpm, triangle lead.
+- **Gameplay, enemies:** what the model learned from: Rogue Agents (they debut here and are 1.5× as common),
+  Spaghetti Code, Flaky Tests and Deprecation Warnings (outdated docs). Hallucinations are 1.5× as likely.
 
 ### 8. The Latent Space
 
@@ -170,6 +193,7 @@ amber shots, so check contrast with screenshots before settling on a bright pale
   `#a78bfa`.
 - **Breakables:** bushes and packages in 75 % of combat rooms, up to 4 per room.
 - **Music:** C lydian, 96 bpm, sine lead.
+- **Gameplay:** the first floor where everything mixes (see "Floor 8 and deeper" above), and the first side quest.
 
 ### 9. Undefined Behavior
 

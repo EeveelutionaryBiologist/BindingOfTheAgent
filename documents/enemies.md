@@ -17,29 +17,46 @@ For comparison, the player has 3 hearts at the start and moves at 240 px/s; enem
 ## Enemies
 
 HP is the floor-1 value. "First floor" is the earliest floor where an enemy can appear in normal rooms.
-Some enemies belong to one floor theme and only appear there; floor themes repeat every 11 floors, so
-"Forgotten Branches" means floors 3, 14, 25 and so on.
+Some enemies belong to one floor theme and only appear there (until floor 8, see below); floor themes repeat every
+11 floors, so "Forgotten Branches" means floors 3, 14, 25 and so on.
+
+**Where they live.** Every enemy has one or more home floors. At home it spawns at its full odds; on other floors
+it still turns up, but at only a fifth of its usual odds. That gives each of the first seven floors its own crowd:
+
+| Floor | Mostly meets |
+|---|---|
+| 1 The Backlog | Bug, Null Pointer, Memory Leak |
+| 2 Legacy Codebase | Bug, Null Pointer, Spaghetti Code, Jira Ticket, Zombie Process, Deprecation Warning |
+| 3 Forgotten Branches | Merge Conflict and the Forgotten Branches family |
+| 4 Dependency Hell | Memory Leak, Scope Creep, Zombie Process, Race Condition |
+| 5 Production | Race Condition, Graphics Glitch, Flaky Test, Jira Ticket, Merge Conflict, Null Pointer |
+| 6 Sandbox Borders | Deprecation Warning (2.5×) and the Sandbox Borders family |
+| 7 The Training Data | Rogue Agent (1.5×), Spaghetti Code, Flaky Test, Deprecation Warning |
+
+The Hallucination can turn up anywhere. **From floor 8** the floors stop having their own crowd: every enemy's odds
+move toward normal (a quarter of the way on floor 8, about a tenth more per floor, all the way from floor 16), so
+everything you've met so far turns up together, the floor families included.
 
 | | Name | First floor | HP | Behaviour | Flavour text |
 |---|---|---|---|---|---|
 | ![Bug](images/enemy_bug.png) | **Bug** `bug` | 1 | 8 | Wanders around slowly. Gets rarer on deeper floors | It's not a bug, it's a feature. A feature with mandibles. |
 | ![Null Pointer](images/enemy_null_pointer.png) | **Null Pointer** `null_pointer` | 1 | 5 | Flies straight at you, fast but fragile | Points at nothing. Charges at you anyway. |
 | ![Memory Leak](images/enemy_memory_leak.png) | **Memory Leak** `memory_leak` | 1 | 14 | Chases you slowly and grows the longer it lives. Splits into 2 Leaklets when killed | Gets bigger the longer you ignore it. |
-| ![Hallucination](images/enemy_hallucination.png) | **Hallucination** `hallucination` | 1 | 6 | Disguised as a Credit, Half Heart or Approval until you get within about 120 px or a bomb goes off nearby, then chases you fast. Real pickups of the same kinds lie around in some combat rooms too, so you can't tell them apart by looks. 10 % chance per combat room (+1 % per floor, max 25 %) to appear on top of the normal enemies (max 1); twice that on Sandbox Borders (mirages), still at most 25 % | Looked real. Was, in fact, not real. |
+| ![Hallucination](images/enemy_hallucination.png) | **Hallucination** `hallucination` | 1 | 6 | Disguised as a Credit, Half Heart or Approval until you get within about 120 px or a bomb goes off nearby, then chases you fast. Real pickups of the same kinds lie around in some combat rooms too, so you can't tell them apart by looks. 10 % chance per combat room (+1 % per floor, max 25 %) to appear on top of the normal enemies (max 1); twice that on Sandbox Borders (mirages) and 1.5× on The Training Data, still at most 25 % | Looked real. Was, in fact, not real. |
 | ![Flaky Test](images/enemy_flaky_test.png) | **Flaky Test** `flaky_test` | 2 | 10 | Fades out and teleports 170–400 px away from you, then fires one aimed shot. Can't be hit while faded | Passes on my machine. |
 | ![Merge Conflict](images/enemy_merge_conflict.png) | **Merge Conflict** `merge_conflict` | 2 | 18 | When lined up with you horizontally or vertically, winds up for 0.5 s and dashes. Max 3 per room | <<<<<<< HEAD |
 | ![Jira Ticket](images/enemy_jira_ticket.png) | **Jira Ticket** `jira_ticket` | 2 | 18 | Stationary turret: a 4-way burst every 1.7 s, alternating + and × directions. Max 2 per room | Priority: Blocker. Assignee: you. |
 | ![Spaghetti Code](images/enemy_spaghetti_code.png) | **Spaghetti Code** `spaghetti_code` | 2 | 14 | Wanders and fires a 3-shot spread every 2.5 s | Nobody knows where it starts. Or ends. |
 | ![Race Condition](images/enemy_race_condition.png) | **Race Condition** `race_condition` | 2 | 6 | Always comes in pairs; zigzags erratically and sometimes sprints. Max 4 per room | Sometimes it hits first. Sometimes you do. Sometimes both. |
 | ![Graphics Glitch](images/enemy_graphics_glitch.png) | **Graphics Glitch** `graphics_glitch` | 2 | 10 | Flickers in place, then jumps 1–3 tiles in a straight line (a faint copy shows where it will land). Usually jumps toward you. When it touches you, it scrambles one part of the top bar for 7 s: hearts, active item, stats or minimap. Max 2 per room | Is it supposed to look like this...? |
-| ![Deprecation Warning](images/enemy_deprecation_warning.png) | **Deprecation Warning** `deprecation_warning` | 3 | 12 | Flies in circles around you at a distance (160–220 px) and fires an aimed shot every 2.4 s. Max 3 per room. 2.5× as common on Sandbox Borders | Will be removed in a future release. Not this one. |
-| ![Zombie Process](images/enemy_zombie_process.png) | **Zombie Process** `zombie_process` | 3 | 14 | Chases you. When killed, it lies down for 1.8 s and gets back up once with half its HP, angrier | `kill -9` recommended. |
+| ![Deprecation Warning](images/enemy_deprecation_warning.png) | **Deprecation Warning** `deprecation_warning` | 2 | 12 | Flies in circles around you at a distance (160–220 px) and fires an aimed shot every 2.4 s. Max 3 per room. 2.5× as common on Sandbox Borders | Will be removed in a future release. Not this one. |
+| ![Zombie Process](images/enemy_zombie_process.png) | **Zombie Process** `zombie_process` | 2 | 14 | Chases you. When killed, it lies down for 1.8 s and gets back up once with half its HP, angrier | `kill -9` recommended. |
 | ![Scope Creep](images/enemy_scope_creep.png) | **Scope Creep** `scope_creep` | 4 | 10 | Slowly grows (up to 1.9× size and 1.6× HP). Once big enough, fires a ring of shots every 3.6 s. Max 2 per room | Just one more small feature. |
 | ![Rogue Agent](images/boss_rogue_agent_a.png) | **Rogue Agent** `rogue_agent` | 7 | 16 | A single member of the Rogue Agent Swarm, escaped from the sandbox (looks like one of the four Swarm agents). Runs around quickly and keeps 200–320 px away from you, strafing to the side. After a green glow it fires either two 3-shot fans in a row or three quick single shots at you. Max 2 per room | Same weights, different goals. Escaped the sandbox and is in no hurry to go back. |
 
 ### Forgotten Branches family
 
-These only appear on Forgotten Branches floors. They share a woody look with leaf colours, rustle and knock
+These only appear on Forgotten Branches floors until floor 8; from there on they turn up anywhere. They share a woody look with leaf colours, rustle and knock
 instead of clicking when hit, and shed leaves when they take damage.
 
 | | Name | First floor | HP | Behaviour | Flavour text |
@@ -51,7 +68,7 @@ instead of clicking when hit, and shed leaves when they take damage.
 
 ### Sandbox Borders family
 
-These only appear on Sandbox Borders floors. Dark bodies with light sand patterns (so they stand out on the sand),
+These only appear on Sandbox Borders floors until floor 8; from there on they turn up anywhere. Dark bodies with light sand patterns (so they stand out on the sand),
 sand bursts and dry crunching sounds when hit.
 
 | | Name | First floor | HP | Behaviour | Flavour text |
@@ -83,11 +100,18 @@ Branches): its own boss, the Octopus Merge, at about 52 %; Monolith, Infinite Lo
 Stakeholder 9 %. **Floor 4 and deeper:** Friday Deploy and the Antagonistic Reviewer join: 18 % each, Stakeholder 12 %.
 From **floor 8** the Nested Infinite Loop takes the Infinite Loop's place (same odds).
 On later Forgotten Branches floors (14, 25, …) the Octopus Merge comes back at about 41 %, the other six 10 % each and
-the Stakeholder 7 %. These are the base odds.
+the Stakeholder 7 %. From floor 8 the Octopus Merge can be the boss of any floor (about 5 % on floor 8, rising to
+about 16 % by floor 16). These are the base odds.
 Within a run, the boss of the previous floor never comes again right away, and every boss you've already met counts
 only 1/(1 + times met) as much, so a run sees more different bosses. Every attack has a
 visible warning before it fires (glow, "!", target ring). Beating a boss drops an item, a heart and the trapdoor
 to the next floor.
+
+**Side quests (floor 8 and deeper).** The Monolith, The Stakeholder, The Infinite Loop (even though it's no longer a
+floor boss there) and the Rogue Agent Swarm can also wait in an ordinary combat room: one on floors 8 and 9, one or
+two from floor 10, never the same boss as the floor boss. The room is an open arena, and the boss has half the HP it
+would have as that floor's boss. There's no intro card and no trapdoor; the health bar reads "SIDE QUEST", and
+winning drops an extra pickup on top of the usual room reward.
 
 | | Name | First floor | HP | Attacks | Phase 2 | Intro subtitle |
 |---|---|---|---|---|---|---|

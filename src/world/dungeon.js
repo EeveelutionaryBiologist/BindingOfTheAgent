@@ -13,9 +13,11 @@
  *  8. Ab Tiefe 2 bekommt ein Kampfraum ein garantiertes Approval beim Clearing (assignKeyRoom).
  *  9. Manche Kampfraeume bekommen lose Pickups, die schon beim Betreten herumliegen (assignLooseLoot).
  * 10. Auf ~30 % der Etagen liegt in einem normalen Raum ein README.md, das die Karte aufdeckt (assignReadme).
- * 12. Zerstoerbare Objekte (Kisten, Buesche, ...) je nach Etagen-Thema in normalen Raeumen (assignProps).
  * 11. ~10 % der Kampfraeume hinterlassen beim Clearing ein Rohr (Pipe), das in einen Zufallsraum teleportiert
  *     (assignPipes; Objekt in pickup.js, Sprung in game.pipeWarp).
+ * 12. Ab Etage 8: 1–2 Kampfraeume werden zur Zwischenboss-Begegnung mit offener Arena (assignEncounters).
+ * 13. Zerstoerbare Objekte (Kisten, Buesche, ...) je nach Etagen-Thema in normalen Raeumen (assignProps).
+ * 14. Kakteen aus Felsen, nur auf Themen mit cacti (assignCacti).
  */
 'use strict';
 
@@ -27,6 +29,8 @@
   const DOOR_FRONT = { up: [7, 1], down: [7, ROWS - 2], left: [1, 4], right: [COLS - 2, 4] };
   const README_CHANCE = 0.3; // Anteil der Etagen mit einem README.md (Playtest-Wunsch 2026-10-31)
   const PIPE_CHANCE = 0.1;   // Anteil der Kampfraeume, die beim Clearing ein Rohr hinterlassen (2026-11-01)
+  const ENCOUNTER_TWO_FROM = 10; // ab dieser Tiefe kann es eine zweite Zwischenboss-Begegnung geben ...
+  const ENCOUNTER_TWO_CHANCE = 0.5; // ... mit dieser Chance (Etage 8–9: immer genau eine)
   const DIRS = B.DIRS;
   const DIR_KEYS = ['up', 'down', 'left', 'right'];
 
@@ -43,6 +47,7 @@
       this.start = null;
       this.keyRoom = null; // Zelle mit garantiertem Approval (ab Tiefe 2, siehe assignKeyRoom)
       this.readmeRoom = null; // Zelle mit dem README.md (oder null, siehe assignReadme)
+      this.encounterRooms = []; // Zellen mit Zwischenboss-Begegnung (ab Tiefe 8, siehe assignEncounters)
       this.documented = false; // README.md eingesammelt -> Karte (ohne Geheimraum) sichtbar
       this.generate();
     }
@@ -107,6 +112,7 @@
       this.assignLooseLoot(ordered);
       this.assignReadme(ordered);
       this.assignPipes(ordered);
+      this.assignEncounters(ordered);
       this.assignProps(ordered);
       this.assignCacti(ordered);
     }
@@ -155,7 +161,7 @@
       for (const cell of ordered) {
         const has = rng.chance(cfg.chance || 0);
         const count = rng.int(1, Math.max(1, cfg.max || 3));
-        if (!has || cell.type !== 'normal') continue;
+        if (!has || cell.type !== 'normal' || cell.room.encounterBoss) continue; // Arenen bleiben frei
         const room = cell.room;
         const spawnTiles = new Set(room.spawnPoints.map((p) => Math.floor(p.x / TILE) + ',' + Math.floor(p.y / TILE)));
         const fronts = Object.keys(room.doors).map((dir) => DOOR_FRONT[dir]);
@@ -219,6 +225,56 @@
       for (const cell of ordered) {
         const hit = rng.chance(PIPE_CHANCE);
         if (hit && cell.type === 'normal' && cell.room.plannedEnemies.length) cell.room.hasPipe = true;
+      }
+    }
+
+    /**
+     * Zwischenboss-Begegnungen (ab B.ENCOUNTER_FROM = 8): 1 Raum auf Etage 8–9, ab Etage 10 mit 50 % ein zweiter.
+     * Gewaehlt werden Kampfraeume, bevorzugt nicht neben dem Startraum und nicht neben einer anderen Begegnung.
+     * Der Raum bekommt eine offene Arena (ein 'special'-Layout wie der Boss-Raum, denn die Boss-Verhalten
+     * erwarten freie Flaeche) und keine normalen Gegner mehr; welcher Boss kommt, entscheidet pickEncounterBosses.
+     * Eigener RNG-Strom (':encounter'): Etagen-RNG, Karten und alle anderen Zuweisungen bleiben gleich. Laeuft vor
+     * assignProps, damit keine Objekte in der Arena landen (Schluessel, lose Pickups, README und Rohr duerfen bleiben).
+     */
+    assignEncounters(ordered) {
+      this.encounterRooms = [];
+      if (this.depth < (B.ENCOUNTER_FROM || 8) || !B.ENCOUNTER_BOSSES) return;
+      const rng = new B.RNG(B.hashString(String(this.seed) + ':encounter'));
+      const two = rng.chance(ENCOUNTER_TWO_CHANCE); // immer ziehen -> Ergebnis unabhaengig von der Tiefe stabil
+      const count = this.depth >= ENCOUNTER_TWO_FROM && two ? 2 : 1;
+      const combat = ordered.filter((c) => c.type === 'normal' && c.room.plannedEnemies.length);
+      const arenas = B.LAYOUTS.filter((l) => l.tags.includes('special'));
+      const near = (a, b) => Math.abs(a.x - b.x) + Math.abs(a.y - b.y) <= 1;
+      for (let i = 0; i < count; i++) {
+        const taken = this.encounterRooms;
+        let pool = combat.filter((c) => !taken.includes(c) && c.dist >= 2 && !taken.some((t) => near(t, c)));
+        if (!pool.length) pool = combat.filter((c) => !taken.includes(c));
+        if (!pool.length) break;
+        const cell = rng.pick(pool);
+        cell.room.stampLayout(arenas.length ? rng.weighted(arenas, (l) => l.weight || 1) : null);
+        cell.room.plannedEnemies = [];
+        taken.push(cell);
+      }
+      const bossCell = this.findType('boss');
+      this.pickEncounterBosses(bossCell && bossCell.room.bossId);
+    }
+
+    /**
+     * Bosse fuer die Begegnungs-Raeume waehlen: gleichverteilt aus B.ENCOUNTER_BOSSES, nie der Etagen-Boss
+     * (avoid) und auf einer Etage nie zweimal derselbe. Eigener Strom (':encounter:boss'), daher beliebig oft
+     * wiederholbar: game.assignFloorBoss ruft das mit dem endgueltigen Etagen-Boss erneut auf.
+     */
+    pickEncounterBosses(avoid) {
+      const rooms = this.encounterRooms || [];
+      if (!rooms.length) return;
+      const rng = new B.RNG(B.hashString(String(this.seed) + ':encounter:boss'));
+      const all = B.ENCOUNTER_BOSSES.filter((id) => B.BOSSES[id]);
+      let pool = all.filter((id) => id !== avoid);
+      for (const cell of rooms) {
+        if (!pool.length) pool = all.slice();
+        const id = rng.pick(pool);
+        pool = pool.filter((x) => x !== id);
+        cell.room.encounterBoss = id;
       }
     }
 
