@@ -50,6 +50,11 @@
  *   - Zwischenboss-Begegnungen ab 8: Anzahl je Tiefe, Platzierung, offene Arena, nie der Etagen-Boss; jeder der vier
  *     Bosse durch eine Tuer: kein Intro, HP x ENCOUNTER_HP, agiert, raeumt den Raum, keine Falltuer/Reste
  *   - Themen-Gegner und -Bosse "nur auf ihrer Etage" gilt vor Etage 8 (danach Kakophonie)
+ *   - Dust Daemon / Dry Run: in Tiefe 1–7 nur auf Sandbox Borders bzw. The Training Data; Dust Daemon lenkt
+ *     Spielerschuesse im Drehsinn ab (nicht ausserhalb, nicht erschoepft/eingefroren, keine Gegnerschuesse), gezielte
+ *     Schuesse treffen den Kern immer, Wurf nach Telegraph mit 4 Brocken (einer auf den Spieler), bleibt im Raum;
+ *     Dry Run wiederholt Weg und Schuesse des Geistes exakt delay Ticks spaeter (auch nach Einfrieren/Rueckstoss),
+ *     Ausholen vor jedem Angriff, Geist harmlos, Tempo 165–260, Geist verpufft beim Tod
  *   - Spezialraeume, Pause- und Todesbildschirm rendern
  * Screenshots landen in tools/out/ (nicht einchecken).
  *
@@ -1752,6 +1757,260 @@ const URL = 'file://' + path.join(ROOT, 'index.html').replace(/\\/g, '/') + '?se
       return out;
     }, id));
   }
+
+  // --- Dust Daemon (Sandbox Borders) und Dry Run (The Training Data): nur auf ihrer Etage (Tiefe 1–7);
+  //     Dust Daemon: Wirbel lenkt Spielerschuesse im Drehsinn ab, gezielte Schuesse treffen den Kern immer, ausserhalb /
+  //     erschoepft / eingefroren keine Ablenkung, Wurf erst nach Telegraph, 4 Brocken (einer auf den Spieler);
+  //     Dry Run: Koerper wiederholt Weg und Schuesse des Geistes exakt delay Ticks spaeter, Geist macht keinen
+  //     Schaden, Ausholen vor jedem Angriff, Tempo 165–260, sauberer Tod ---
+  const probeProblems = await page.evaluate(() => {
+    const out = [];
+    const g = BOTA.game, AI = BOTA.AI, DT = 1 / 60;
+    // 1) Heimat-Etagen (nur Tiefe 1–7: ab Tiefe 8 duerfen thematische Gegner auch anderswo auftauchen)
+    const homes = { dust_daemon: 'sandbox', dry_run: 'training' };
+    for (const [id, home] of Object.entries(homes)) {
+      let atHome = 0;
+      for (let d = 1; d <= 7; d++) {
+        const isHome = BOTA.themeKeyAt(d) === home;
+        for (let i = 0; i < 300; i++) {
+          if (!BOTA.rollRoomEnemies(new BOTA.RNG(BOTA.hashString('probe:' + id + d + ':' + i)), d).includes(id)) continue;
+          if (isHome) atHome++;
+          else { out.push(id + ' auf Etage ' + d + ' (' + BOTA.themeKeyAt(d) + ')'); break; }
+        }
+      }
+      if (!atHome) out.push(id + ' taucht auf seiner Etage (' + home + ') nie auf');
+    }
+
+    BOTA.debug.gotoRoom('start'); BOTA.debug.god(true);
+    for (let i = 0; i < 4; i++) BOTA.debug.killAll();
+    g.room.projectiles.length = 0;
+    const p = g.player;
+    const events = [];
+    const offs = ['enemyWindup', 'enemyVanish'].map((n) => BOTA.bus.on(n, (e) => events.push(n + ':' + (e.sound || e.text || ''))));
+    try {
+      // 2) Dust Daemon: Schussablenkung (nur Projektile takten, der Daemon steht still im Modus drift)
+      p.x = 120; p.y = 480;
+      const D = BOTA.debug.spawn('dust_daemon', 480, 288);
+      D.spawnDelay = 0;
+      const S = D.state, P = D.params;
+      if (S.mode !== 'drift' || S.power !== 1 || Math.abs(S.spin) !== 1) out.push('Dust Daemon: Startzustand falsch');
+      /** Spielerschuss von (x, y) in Richtung (dx, dy); fliegt bis zum Ende. Ergebnis: Treffer + Richtungsaenderung */
+      const fire = (x, y, dx, dy, speed, r) => {
+        g.room.projectiles.length = 0;
+        D.hp = D.maxHp;
+        const n = Math.hypot(dx, dy);
+        const pr = g.spawnProjectile({ x, y, vx: (dx / n) * speed, vy: (dy / n) * speed, team: 'player', damage: 0.01, r, range: 900 });
+        const a0 = Math.atan2(pr.vy, pr.vx);
+        for (let i = 0; i < 240 && !pr.dead; i++) pr.update(DT, g);
+        const turn = BOTA.M.angleDiff(a0, Math.atan2(pr.vy, pr.vx));
+        g.room.projectiles.length = 0;
+        return { hit: pr.hitSet.has(D), turn };
+      };
+      // a) Gezielte Schuesse (Bahn < eye am Kern vorbei) treffen IMMER — aus 8 Richtungen, verschiedene Tempi/Groessen,
+      //    von ausserhalb und von innerhalb des Wirbels
+      let missed = 0, aimed = 0;
+      for (let k = 0; k < 8; k++) {
+        const a = (k * Math.PI) / 4 + 0.13;
+        for (const dist of [200, 90]) {
+          for (const lat of [0, -14, 14]) {
+            for (const speed of [240, 480, 770]) {
+              for (const r of [9, 5]) {
+                if (Math.abs(lat) > D.r + r - 2) continue;
+                const ux = -Math.cos(a), uy = -Math.sin(a);          // Flugrichtung (zum Kern)
+                const x = D.x + Math.cos(a) * dist - uy * lat, y = D.y + Math.sin(a) * dist + ux * lat;
+                aimed++;
+                if (!fire(x, y, ux, uy, speed, r).hit) missed++;
+              }
+            }
+          }
+        }
+      }
+      if (missed) out.push('Dust Daemon: ' + missed + ' von ' + aimed + ' gezielten Schuessen verfehlen den Kern');
+      // b) Vorbeifliegende Schuesse werden im Drehsinn abgelenkt (beide Seiten), ausserhalb des Wirbels nie
+      const side = (lat) => fire(D.x - 200, D.y + lat, 1, 0, 480, 9);
+      for (const lat of [-60, 60]) {
+        const r = side(lat);
+        if (!r.hit && (Math.abs(r.turn) < 0.25 || Math.sign(r.turn) !== S.spin)) out.push('Dust Daemon: Schuss mit ' + lat + ' px Abstand nur um ' + r.turn.toFixed(2) + ' rad abgelenkt (Drehsinn ' + S.spin + ')');
+      }
+      if (side(P.swirlR + 15).turn !== 0 || side(-P.swirlR - 15).turn !== 0) out.push('Dust Daemon: lenkt Schuesse ausserhalb des Wirbels ab');
+      // Mit dem Wind geschossene Schuesse werden (bei passendem Abstand) in den Kern getragen
+      let carried = 0;
+      // (Drehsinn +1 dreht einen nach rechts fliegenden Schuss nach unten -> er muss oberhalb des Kerns fliegen)
+      for (let lat = 28; lat <= 90; lat += 4) if (side(-lat * S.spin).hit) carried++;
+      if (!carried) out.push('Dust Daemon: kein Schuss wird vom Wirbel in den Kern getragen');
+      // Gegnerschuesse bleiben unberuehrt
+      {
+        g.room.projectiles.length = 0;
+        const pr = g.spawnProjectile({ x: D.x - 200, y: D.y + 60, vx: 200, vy: 0, team: 'enemy' });
+        for (let i = 0; i < 90 && !pr.dead; i++) pr.update(DT, g);
+        if (pr.vy !== 0) out.push('Dust Daemon: lenkt Gegnerschuesse ab');
+        g.room.projectiles.length = 0;
+      }
+      // eingefroren -> kein Wirbel
+      D.frozen = 5;
+      if (side(60).turn !== 0) out.push('Dust Daemon: lenkt eingefroren ab');
+      D.frozen = 0;
+
+      // c) Wurf: Telegraph (spinup + hold) vor den Schuessen, 4 Brocken, einer zielt auf den Spieler, danach erschoepft
+      p.x = 230; p.y = 380;
+      g.room.projectiles.length = 0;
+      S.cd = 0.01;
+      let tellT = 0, shots = null;
+      for (let i = 0; i < 400; i++) {
+        const before = S.mode;
+        D.update(DT, g);
+        if (S.mode === 'spinup' || S.mode === 'hold') tellT += DT;
+        if (before === 'hold' && S.mode === 'calm') { shots = g.room.projectiles.filter((pr) => pr.team === 'enemy'); break; }
+        if (D.dead) break;
+      }
+      if (!shots) out.push('Dust Daemon: wirft nie');
+      else {
+        if (tellT < P.spinup + P.hold - 0.05) out.push('Dust Daemon: Telegraph nur ' + tellT.toFixed(2) + ' s');
+        if (!events.includes('enemyWindup:gust')) out.push('Dust Daemon: kein Wirbel-Event (enemyWindup gust)');
+        if (shots.length !== P.clods) out.push('Dust Daemon: ' + shots.length + ' statt ' + P.clods + ' Brocken');
+        if (shots.some((pr) => pr.speed < 165 || pr.speed > 260)) out.push('Dust Daemon: Schussgeschwindigkeit ausserhalb 165–260');
+        // Abstand der Wurflinie (Strahl) zum Spieler; einer muss ihn treffen
+        const lineDist = (pr) => {
+          const ux = pr.vx / pr.speed, uy = pr.vy / pr.speed, rx = p.x - pr.x, ry = p.y - pr.y;
+          const along = rx * ux + ry * uy;
+          return along < 0 ? Infinity : Math.abs(rx * uy - ry * ux);
+        };
+        const best = Math.min(...shots.map(lineDist));
+        if (!(best < 14)) out.push('Dust Daemon: kein Brocken zielt auf den Spieler (naechste Linie ' + best.toFixed(1) + ' px)');
+        if (S.power !== 0) out.push('Dust Daemon: nach dem Wurf nicht erschoepft');
+      }
+      g.room.projectiles.length = 0;
+      D.x = 480; D.y = 288;                                 // zurueck in die Mitte (erschoepft steht er still)
+      if (side(60).turn !== 0) out.push('Dust Daemon: lenkt erschoepft trotzdem ab');
+      for (let i = 0; i < Math.ceil((P.calm + P.rebuild) / DT) + 10; i++) { D.update(DT, g); S.cd = 99; }
+      if (S.mode !== 'drift' || S.power !== 1) out.push('Dust Daemon: baut den Wirbel nicht wieder auf (' + S.mode + ', ' + S.power + ')');
+      // d) Treibt 15 s lang und bleibt im Raum
+      let outside = 0;
+      const I = BOTA.C.INNER;
+      for (let i = 0; i < 900; i++) {
+        p.x = 480 + Math.cos(i / 80) * 300; p.y = 288 + Math.sin(i / 60) * 160;
+        D.update(DT, g);
+        if (g.room.projectiles.length > 100) g.room.projectiles.length = 0;
+        if (D.x < I.x0 || D.x > I.x1 || D.y < I.y0 || D.y > I.y1) outside++;
+      }
+      if (outside) out.push('Dust Daemon: ' + outside + ' Ticks ausserhalb des Raums');
+      D.hurt(1e6, g, {});
+      if (!D.dead) out.push('Dust Daemon: stirbt nicht');
+      g.room.projectiles.length = 0;
+      for (let i = 0; i < 4; i++) BOTA.debug.killAll();
+
+      // 3) Dry Run: exakte Wiederholung
+      const R = BOTA.debug.spawn('dry_run', 300, 200);
+      R.spawnDelay = 0;
+      const RS = R.state, RP = R.params, N = RP.delay, start = { x: R.x, y: R.y };
+      const ghost = [], body = [], ghostShots = [], bodyShots = [], modes = [];
+      let tick = 0, dmgOk = true, dashes = 0, sweeps = 0, aimRun = 0, badTell = 0;
+      const origShoot = AI.shoot;
+      AI.shoot = function (game, e, angle, speed, opts) {
+        const pr = origShoot.apply(this, arguments);
+        if (e === R && pr) bodyShots.push({ tick, a: angle, sp: speed, x: pr.x, y: pr.y });
+        return pr;
+      };
+      try {
+        for (let i = 0; i < 1500; i++) {
+          p.x = 480 + Math.cos(i / 90) * 260; p.y = 288 + Math.sin(i / 70) * 150;
+          if (i % 9 === 0) g.room.updateFlow(p.x, p.y);
+          if (i === 500) R.frozen = 0.3;                         // Einfrieren pausiert beide Ebenen
+          if (i === 700) { R.knockback(1, 0, 600); g.explode(R.x + 30, R.y, 60, 0, 'the smoke test'); }   // darf ihn nicht verschieben
+          const active = !(R.frozen > 0);
+          const gm0 = RS.gm;
+          R.update(DT, g);
+          if (!active) continue;
+          ghost.push({ x: RS.g.x, y: RS.g.y });
+          body.push({ x: R.x, y: R.y });
+          const f = RS.queue[RS.queue.length - 1];
+          modes.push(f.m);
+          if (f.shot) ghostShots.push({ tick, a: f.shot.a, sp: f.shot.sp, x: RS.g.x + Math.cos(f.shot.a) * R.r * 0.6, y: RS.g.y + Math.sin(f.shot.a) * R.r * 0.6 });
+          // Telegraph: jeder Angriff des Geistes beginnt nach >= windup Sekunden Ausholen
+          if (RS.gm === 'aim') aimRun++;
+          if (gm0 === 'aim' && (RS.gm === 'dash' || RS.gm === 'sweep')) {
+            if (aimRun * DT < RP.windup - 0.02) badTell++;
+            if (RS.gm === 'dash') dashes++; else sweeps++;
+          }
+          if (RS.gm !== 'aim') aimRun = 0;
+          // Kontaktschaden: 2 nur waehrend des nachgespielten Sturmlaufs
+          const fm = RS.frame && RS.frame.m;
+          if (R.contactDamage !== (fm === 'dash' ? 2 : 1)) dmgOk = false;
+          tick++;
+          if (g.room.projectiles.length > 150) g.room.projectiles.length = 0;
+        }
+      } finally {
+        AI.shoot = origShoot;
+      }
+      let maxDev = 0;
+      for (let k = N; k < body.length; k++) maxDev = Math.max(maxDev, Math.hypot(body[k].x - ghost[k - N].x, body[k].y - ghost[k - N].y));
+      for (let k = 0; k < N; k++) maxDev = Math.max(maxDev, Math.hypot(body[k].x - start.x, body[k].y - start.y));   // wartet am Start
+      if (maxDev > 0.01) out.push('Dry Run: Koerper weicht bis zu ' + maxDev.toFixed(2) + ' px vom Weg des Geistes ab');
+      const travelled = ghost.reduce((acc, q, k) => acc + (k ? Math.hypot(q.x - ghost[k - 1].x, q.y - ghost[k - 1].y) : 0), 0);
+      if (travelled < 500) out.push('Dry Run: Geist bewegt sich kaum (' + Math.round(travelled) + ' px)');
+      if (!dashes || !sweeps) out.push('Dry Run: nicht beide Angriffe gesehen (dash ' + dashes + ', sweep ' + sweeps + ')');
+      if (badTell) out.push('Dry Run: ' + badTell + ' Angriffe ohne volles Ausholen');
+      if (!dmgOk) out.push('Dry Run: Kontaktschaden passt nicht zum nachgespielten Modus');
+      const expect = ghostShots.filter((s) => s.tick + N < tick);
+      if (!expect.length) out.push('Dry Run: Geist schiesst nie');
+      if (bodyShots.length !== expect.length) out.push('Dry Run: ' + bodyShots.length + ' echte Schuesse statt ' + expect.length + ' geprobter');
+      let shotBad = 0;
+      for (let k = 0; k < Math.min(bodyShots.length, expect.length); k++) {
+        const b = bodyShots[k], q = expect[k];
+        if (b.tick !== q.tick + N || Math.abs(BOTA.M.angleDiff(b.a, q.a)) > 1e-9 || b.sp !== q.sp || Math.hypot(b.x - q.x, b.y - q.y) > 0.01) shotBad++;
+      }
+      if (shotBad) out.push('Dry Run: ' + shotBad + ' Schuesse weichen von der Probe ab (Takt/Winkel/Tempo/Ort)');
+      if (bodyShots.some((s) => s.sp < 165 || s.sp > 260)) out.push('Dry Run: Schussgeschwindigkeit ausserhalb 165–260');
+      if (!events.includes('enemyWindup:rehearse') || !events.includes('enemyWindup:replay')) out.push('Dry Run: Ausholen-Events fehlen');
+      // Geist macht keinen Schaden: Spieler steht still, der Geist stuermt (erzwungen) dreimal durch ihn hindurch;
+      // gezaehlt werden nur Ticks, in denen der Geist den Spieler beruehrt und der Koerper weit weg ist
+      g.room.projectiles.length = 0;
+      let ghostHurts = 0, checked = 0;
+      const origHurt = p.hurt;
+      p.hurt = function () { ghostHurts++; return false; };
+      p.x = 480; p.y = 300;
+      g.room.updateFlow(p.x, p.y);
+      try {
+        for (let i = 0; i < 270; i++) {
+          if (i % 90 === 0) {
+            RS.g.x = p.x - 190; RS.g.y = p.y + (i / 90 - 1) * 12;
+            RS.gm = 'aim'; RS.gatk = 'dash'; RS.gaim = Math.atan2(p.y - RS.g.y, p.x - RS.g.x); RS.gt = RP.windup;
+          }
+          g.room.projectiles = g.room.projectiles.filter((pr) => pr.team !== 'enemy');
+          const before = ghostHurts;
+          R.update(DT, g);
+          const touch = Math.hypot(RS.g.x - p.x, RS.g.y - p.y) < R.r + p.r;
+          const far = Math.hypot(R.x - p.x, R.y - p.y) > R.r + p.r + 10;
+          if (touch && far) checked++;
+          else ghostHurts = before;      // Beruehrung durch den Koerper (oder kein Geist-Kontakt) zaehlt hier nicht
+        }
+      } finally {
+        p.hurt = origHurt;
+      }
+      if (checked < 10) out.push('Dry Run: Geist beruehrt den Spieler im Test zu selten (' + checked + ' Ticks)');
+      if (ghostHurts) out.push('Dry Run: Geist verletzt den Spieler (' + ghostHurts + 'x)');
+      // Tod: Geist verpufft, nichts bleibt zurueck
+      R.hurt(1e6, g, {});
+      if (!R.dead || !events.includes('enemyVanish:aborted')) out.push('Dry Run: Tod ohne Verpuffen des Geistes');
+      for (let i = 0; i < 4; i++) BOTA.debug.killAll();
+      g.room.enemies = g.room.enemies.filter((en) => !en.dead);
+      if (g.room.enemies.length) out.push('Dust Daemon/Dry Run: killAll laesst ' + g.room.enemies.length + ' Gegner zurueck');
+      // Beide spawnen auch auf fremden Etagen sauber (Themen sickern ab Tiefe 8 auf alle Etagen)
+      for (const id of ['dust_daemon', 'dry_run']) {
+        const e = BOTA.debug.spawn(id, 480, 288);
+        e.spawnDelay = 0;
+        for (let i = 0; i < 240; i++) e.update(DT, g);
+        if (e.dead || !Number.isFinite(e.x) || !Number.isFinite(e.y)) out.push(id + ': verhaelt sich nach 4 s seltsam');
+      }
+    } finally {
+      for (const off of offs) off();
+      for (let i = 0; i < 4; i++) BOTA.debug.killAll();
+      g.room.projectiles.length = 0;
+      p.invuln = 0;
+    }
+    return out;
+  });
+  problems.push(...probeProblems);
 
   // Mehrfach toedlicher Schaden, weil Items wie "Retry with Backoff" den ersten Tod abfangen
   await page.evaluate(() => {

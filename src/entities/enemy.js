@@ -11,6 +11,8 @@
  *     onLethal(e, game, source) {}, // optional: true zurueckgeben = Tod verhindern (z. B. Zombie Process)
  *     onExplosion(e, game, x, y, radius) {}, // optional: jede Explosion im Raum (game.explode), egal wie nah
  *     onHitPlayer(e, game) {},      // optional: Kontaktschaden hat den Spieler wirklich getroffen
+ *     bendShot(e, shot, dt, game) {}, // optional: darf vx/vy eines SPIELERschusses aendern (jeder Tick, vor
+ *                                   // dessen Bewegung; Aufruf aus projectile.js) — Dust Daemon; deterministisch!
  *     draw(e, ctx, game) {},        // optional — ersetzt das Standard-Sprite-Zeichnen komplett
  *     drawUnder(e, ctx, game) {},   // optional — wird VOR dem Standard-Sprite gezeichnet (Bodenmarker)
  *     drawOver(e, ctx, game) {},    // optional — wird NACH dem Standard-Sprite gezeichnet (Telegraphen)
@@ -32,14 +34,16 @@
  * revive, grow, mimic, zigzag, glitch, stale (Stale Branch), detached_body + detached_tag (Detached HEAD),
  * cherry (Cherry-Pick), orphan (Orphan Commit). stale, detached_*, cherry und orphan gehoeren zur
  * Forgotten-Branches-Familie; spinlock + spinlock_segment (Spinlock) und rootkit (Rootkit) zur Sandbox-Borders-Familie;
- * rogue_agent (einzelnes Swarm-Mitglied, ab Etage 7).
+ * rogue_agent (einzelnes Swarm-Mitglied, ab Etage 7); dust_daemon (Dust Daemon, Sandbox Borders, lenkt Schuesse
+ * ab); dry_run (Dry Run, The Training Data: Geist probt, Koerper wiederholt exakt).
  * Boss-Verhalten (und das Wurm-Segment) stehen in entities/boss.js.
  *
  * Zusaetzliche Bus-Events (nur informativ, z. B. fuer Sound/Effekte): 'enemyRevive' (Zombie steht auf),
  * 'enemyReveal' (Hallucination enttarnt sich), 'enemyShed' (Stale Branch verliert Laub: { colors, count, big }),
  * 'enemyWindup' (Stale Branch zittert vor dem Sprung), 'orphanCaught' (Orphan Commit gefangen: { count }),
  * 'enemyVanish' (Gegner verschwindet ohne Tod, z. B. Garbage Collection: { color, text }), 'enemyBurrow'
- * (Rootkit taucht auf/ab: { up }); 'enemyWindup' darf { sound } tragen (Rassel, Graben); aus boss.js: 'bossPhase', 'bossStomp', 'bossBounce'.
+ * (Rootkit taucht auf/ab: { up }); 'enemyWindup' darf { sound } tragen (Rassel, Graben, Wirbel 'gust',
+ * Probe 'rehearse' / Ernstfall 'replay'); aus boss.js: 'bossPhase', 'bossStomp', 'bossBounce'.
  * 'enemyDeath' kann zusaetzlich { segment: true } tragen (platzende Wurm-Segmente, ohne Kill-Zaehlung).
  *
  * SICHERHEIT: reine Spiellogik, kein DOM-Zugriff (ausser Canvas-Zeichnen), kein eval/innerHTML,
@@ -2525,6 +2529,464 @@
       const sink = s.mode === 'dive' ? 1 - s.t / P.dive : 0;
       B.drawSprite(ctx, 'enemy_rootkit_mound', e.x, e.y + 10, { frame: 1, alpha: e.alpha * 0.9 });
       AI.drawBody(e, ctx, { dy: sink * 14 - 4, alpha: 1 - sink * 0.6, frame: !s.flushed && s.mode === 'up' && s.t > P.up - 0.3 ? 1 : 0 });
+      AI.drawSay(e, ctx);
+    },
+  };
+
+  // ===========================================================================
+  // Sandbox Borders: Dust Daemon ('dust_daemon')
+  // ===========================================================================
+  //
+  // Zustaende (state.mode):
+  //   drift    treibt (Flieger) zu einem Punkt, der langsam auf einem Kreis (orbitR) um den Spieler wandert;
+  //            der Wirbel ist aktiv (state.power 0..1, baut sich nach einem Wurf in rebuild Sekunden wieder auf)
+  //   spinup   Telegraph 1: bleibt stehen, Wirbel dreht schneller, clods ziegelrote Brocken kreisen um ihn, "!"
+  //            ('enemyWindup' mit sound 'gust')
+  //   hold     Telegraph 2: Brocken gleiten an ihre Wurfplaetze und stehen, gestrichelte Wurflinien; einer der
+  //            Plaetze ist so gewaehlt, dass seine Tangente genau durch den Spieler geht (Stand bei hold-Beginn)
+  //   calm     Brocken tangential geschleudert; Wirbel aus (power 0), Spielerschuesse fliegen gerade
+  // Schussablenkung (Hook bendShot, aufgerufen von projectile.js fuer jeden Spielerschuss vor seiner Bewegung):
+  // dreht die Schussrichtung um spin * curve * k * power * (in diesem Tick geflogene px); k faellt linear vom Auge
+  // (1) zum Rand swirlR (0); das Tempo bleibt gleich. Faire Ausnahme: fliegt der Schuss auf den Kern zu und geht
+  // seine GERADE Bahn naeher als eye am Mittelpunkt vorbei (oder ist er schon im Auge), wird er nicht abgelenkt —
+  // gezielte Schuesse treffen also immer. Drehsinn state.spin (+1/-1) pro Exemplar per game.rng; Wirbelboegen,
+  // kreisende Koerner, Brocken und Sprite (gespiegelt) zeigen ihn an. Eingefroren oder beim Spawnen: kein Wirbel.
+  // Das Ablenken ist rein geometrisch (keine Zufallszuege), Seeds bleiben also reproduzierbar.
+
+  const DUST_SHOT = { color: '#c8402c' };   // Ziegelrot: hebt sich vom Sand ab (Wuestenregel)
+
+  /** Brocken-Winkel phi0, dessen tangentialer Wurf (Drehsinn spin) durch den Spieler geht (Spieler im Kreis: radial) */
+  function dustAimAngle(e, p, rho, spin) {
+    const dx = p.x - e.x, dy = p.y - e.y;
+    const D = Math.hypot(dx, dy), alpha = Math.atan2(dy, dx);
+    if (D <= rho + 1) return alpha;
+    return alpha - spin * Math.acos(rho / D);
+  }
+
+  /** Wurfrichtung eines Brockens auf Kreiswinkel phi (Tangente im Drehsinn) */
+  function dustThrowAngle(phi, spin) { return phi + spin * Math.PI / 2; }
+
+  /** Wirbel zeichnen: Schleier mit gestricheltem Rand (Wirkungsradius), Boegen im Drehsinn, kreisende Koerner */
+  function dustDrawSwirl(e, ctx) {
+    const s = e.state, P = e.params;
+    const pw = e.spawnDelay > 0 ? 0 : s.power;
+    if (pw <= 0.02) return;
+    ctx.save();
+    // Wirkungsbereich: zarter dunkler Schleier mit Randlinie
+    ctx.globalAlpha = 0.12 * pw;
+    ctx.fillStyle = '#2a1a0c';
+    ctx.beginPath();
+    ctx.arc(e.x, e.y, P.swirlR, 0, TAU);
+    ctx.fill();
+    ctx.globalAlpha = 0.4 * pw;
+    ctx.strokeStyle = '#2a1a0c';
+    ctx.lineWidth = 2;
+    ctx.setLineDash([4, 10]);
+    ctx.lineDashOffset = -s.phase * 30;
+    ctx.stroke();
+    ctx.setLineDash([]);
+    // Wirbelboegen in drei Ringen (innen schneller), zeigen den Drehsinn
+    ctx.lineCap = 'round';
+    for (let ring = 0; ring < 3; ring++) {
+      const rr = P.eye + 14 + ring * ((P.swirlR - P.eye - 22) / 2);
+      const rot = s.phase * (1.6 - ring * 0.35) + ring * 1.3;
+      ctx.globalAlpha = (0.58 - ring * 0.1) * pw;
+      ctx.strokeStyle = ring === 0 ? '#3a2614' : '#2a1a0c';
+      ctx.lineWidth = 4 - ring;
+      for (let i = 0; i < 3; i++) {
+        const a0 = rot + (i * TAU) / 3;
+        const lead = a0 + s.spin * 0.9;   // vorderes Ende im Drehsinn: dicker Punkt ("Pfeilspitze")
+        ctx.beginPath();
+        ctx.arc(e.x, e.y, rr, Math.min(a0, lead), Math.max(a0, lead));
+        ctx.stroke();
+        ctx.fillStyle = ctx.strokeStyle;
+        ctx.fillRect(Math.round(e.x + Math.cos(lead) * rr) - 3, Math.round(e.y + Math.sin(lead) * rr) - 3, 6, 6);
+      }
+    }
+    // Kreisende Sandkoerner (feste Bahnen, nur Optik)
+    ctx.globalAlpha = 0.7 * pw;
+    for (let i = 0; i < 14; i++) {
+      const rr = P.eye + (P.swirlR - P.eye) * ((i * 0.618) % 1);
+      const a = i * 2.4 + s.phase * (2.4 - (rr / P.swirlR) * 1.6);
+      ctx.fillStyle = i % 3 ? '#3a2614' : '#e8c88a';
+      ctx.fillRect(Math.round(e.x + Math.cos(a) * rr) - 2, Math.round(e.y + Math.sin(a) * rr * 0.9) - 2, 4, 4);
+    }
+    ctx.restore();
+  }
+
+  B.BEHAVIORS.dust_daemon = {
+    init(e, game) {
+      const s = e.state, P = e.params;
+      const rng = game && game.rng;
+      s.mode = 'drift';
+      s.spin = rng && rng.chance(0.5) ? -1 : 1;
+      s.orbA = rng ? rng.angle() : 0;
+      s.cd = rng ? rng.float(P.cdMin, P.cdMax) : 3;
+      s.t = 0;
+      s.power = 1;          // Wirbelstaerke 0..1 (bendShot und Optik)
+      s.phase = 0;          // Drehwinkel der Wirbelboegen (nur Optik, aber deterministisch)
+      s.clodA = 0;          // Winkel des ersten Brockens
+      s.clodFrom = 0;
+      s.clodTo = 0;
+    },
+
+    update(e, dt, game) {
+      const s = e.state, P = e.params, p = game.player;
+      let spinRate = 2.2;
+      switch (s.mode) {
+        case 'drift': {
+          if (s.power < 1) s.power = Math.min(1, s.power + dt / P.rebuild);
+          // Treibpunkt wandert langsam um den Spieler (im Drehsinn), in den Raum geklemmt
+          s.orbA += s.spin * P.orbitSpin * dt;
+          const T = AI.clampToRoom(p.x + Math.cos(s.orbA) * P.orbitR, p.y + Math.sin(s.orbA) * P.orbitR, 40);
+          const dx = T.x - e.x, dy = T.y - e.y, d = Math.hypot(dx, dy);
+          const sp = e.speed * Math.min(1, d / 60);
+          // traege Steuerung + leichtes Schlingern ("treibt", statt zu laufen)
+          const wob = Math.sin(e.t * 1.7) * 0.5;
+          const wx = d > 0.5 ? ((dx - dy * wob) / d) * sp : 0, wy = d > 0.5 ? ((dy + dx * wob) / d) * sp : 0;
+          const k = Math.min(1, 3 * dt);
+          e.vx += (wx - e.vx) * k;
+          e.vy += (wy - e.vy) * k;
+          s.cd -= dt;
+          if (s.cd <= 0 && s.power >= 1 && AI.dist(e, p) < 420) {
+            s.mode = 'spinup';
+            s.t = P.spinup;
+            s.clodA = game.rng.angle();
+            AI.stop(e);
+            B.bus.emit('enemyWindup', { game, enemy: e, x: e.x, y: e.y, sound: 'gust' });
+          }
+          break;
+        }
+        case 'spinup': {
+          AI.stop(e);
+          s.t -= dt;
+          const k = 1 - s.t / P.spinup;
+          spinRate = 2.2 + 6 * k;
+          s.clodA += s.spin * (3 + 6 * k) * dt;
+          if (s.t <= 0) {
+            // Wurfplaetze festlegen: der Platz-Satz (Brocken sind gleichmaessig verteilt, also Winkel modulo
+            // TAU/clods), dessen einer Brocken auf den Spieler zielt — der naechstgelegene, damit sie nur kurz gleiten
+            const step = TAU / P.clods;
+            const delta = B.M.angleDiff(s.clodA, dustAimAngle(e, p, P.clodR, s.spin));
+            s.clodFrom = s.clodA;
+            s.clodTo = s.clodA + delta - Math.round(delta / step) * step;
+            s.mode = 'hold';
+            s.t = P.hold;
+          }
+          break;
+        }
+        case 'hold': {
+          AI.stop(e);
+          spinRate = 8;
+          s.t -= dt;
+          const k = Math.min(1, (P.hold - s.t) / 0.12);
+          s.clodA = s.clodFrom + (s.clodTo - s.clodFrom) * k;
+          if (s.t <= 0) {
+            s.clodA = s.clodTo;
+            const sp = AI.shotSpeed(game, P.shotSpeed);
+            for (let i = 0; i < P.clods; i++) {
+              const phi = s.clodTo + (i * TAU) / P.clods;
+              AI.shoot(game, e, dustThrowAngle(phi, s.spin), sp, Object.assign({
+                x: e.x + Math.cos(phi) * P.clodR, y: e.y + Math.sin(phi) * P.clodR,
+              }, DUST_SHOT));
+            }
+            s.mode = 'calm';
+            s.t = P.calm;
+            s.power = 0;
+          }
+          break;
+        }
+        case 'calm':
+          AI.stop(e);
+          spinRate = 0.6;
+          s.t -= dt;
+          if (s.t <= 0) {
+            s.mode = 'drift';
+            s.cd = AI.cooldown(game, game.rng.float(P.cdMin, P.cdMax));
+          }
+          break;
+      }
+      s.phase += s.spin * spinRate * Math.max(0.15, s.power) * dt;
+    },
+
+    /** Ablenkung eines Spielerschusses (Aufruf aus Projectile.update, siehe Kopfkommentar) */
+    bendShot(e, shot, dt) {
+      const s = e.state, P = e.params;
+      if (!(s.power > 0) || e.frozen > 0 || e.spawnDelay > 0) return;
+      const dx = shot.x - e.x, dy = shot.y - e.y;
+      const d2 = dx * dx + dy * dy;
+      if (d2 >= P.swirlR * P.swirlR) return;
+      const d = Math.sqrt(d2);
+      if (d <= P.eye) return;
+      const sp = Math.hypot(shot.vx, shot.vy);
+      if (sp < 1) return;
+      // Ruhiges Auge: fliegt er auf den Kern zu und trifft seine gerade Bahn das Auge -> unberuehrt lassen
+      if (dx * shot.vx + dy * shot.vy < 0 && Math.abs(dx * shot.vy - dy * shot.vx) / sp < P.eye) return;
+      const k = (P.swirlR - d) / (P.swirlR - P.eye);
+      const ang = s.spin * P.curve * k * s.power * sp * dt;
+      const c = Math.cos(ang), sn = Math.sin(ang);
+      const vx = shot.vx * c - shot.vy * sn;
+      shot.vy = shot.vx * sn + shot.vy * c;
+      shot.vx = vx;
+    },
+
+    draw(e, ctx) {
+      const s = e.state, P = e.params;
+      dustDrawSwirl(e, ctx);
+      const winding = s.mode === 'spinup' || s.mode === 'hold';
+      // Wurflinien (hold): eine pro Brocken, entlang der Tangente; werden zum Wurf hin deutlicher
+      if (s.mode === 'hold') {
+        const k = 1 - s.t / P.hold;
+        for (let i = 0; i < P.clods; i++) {
+          const phi = s.clodTo + (i * TAU) / P.clods, th = dustThrowAngle(phi, s.spin);
+          const x0 = e.x + Math.cos(phi) * P.clodR, y0 = e.y + Math.sin(phi) * P.clodR;
+          ctx.save();
+          ctx.globalAlpha = 0.35 + 0.55 * k;
+          ctx.strokeStyle = '#ff7a5c';
+          ctx.lineWidth = 3;
+          ctx.setLineDash([8, 7]);
+          ctx.beginPath();
+          ctx.moveTo(x0, y0);
+          ctx.lineTo(x0 + Math.cos(th) * 230, y0 + Math.sin(th) * 230);
+          ctx.stroke();
+          ctx.restore();
+        }
+      }
+      // Koerper: leicht schwebend, Frames wechseln schneller, wenn er hochdreht; gespiegelt bei Gegen-Drehsinn
+      const fps = winding ? 18 : s.mode === 'calm' ? 3 : 8;
+      AI.drawBody(e, ctx, {
+        dy: -6 + Math.sin(e.t * 3) * 2,
+        frame: Math.floor(e.t * fps) % 2,
+        flipX: s.spin < 0,
+        alpha: s.mode === 'calm' ? 0.85 : 1,
+      });
+      // Brocken (spinup/hold): kleine ziegelrote Klumpen mit dunkler Kontur
+      if (winding) {
+        for (let i = 0; i < P.clods; i++) {
+          const phi = s.clodA + (i * TAU) / P.clods;
+          const x = Math.round(e.x + Math.cos(phi) * P.clodR), y = Math.round(e.y + Math.sin(phi) * P.clodR);
+          ctx.fillStyle = '#1f140a';
+          ctx.fillRect(x - 6, y - 6, 12, 12);
+          ctx.fillStyle = '#c8402c';
+          ctx.fillRect(x - 4, y - 4, 8, 8);
+          ctx.fillStyle = '#ff8a6a';
+          ctx.fillRect(x - 4, y - 4, 4, 4);
+        }
+        AI.drawMark(ctx, '!', e.x, e.y - e.r - 18, e.t, '#ff4d4d', 22);
+      }
+      AI.drawSay(e, ctx);
+    },
+  };
+
+  // ===========================================================================
+  // The Training Data: Dry Run ('dry_run')
+  // ===========================================================================
+  //
+  // Zwei Ebenen in einem Enemy:
+  //   Geist (state.g, eine B.Entity nur fuer die Kachelkollision — KEIN Enemy, also harmlos und ungreifbar):
+  //     plant und "probt" alles: walk (heran bzw. seitlich), aim (Ausholen, Richtung fest), dash (Sturmlauf),
+  //     sweep (5 Schuesse, die einen Faecher abfahren), rest. Seine Schuesse sind reine Optik (state.gshots).
+  //     Zufall (Angriffsart, Pausen, Seitenwechsel) kommt aus game.rng, aber nur hier, beim Planen.
+  //   Koerper (das Enemy selbst, static/noKnockback/noSeparate): spielt die aufgezeichneten Geist-Frames genau
+  //     params.delay Ticks spaeter ab — gleiche Position, gleicher Modus, Schuesse mit gleichem Winkel und Tempo
+  //     an gleicher Stelle. Deshalb darf ihn nichts verschieben (kein Rueckstoss, keine Abstossung).
+  // Eingefroren/Spawn-Verzoegerung: update laeuft fuer beide nicht -> die Verzoegerung bleibt exakt.
+  // Telegraphen: der Geist selbst (1 s Vorlauf) plus das Ausholen (windup), das der Koerper mitspielt
+  // ('enemyWindup' mit sound 'rehearse' beim Geist und 'replay' beim Koerper). Dash = Kontakt 2, sonst 1.
+  // Stirbt der Koerper, verpufft der Geist ('enemyVanish', Text "aborted").
+
+  const DRY_SHOT = { color: '#ff8a3d' };   // Orange: auf dem gruenen Karopapier gut sichtbar, nicht gruen
+
+  /** Geister-Schuesse weiterbewegen (gleiche Flugregeln wie echte Gegnerschuesse: gerade, Ende an Waenden/Reichweite) */
+  function dryStepGhostShots(s, dt, room) {
+    for (const g of s.gshots) {
+      g.x += g.vx * dt;
+      g.y += g.vy * dt;
+      g.travel += Math.hypot(g.vx, g.vy) * dt;
+      if (g.travel > 700 || room.isSolidAt(g.x, g.y, 'shot', false)) g.dead = true;
+    }
+    s.gshots = s.gshots.filter((g) => !g.dead);
+  }
+
+  B.BEHAVIORS.dry_run = {
+    init(e, game) {
+      const s = e.state, P = e.params;
+      e.static = true;          // Position kommt ausschliesslich aus der Aufzeichnung
+      e.noKnockback = true;
+      e.noSeparate = true;
+      s.g = new B.Entity(e.x, e.y, e.r);
+      s.gm = 'walk';            // Modus des Geistes
+      s.gt = 0;
+      s.gcd = game && game.rng ? game.rng.float(P.cdMin, P.cdMax) : 2;
+      s.gaim = 0;
+      s.gatk = 'dash';
+      s.gn = 0;                 // Schuesse im laufenden Faecher
+      s.gdir = 1;               // Faecher-Richtung (links->rechts oder umgekehrt)
+      s.strafe = 1;
+      s.strafeT = 1.5;
+      s.gbump = false;
+      s.queue = [];             // Geist-Frames, die der Koerper noch abspielen wird (max. delay)
+      s.gshots = [];            // Geister-Schuesse (nur Optik)
+      s.frame = null;           // gerade abgespielter Frame des Koerpers
+      s.said = false;
+    },
+
+    update(e, dt, game) {
+      const s = e.state, P = e.params, p = game.player, room = game.room, g = s.g;
+      // ---------------- Geist: planen und proben ----------------
+      let shot = null;
+      switch (s.gm) {
+        case 'walk': {
+          const d = Math.hypot(p.x - g.x, p.y - g.y);
+          s.strafeT -= dt;
+          if (s.strafeT <= 0 || s.gbump) { s.strafe = -s.strafe; s.strafeT = game.rng.float(1.2, 2.2); }
+          if (d > P.near) {
+            const f = room.flowDir(g.x, g.y, p.x, p.y);
+            g.vx = f.x * e.speed;
+            g.vy = f.y * e.speed;
+          } else {
+            // nah dran: seitlich gehen, zu nah (< near - 60): dabei zurueckweichen, damit die Probe sichtbar bleibt
+            const ax = (p.x - g.x) / Math.max(1, d), ay = (p.y - g.y) / Math.max(1, d);
+            const back = d < P.near - 60 ? -0.8 : 0;
+            const vx = ax * back - ay * s.strafe, vy = ay * back + ax * s.strafe, n = Math.hypot(vx, vy) || 1;
+            g.vx = (vx / n) * e.speed * 0.8;
+            g.vy = (vy / n) * e.speed * 0.8;
+          }
+          s.gcd -= dt;
+          if (s.gcd <= 0 && d < 430 && room.lineOfSight(g.x, g.y, p.x, p.y)) {
+            s.gm = 'aim';
+            s.gt = P.windup;
+            s.gaim = Math.atan2(p.y - g.y, p.x - g.x);           // ab hier fest (beide Telegraphen zeigen sie)
+            s.gatk = d > 150 && game.rng.chance(0.55) ? 'dash' : 'sweep';
+            s.gdir = game.rng.chance(0.5) ? 1 : -1;
+            g.vx = g.vy = 0;
+            B.bus.emit('enemyWindup', { game, enemy: e, x: g.x, y: g.y, sound: 'rehearse' });
+          }
+          break;
+        }
+        case 'aim':
+          g.vx = g.vy = 0;
+          s.gt -= dt;
+          if (s.gt <= 0) { s.gm = s.gatk; s.gt = 0; s.gn = 0; s.gbump = false; }
+          break;
+        case 'dash':
+          g.vx = Math.cos(s.gaim) * P.dashSpeed;
+          g.vy = Math.sin(s.gaim) * P.dashSpeed;
+          s.gt += dt;
+          if (s.gt >= P.dashTime || s.gbump) { s.gm = 'rest'; s.gt = P.rest; g.vx = g.vy = 0; }
+          break;
+        case 'sweep':
+          g.vx = g.vy = 0;
+          s.gt -= dt;
+          if (s.gt <= 0) {
+            const n = P.sweepShots;
+            const a = s.gaim + s.gdir * P.sweepArc * (s.gn / (n - 1) - 0.5);
+            shot = { a, sp: AI.shotSpeed(game, P.shotSpeed) };
+            s.gn++;
+            s.gt = P.sweepGap;
+            if (s.gn >= n) { s.gm = 'rest'; s.gt = P.rest; }
+          }
+          break;
+        case 'rest':
+          g.vx = g.vy = 0;
+          s.gt -= dt;
+          if (s.gt <= 0) { s.gm = 'walk'; s.gcd = AI.cooldown(game, game.rng.float(P.cdMin, P.cdMax)); }
+          break;
+      }
+      s.gbump = g.moveAndCollide(dt, room);
+      dryStepGhostShots(s, dt, room);
+      if (shot) {
+        // Geister-Schuss: gleicher Startpunkt wie AI.shoot (Rand des Koerpers in Schussrichtung)
+        s.gshots.push({
+          x: g.x + Math.cos(shot.a) * (e.r * 0.6), y: g.y + Math.sin(shot.a) * (e.r * 0.6),
+          vx: Math.cos(shot.a) * shot.sp, vy: Math.sin(shot.a) * shot.sp, travel: 0,
+        });
+      }
+      s.queue.push({
+        x: g.x, y: g.y, m: s.gm, atk: s.gatk, a: s.gaim, dir: s.gdir,
+        k: s.gm === 'aim' ? 1 - s.gt / P.windup : 0, shot,
+      });
+
+      // ---------------- Koerper: genau delay Ticks spaeter nachspielen ----------------
+      if (s.queue.length <= P.delay) return;
+      const prev = s.frame;
+      const f = s.queue.shift();
+      s.frame = f;
+      e.x = f.x;
+      e.y = f.y;
+      e.contactDamage = f.m === 'dash' ? 2 : e.def.contactDamage;
+      if (f.m === 'aim' && (!prev || prev.m !== 'aim')) {
+        B.bus.emit('enemyWindup', { game, enemy: e, x: e.x, y: e.y, sound: 'replay' });
+        if (!s.said) { s.said = true; AI.say(e, 'now for real', 1.2, '#ffd27a'); }
+      }
+      if (f.shot) AI.shoot(game, e, f.shot.a, f.shot.sp, DRY_SHOT);
+    },
+
+    onDeath(e, game) {
+      const g = e.state.g;
+      e.state.gshots = [];
+      if (g) B.bus.emit('enemyVanish', { game, enemy: e, x: g.x, y: g.y, color: '#fff3d0', text: 'aborted' });
+    },
+
+    draw(e, ctx) {
+      const s = e.state, P = e.params, g = s.g;
+      const live = e.spawnDelay <= 0;
+      // Geplanter Weg: gepunktete Linie vom Koerper zum Geist (jeder 5. Frame)
+      if (live && s.queue.length) {
+        ctx.save();
+        ctx.fillStyle = '#fff3d0';
+        for (let i = 4; i < s.queue.length; i += 5) {
+          ctx.globalAlpha = 0.18 + 0.27 * (1 - i / s.queue.length);
+          ctx.fillRect(Math.round(s.queue[i].x) - 2, Math.round(s.queue[i].y + e.r * 0.6) - 2, 4, 4);
+        }
+        ctx.restore();
+      }
+      // Telegraph-Zeichnung fuer einen Frame (Geist: blass/weiss, Koerper: orange)
+      const drawTell = (x, y, f, k, col, alpha) => {
+        if (f.atk === 'dash') {
+          const len = P.dashSpeed * P.dashTime;
+          ctx.save();
+          ctx.globalAlpha = alpha * (0.4 + 0.6 * k);
+          ctx.strokeStyle = col;
+          ctx.lineWidth = 3;
+          ctx.setLineDash([10, 8]);
+          ctx.beginPath();
+          ctx.moveTo(x, y);
+          ctx.lineTo(x + Math.cos(f.a) * len, y + Math.sin(f.a) * len);
+          ctx.stroke();
+          ctx.restore();
+        } else {
+          const n = P.sweepShots, angs = [];
+          for (let i = 0; i < n; i++) angs.push(f.a + f.dir * P.sweepArc * (i / (n - 1) - 0.5));
+          AI.drawRays(ctx, x, y, angs, e.r + 4, 60 + 40 * k, alpha * (0.4 + 0.6 * k), col);
+        }
+      };
+      // Geist: weisse, durchscheinende Silhouette (Sprite-Blitzvariante) mit "--dry-run"-Etikett
+      if (live) {
+        const gf = { atk: s.gatk, a: s.gaim, dir: s.gdir };
+        if (s.gm === 'aim') drawTell(g.x, g.y, gf, 1 - s.gt / P.windup, '#f3ece6', 0.6);
+        ctx.save();
+        ctx.strokeStyle = '#f3ece6';
+        ctx.lineWidth = 2;
+        ctx.globalAlpha = 0.55;
+        for (const gs of s.gshots) { ctx.beginPath(); ctx.arc(gs.x, gs.y, 7, 0, TAU); ctx.stroke(); }
+        ctx.restore();
+        const moving = s.gm === 'walk' || s.gm === 'dash';
+        B.drawSprite(ctx, e.def.sprite, g.x, g.y - 4, { flash: true, alpha: 0.38, frame: moving ? Math.floor(e.t * 6) % 2 : 0 });
+        // Etikett nur, wenn der Geist sichtbar vor dem Koerper laeuft (sonst ueberdecken sich Text und Koerper)
+        if (typeof B.text === 'function' && Math.hypot(g.x - e.x, g.y - e.y) > 40) {
+          B.text(ctx, '--dry-run', g.x, g.y - e.r - 22, { size: 12, align: 'center', color: '#f3ece6', alpha: 0.55 });
+        }
+      }
+      // Koerper: spielt den Frame nach (Ausholen = oranges Gluehen + Telegraph + "!")
+      const f = s.frame;
+      if (f && f.m === 'aim') {
+        AI.drawGlow(ctx, e.x, e.y - 4, e.r + 8, f.k, '#ff8a3d');
+        drawTell(e.x, e.y, f, f.k, '#ff7a5c', 1);
+        AI.drawMark(ctx, '!', e.x, e.y - e.r - 14, e.t, '#ff4d4d', 22);
+      }
+      const walking = f && (f.m === 'walk' || f.m === 'dash');
+      AI.drawBody(e, ctx, { dy: -4, frame: walking ? Math.floor(e.t * (f.m === 'dash' ? 12 : 6)) % 2 : 0, flipX: false });
       AI.drawSay(e, ctx);
     },
   };

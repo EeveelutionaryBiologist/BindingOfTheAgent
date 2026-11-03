@@ -120,6 +120,13 @@ Live state is under `BOTA.game` (`.player`, `.room`, `.floor`, `.depth`, `.state
   after its telegraph with a ring of 8 shots, and a bomb flushes it out without the ring;
 - the **Rogue Agent** never rolls before floor 7, keeps its distance, and every volley (two 3-shot fans or three
   single shots) comes after its green glow at 165–260 px/s;
+- the **Dust Daemon** and **Dry Run** roll only on their home floors within depths 1–7 (Sandbox Borders / The Training
+  Data); the Dust Daemon bends player shots in its spin direction (never outside its radius, while exhausted or
+  frozen, or enemy shots), shots aimed at its core always hit, some shots flying with the wind get carried into it,
+  and its throw comes after spin-up + hold with 4 clods (one aimed at the player) at 165–260 px/s; the Dry Run's
+  body repeats the ghost's path and shots exactly `delay` ticks later (same tick offset, angle, speed and start
+  point, even after a freeze, knockback or explosion), every attack has its full windup, the ghost never hurts,
+  and the ghost vanishes when the body dies;
 - the **Nested Infinite Loop** replaces the Infinite Loop from floor 8 (never before, and the Loop never after); it has
   rings of 14 / 9 / 5 parts, only the outermost living ring fires and can be hit, the rings break at 50 % and
   16.67 % (one `bossPhase` each), its shots stay at 165–260 px/s, its parts stay inside the room, and it dies once
@@ -352,10 +359,13 @@ The previous floor's boss is excluded, and bosses already met count `weight · t
   - `split` produces 4 children at half damage. Player shots test `room.enemies`; enemy shots test followers with
     `blocksShots` first, then the player (hitbox 0.7 × r).
   - An enemy marked `intangible` lets shots pass through; one marked `invulnerable` absorbs them.
+  - **Shot fields:** every tick, before moving, a player shot calls the behaviour hook `bendShot(e, shot, dt, game)`
+    of every living enemy in the room that has one (the Dust Daemon's swirl). It may change `vx/vy` and must be
+    deterministic. Enemy shots are never bent.
 - **`Bomb`:** sits in `room.projectiles` with a 1.5 s fuse, then calls `game.explode(…, 110, 30)`. It hurts the player too.
 - **`Enemy`** (`entities/enemy.js`):
   - **Behaviour contract:** `init`, `update`, `afterMove`, `onDeath`, `onLethal`, `onExplosion`, `onHitPlayer`,
-    `draw` / `drawUnder` / `drawOver`. `afterMove` is optional and runs **every** tick after movement and separation,
+    `bendShot` (see Projectile), `draw` / `drawUnder` / `drawOver`. `afterMove` is optional and runs **every** tick after movement and separation,
     even during `spawnDelay` or while frozen (Cherry-Pick enforces its stem leash there).
   - **Common fields:** `e.state` (free scratch space), `e.params`, `spawnDelay` (0.5 s with no action and no contact
     damage), `frozen`.
@@ -423,7 +433,7 @@ The previous floor's boss is excluded, and bosses already met count `weight · t
     `prop_{crate,bush,package,carton}` (frame 1 = damaged)
   - `item_<id>`, `pickup_<type>`, `pedestal`, `trapdoor`, `bomb`, `familiar_duck`, `orbital_test`
   - `enemy_<id>`, `boss_<id>`
-- **Count:** about 117 sprites. All of them are original pixel art written as ASCII in code.
+- **Count:** about 119 sprites. All of them are original pixel art written as ASCII in code.
 
 ### 3.11 Event bus (who emits → who listens)
 Payloads usually include `game, x, y` and often `color`.
@@ -433,9 +443,9 @@ Payloads usually include `game, x, y` and often `color`.
 | `shoot`, `familiarShoot` | player, familiar | audio |
 | `enemyHit`, `enemyDeath` (`boss`, `segment`) | enemy | audio, effects |
 | `enemyReveal`, `enemyRevive` | enemy behaviours | audio, effects |
-| `enemyShed` (`colors, count, big`), `enemyWindup` (`sound`?) | Stale Branch, Spinlock, Rootkit | audio (`rustle`; windup: `sound` if given, else the family's), effects (falling leaves) |
+| `enemyShed` (`colors, count, big`), `enemyWindup` (`sound`?) | Stale Branch, Spinlock, Rootkit, Dust Daemon (`gust`), Dry Run (`rehearse` / `replay`) | audio (`rustle`; windup: `sound` if given, else the family's), effects (falling leaves) |
 | `enemyBurrow` (`up`) | Rootkit | audio (`sandPop`), effects (sand fountain / dust) |
-| `orphanCaught` (`count`), `enemyVanish` (`color, text`) | Orphan Commit | audio (`rescue`, `gcSweep`), effects (sparkles / puff and text) |
+| `orphanCaught` (`count`), `enemyVanish` (`color, text`) | Orphan Commit; Dry Run's ghost on death | audio (`rescue`, `gcSweep`), effects (sparkles / puff and text) |
 | `hudGlitch` (`kind`) | game (`glitchHud`) | audio |
 | `pipeAppear`, `pipeWarp`, `pipeArrive` (`to`) | game | audio, effects |
 | `propHit`, `propBreak` (`kind, color`) | game | audio, effects |
@@ -453,7 +463,7 @@ Rule: audio and effects **only listen**. Game logic never calls them directly, e
 are game state.
 
 ### 3.12 Audio (`core/audio.js`) and effects (`entities/effects.js`)
-- **Audio:** 48 synthesized SFX in total. Every sound has a name; `audio.names()` lists them.
+- **Audio:** 51 synthesized SFX in total. Every sound has a name; `audio.names()` lists them.
   - Bus routing: voices → sfx/music bus → master → compressor.
   - Per-name rate limits (`RATE`) and a 40-voice cap keep it from getting noisy.
   - There is a procedural chiptune loop per floor plus a boss variant. Mute is persisted in storage; there's no
@@ -511,6 +521,8 @@ Item conventions:
 | orphan_commit | orphan | 3, Forgotten Branches only | 6 (bonus spawn, harmless) |
 | spinlock | spinlock (+ 4 `spinlock_segment`) | Sandbox Borders only | 16 |
 | rootkit | rootkit | Sandbox Borders only | 12 |
+| dust_daemon | dust_daemon | Sandbox Borders only | 14 |
+| dry_run | dry_run | 7, The Training Data only | 14 |
 
 The **Rogue Agent** (floor 7+, "outside the box") reuses the Rogue Agent Swarm's four sprites (one per agent, picked
 with `game.rng`) and its green shots. It strafes at 200–320 px and cuts inward for 0.5 s after bumping into
@@ -526,6 +538,19 @@ Rootkit. On that floor Deprecation Warnings also weigh ×2.5 and the Hallucinati
 25 % cap still applies), via `themes: { sandbox: … }` on the existing definitions. Desert enemies must be **dark**
 with a strong outline and fire non-sand colours (brick red), because the sand is the one mid-bright floor.
 The Spinlock places its body segments in `afterMove`, after its head has moved, so the chain never lags a frame.
+The **Dust Daemon** (weight 5, cost 1.8, flying) joined the family on 2026-11-03: its swirl (radius 130) bends player
+shots through the `bendShot` hook (§3.8) by up to 0.008 rad per px flown, fading to 0 at the rim, always in its spin
+direction (`state.spin`, rolled per instance). A shot whose straight path passes within `eye` (26 px) of the core is
+never bent, so aimed shots always land. After 0.8 s spin-up and a 0.35 s hold with dashed throw lines it slings 4
+brick-red clods along their tangents (190 px/s), the first set so that one tangent passes through the player, then
+rests 1.4 s with no swirl and rebuilds it over 0.8 s.
+
+The **Dry Run** (`themeOnly: ['training']`, weight 6, cost 2, 2026-11-03) is a crash-test dummy that plays in two
+layers: a ghost (`state.g`, a plain `B.Entity`, not an enemy, so harmless and intangible) plans and rehearses
+everything with `game.rng`, and the body (`static`, `noKnockback`, `noSeparate`) replays the recorded frames exactly
+`params.delay` = 60 ticks later: position, mode (windup, dash with 2 damage) and shots (angle, speed, start point).
+Nothing may move the body directly, or the replay would no longer match. Freezing pauses both layers. It's not in
+the Sandbox Borders family on purpose: a bright dummy breaks the desert rule above, and that family already has three.
 
 Minions (`spawn: false`): `leaklet`, `microservice`, `loop_segment`, `nested_loop_part`, `detached_head_tag` (Detached HEAD's head),
 `octo_arm` (Octopus Merge arm segment), `spinlock_segment` (Spinlock body; invulnerable, shields the head).
@@ -754,9 +779,9 @@ work again, the same file-ownership split works well.
   - **Bosses:**
     - ~~Octopus Merge~~: done 2026-11-02 (§4).
     - ~~Nested Infinite Loop~~: done 2026-11-02 (§4), as the Infinite Loop's replacement from floor 8.
-  - **More Sandbox Borders enemies** (brainstorm 2026-11-02, not built yet): **Dry Run** (a translucent ghost copy
-    performs every attack first, then the real one repeats it exactly — a built-in telegraph), **Stack Trace**
+  - **More Sandbox Borders enemies** (brainstorm 2026-11-02, not built yet; ~~Dry Run~~ and ~~Dust Daemon~~ done
+    2026-11-03, §4, the Dry Run on The Training Data): **Stack Trace**
     (scorpion whose segmented tail stings at range after a target line), **Rolling Release** (tumbleweed that bounces
     off walls like Friday Deploy, a little faster after every bounce), **Rate Limiter** (walking cactus: three spine
     shots, then a "429" bubble and a forced pause), **Honeypot** (antlion funnel that pulls you toward its jaws),
-    **Dust Daemon** (whirlwind that bends your shots), **Port Scanner** (pops out of fixed holes in sequence).
+    **Port Scanner** (pops out of fixed holes in sequence).

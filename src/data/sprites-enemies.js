@@ -1261,6 +1261,100 @@
     frames: [MOUND, stampRows(MOUND, [[2, 7, 'k'], [3, 7, 'k'], [3, 8, 'k'], [4, 6, 'k'], [4, 9, 'k'], [5, 9, 'k'], [2, 10, 'D']])],
   });
 
+  // Dust Daemon — dunkler Staubteufel (Trichter, oben breit, unten spitz) mit zwei glimmenden roten Augen.
+  // Helle Staubstreifen wandern zwischen den Frames (Drehung); das Verhalten spiegelt das Sprite beim Gegen-Drehsinn.
+  // Zeichen: k Kontur, d dunkler Staub, m mittlerer Staub, l heller Streifen, e Auge, E Augenglanz
+  const DUST_PAL = { k: '#140c06', d: '#2e2014', m: '#4a3624', l: '#7a5c3c', e: '#e8402a', E: '#ffb38a' };
+  B.defineSprite('enemy_dust_daemon', {
+    palette: DUST_PAL, scale: 4,
+    frames: [
+      [
+        '..kkkkkkkkk..',
+        '.kdmmllldmmk.',
+        'kdmmmdddllmmk',
+        'kmllmmmmmmddk',
+        '.kdmEemmEemk.',
+        '.kmmeemmeemk.',
+        '..kddllmmdk..',
+        '..kmmmmdllk..',
+        '...kdllmmk...',
+        '...kmmddk....',
+        '....kdmlk....',
+        '....kmdk.....',
+        '.....kmk.....',
+        '.....kk......',
+      ],
+      [
+        '..kkkkkkkkk..',
+        '.kmmdddllmmk.',
+        'kllmmmmmddmmk',
+        'kmmddllmmmllk',
+        '.kdmEemmEemk.',
+        '.kmmeemmeemk.',
+        '..kllmmddmk..',
+        '..kmddmmmmk..',
+        '...kmmlldk...',
+        '....kddmmk...',
+        '....klmdk....',
+        '.....kdmk....',
+        '.....kmk.....',
+        '......kk.....',
+      ],
+    ],
+  });
+
+  // ===========================================================================
+  // The Training Data: Dry Run
+  // ===========================================================================
+  // Dry Run — Crashtest-Dummy (Probelauf-Puppe): bernsteingelber Gliederkoerper, schwarz-weisse Messmarken am Kopf
+  // und an der Brust, dunkle Gelenke. Bewusst nicht gruen (der Boden von The Training Data ist gruen).
+  // Frame 1: Schritt (ein Bein angehoben, Arme schwingen). Der Geist ist dieses Sprite als weisse Silhouette.
+  // Zeichen: k Kontur, y Koerper, Y Glanz, o Schatten, j Gelenk, w helle Markenviertel (dunkle = k)
+  const DRY_PAL = { k: '#1a1208', y: '#e8b23a', Y: '#f6d27a', o: '#a8741c', j: '#5a3e14', w: '#fff3d0' };
+  B.defineSprite('enemy_dry_run', {
+    palette: DRY_PAL, scale: 4,
+    frames: [
+      [
+        '....kkkk....',
+        '...kYyyyk...',
+        '..kYywkyyk..',
+        '..kywwkkyk..',
+        '..kykkwwyk..',
+        '..kyykwyyk..',
+        '...kyyyok...',
+        '....kjjk....',
+        '.kkkyyyykkk.',
+        'kyykywkykyyk',
+        'kyykwwkkkyyk',
+        'kjjkyyyyokjk',
+        '.kkkoooookk.',
+        '...kyk.kyk..',
+        '...kok.kok..',
+        '...kjk.kjk..',
+        '...kkk.kkk..',
+      ],
+      [
+        '....kkkk....',
+        '...kYyyyk...',
+        '..kYywkyyk..',
+        '..kywwkkyk..',
+        '..kykkwwyk..',
+        '..kyykwyyk..',
+        '...kyyyok...',
+        '....kjjk....',
+        '.kkkyyyykkk.',
+        'kyykywkykjjk',
+        'kyykwwkkkyyk',
+        'kjjkyyyyokyk',
+        '.kkkoooookk.',
+        '...kyk.kyk..',
+        '...kok.kjk..',
+        '...kjk.kkk..',
+        '...kkk......',
+      ],
+    ],
+  });
+
   // ===========================================================================
   // The Nested Infinite Loop (Boss ab Etage 8)
   // ===========================================================================
