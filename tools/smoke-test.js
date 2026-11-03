@@ -44,6 +44,9 @@
  *   - Nested Infinite Loop: ab Etage 8 statt der Infinite Loop; nur der aeussere lebende Ring feuert und ist
  *     greifbar; Ringe zerfallen bei 50 % / 16,67 %; Schuesse 165–260 px/s; Teile bleiben im Raum; ein Boss-Tod
  *   - Rogue Agent: nie vor Etage 7; haelt Abstand; jede Salve nach Gluehen, zwei 3er-Faecher oder drei Einzelschuesse
+ *   - Stack Trace: auf Tiefe 1–7 nur auf Legacy Codebase; Telegraph vor jedem Stich; Stachel 2, Papier 1, Einfalten
+ *     harmlos; Exception nur jenseits der Reichweite (165–260 px/s), verpufft mit ihm; Waende kuerzen den Schwanz;
+ *     Stack-Abbau 5 -> 4 -> 3; killAll laesst nichts zurueck
  *   - Spezialraeume, Pause- und Todesbildschirm rendern
  * Screenshots landen in tools/out/ (nicht einchecken).
  *
@@ -1535,6 +1538,187 @@ const URL = 'file://' + path.join(ROOT, 'index.html').replace(/\\/g, '/') + '?se
     return out;
   });
   problems.push(...rogueProblems);
+
+  // --- Stack Trace (Legacy Codebase): auf Tiefe 1–7 nur dort; Telegraph (Linie folgt, rastet ein) vor jedem Stich;
+  //     Stachel 2, ausgerolltes Papier 1, Einfalten harmlos; Exception nur jenseits der Reichweite (165–260 px/s,
+  //     1 Schaden); Waende begrenzen den Schwanz; Stack-Abbau 5 -> 4 -> 3; Tod raeumt Exceptions ab; killAll ---
+  const stackProblems = await page.evaluate(() => {
+    const out = [];
+    const g = BOTA.game, DT = 1 / 60, I = BOTA.C.INNER;
+    // 1) Spawn: auf Tiefe 1–7 nur auf Legacy Codebase (ab Tiefe 8 duerfen Themen-Gegner auch anderswo auftauchen),
+    //    dort aber wirklich, und hoechstens maxPerRoom pro Raum
+    let onLegacy = 0;
+    for (let d = 1; d <= 7; d++) {
+      const legacy = BOTA.themeKeyAt(d) === 'legacy';
+      let hits = 0, over = 0;
+      for (let i = 0; i < 300; i++) {
+        const n = BOTA.rollRoomEnemies(new BOTA.RNG(BOTA.hashString('stack' + d + ':' + i)), d).filter((x) => x === 'stack_trace').length;
+        hits += n;
+        if (n > BOTA.ENEMIES.stack_trace.maxPerRoom) over++;
+      }
+      if (!legacy && hits) out.push('Stack Trace auf Etage ' + d + ' (' + BOTA.themeKeyAt(d) + ')');
+      if (over) out.push('Stack Trace: mehr als maxPerRoom in ' + over + ' Raeumen auf Etage ' + d);
+      if (legacy) onLegacy += hits;
+    }
+    if (!onLegacy) out.push('Stack Trace: nie auf Legacy Codebase gewuerfelt');
+
+    BOTA.debug.gotoRoom('start'); BOTA.debug.god(false);
+    for (let i = 0; i < 4; i++) BOTA.debug.killAll();
+    g.room.projectiles.length = 0;
+    const p = g.player;
+    // Treffer am Spieler mitschneiden, ohne dass er Schaden nimmt (eigene Eigenschaft ueberdeckt die Methode)
+    const hits = [];
+    let cur = null;
+    p.hurt = function (amount, source) { hits.push({ amount, source, mode: cur ? cur.state.mode : '?' }); return false; };
+    const events = [];
+    const offs = [
+      BOTA.bus.on('enemyWindup', (e) => { if (e.enemy && e.enemy.id === 'stack_trace') events.push('windup'); }),
+      BOTA.bus.on('enemyShed', (e) => { if (e.enemy && e.enemy.id === 'stack_trace') events.push('shed'); }),
+    ];
+    const enemyShots = () => g.room.projectiles.filter((pr) => pr.team === 'enemy' && !pr.dead);
+    const spawn = (x, y) => { const e = BOTA.debug.spawn('stack_trace', x, y); e.spawnDelay = 0; cur = e; return e; };
+    // Laeuft bis zum naechsten 'move' nach einem Stich; misst Telegraph-Dauer und prueft, dass der Schwanz im Raum bleibt
+    const attack = (e, maxSteps) => {
+      const s = e.state, r = { trace: 0, traceAtSting: -1, hitsBefore: hits.length, outside: 0, stung: false };
+      for (let i = 0; i < (maxSteps || 400); i++) {
+        e.frozen = 0;
+        e.update(DT, g);
+        if (s.mode === 'trace') r.trace += DT;
+        if (s.mode === 'sting' && r.traceAtSting < 0) r.traceAtSting = r.trace;
+        // nur der ausgerollte Schwanz zaehlt (eingerollt ragt er als Zeichnung ueber den Koerper hinaus)
+        if (s.pts && s.ext >= 0.25) for (const q of s.pts) if (q.x < I.x0 - 2 || q.x > I.x1 + 2 || q.y < I.y0 - 2 || q.y > I.y1 + 2) r.outside++;
+        if (s.mode === 'sting' || s.mode === 'hold') r.stung = true;
+        if (r.stung && s.mode === 'move') break;
+      }
+      r.hits = hits.slice(r.hitsBefore);
+      return r;
+    };
+    try {
+      const tele = BOTA.ENEMIES.stack_trace.params.track + BOTA.ENEMIES.stack_trace.params.lock;
+      // 2) Stich aus kurzer Distanz: Telegraph, dann Stachel (2); kein Schuss, weil der Spieler in Reichweite steht
+      p.x = 480; p.y = 420;
+      const A = spawn(480, 270);
+      const P = A.params;
+      if (A.state.n !== P.frames) out.push('Stack Trace: startet mit ' + A.state.n + ' statt ' + P.frames + ' Blaettern');
+      A.state.cd = 0.01;
+      events.length = 0;
+      const ra = attack(A);
+      if (!ra.stung) out.push('Stack Trace: sticht nie');
+      else {
+        if (ra.traceAtSting < tele - 0.02) out.push('Stack Trace: Telegraph nur ' + ra.traceAtSting.toFixed(2) + ' s');
+        if (!events.includes('windup')) out.push('Stack Trace: kein Warn-Event vor dem Stich');
+        if (ra.hits.some((h) => h.mode !== 'sting' && h.mode !== 'hold')) out.push('Stack Trace: Schaden ausserhalb von Stich/Liegen (' + ra.hits.map((h) => h.mode).join(',') + ')');
+        if (!ra.hits.length || ra.hits[0].amount !== P.stingDamage || P.stingDamage !== 2) out.push('Stack Trace: Stachel macht ' + (ra.hits[0] ? ra.hits[0].amount : 0) + ' statt 2 Schaden');
+        if (ra.hits.some((h) => h.source !== 'Stack Trace')) out.push('Stack Trace: falsche Schadensquelle');
+        if (enemyShots().length) out.push('Stack Trace: schiesst, obwohl der Spieler in Reichweite steht');
+        if (ra.outside) out.push('Stack Trace: Schwanz verlaesst den Raum');
+      }
+      // 3) Ausgerolltes Papier (nicht der Stachel): halbes Herz; beim Einfalten kein Schaden
+      hits.length = 0;
+      A.x = 480; A.y = 200; A.vx = A.vy = 0;
+      Object.assign(A.state, { mode: 'hold', t: 0.3, ext: 1, dir: Math.PI / 2 });
+      p.x = 480; p.y = 200 + A.r + 8 + 2 * P.spacing;    // genau auf dem dritten Blatt
+      A.update(DT, g);
+      if (!hits.length || hits[0].amount !== 1) out.push('Stack Trace: Papier macht ' + (hits[0] ? hits[0].amount : 0) + ' statt 1 Schaden');
+      hits.length = 0;
+      Object.assign(A.state, { mode: 'retract', t: P.retract, ext0: 1, ext: 1 });
+      for (let i = 0; i < 20; i++) A.update(DT, g);
+      if (hits.length) out.push('Stack Trace: Einfalten macht Schaden');
+      A.hurt(1e6, g, {});
+
+      // 4) Spieler ausser Reichweite: nach dem Telegraph fliegt eine Exception (165–260 px/s, 1 Schaden) entlang
+      //    der Linie weiter; stirbt der Stack Trace, verpufft sie
+      g.room.projectiles.length = 0;
+      p.x = 480; p.y = 470;
+      const B2 = spawn(480, 130);
+      B2.state.cd = 0.01;
+      let bolt = null, traceAtShot = -1, tr = 0;
+      for (let i = 0; i < 400 && !bolt; i++) {
+        B2.frozen = 0;
+        B2.update(DT, g);
+        if (B2.state.mode === 'trace') tr += DT;
+        const sh = enemyShots();
+        if (sh.length) { bolt = sh[0]; traceAtShot = tr; }
+      }
+      if (!bolt) out.push('Stack Trace: keine Exception ueber die Reichweite hinaus');
+      else {
+        if (traceAtShot < tele - 0.02) out.push('Stack Trace: Exception nach nur ' + traceAtShot.toFixed(2) + ' s Telegraph');
+        if (bolt.speed < 165 || bolt.speed > 260) out.push('Stack Trace: Exception mit ' + Math.round(bolt.speed) + ' px/s');
+        if (bolt.damage !== 1) out.push('Stack Trace: Exception macht ' + bolt.damage + ' Schaden');
+        if (Math.abs(Math.atan2(bolt.vy, bolt.vx) - B2.state.dir) > 0.01) out.push('Stack Trace: Exception fliegt nicht entlang der Ziellinie');
+        if (enemyShots().length !== 1) out.push('Stack Trace: ' + enemyShots().length + ' statt 1 Exception');
+        B2.hurt(1e6, g, {});
+        if (!bolt.dead) out.push('Stack Trace: Exception ueberlebt den Tod des Stack Trace');
+      }
+
+      // 5) Wand: Schwanz Richtung Wand wird gekuerzt, bleibt im Raum, wirft keine Exception
+      g.room.projectiles.length = 0;
+      p.x = 700; p.y = 400;
+      const C = spawn(200, 120);
+      Object.assign(C.state, { mode: 'trace', t: P.track, dir: -Math.PI / 2, aimDist: 400 });
+      const rc = attack(C);
+      if (C.state.throws || enemyShots().length) out.push('Stack Trace: Exception trotz Wand');
+      if (rc.outside) out.push('Stack Trace: Schwanz steckt in der Wand');
+      C.hurt(1e6, g, {});
+
+      // 6) Stack-Abbau: 5 Blaetter -> 4 (ab 2/3 HP) -> 3 (ab 1/3 HP), dann nicht weniger; je ein Papier-Event
+      p.x = 800; p.y = 450;
+      const D = spawn(200, 300);
+      D.state.cd = 99;
+      events.length = 0;
+      D.hurt(D.maxHp * 0.34, g, {}); D.update(DT, g);
+      const n1 = D.state.n;
+      D.hurt(D.maxHp * 0.34, g, {}); D.update(DT, g);
+      const n2 = D.state.n;
+      D.hp = 0.2; D.update(DT, g);
+      const n3 = D.state.n;
+      if (n1 !== 4 || n2 !== 3 || n3 !== 3) out.push('Stack Trace: Stack-Abbau ' + [n1, n2, n3].join(' -> ') + ' statt 4 -> 3 -> 3');
+      if (events.filter((x) => x === 'shed').length !== 2) out.push('Stack Trace: ' + events.filter((x) => x === 'shed').length + ' statt 2 Papier-Events');
+      D.hurt(1e6, g, {});
+
+      // 7) Sounds der Familie 'legacy' vorhanden und abspielbar
+      for (const n of ['legacyHit', 'legacyDeath', 'dotMatrix']) {
+        if (!BOTA.audio.names().includes(n)) out.push('Sound fehlt: ' + n);
+        try { BOTA.audio.play(n); } catch (err) { out.push('Sound ' + n + ': ' + err.message); }
+      }
+
+      // 8) killAll mitten im Angriff: nichts bleibt zurueck (keine Gegner, keine Exceptions)
+      g.room.projectiles.length = 0;
+      p.x = 480; p.y = 470;
+      const E1 = spawn(300, 130), E2 = spawn(660, 130);
+      E1.state.cd = E2.state.cd = 0.01;
+      for (let i = 0; i < 70; i++) for (const e of [E1, E2]) { e.frozen = 0; e.update(DT, g); }
+      BOTA.debug.killAll();
+      g.room.enemies = g.room.enemies.filter((en) => !en.dead);
+      if (g.room.enemies.some((en) => en.id === 'stack_trace')) out.push('Stack Trace: killAll laesst Gegner zurueck');
+      if (enemyShots().length) out.push('Stack Trace: killAll laesst Exceptions zurueck');
+    } finally {
+      delete p.hurt;
+      for (const off of offs) off();
+      for (let i = 0; i < 4; i++) BOTA.debug.killAll();
+      g.room.projectiles.length = 0;
+      BOTA.debug.god(true);
+    }
+    return out;
+  });
+  problems.push(...stackProblems);
+  // Optik: Stack Trace auf Legacy Codebase — eingerastete Ziellinie, ausgerollter Schwanz, Ruhe nach Stack-Abbau
+  await page.evaluate(() => {
+    const g = BOTA.game; g.enterFloor(2); g.setState('play');
+    const c = [...g.floor.cells.values()].find((x) => x.type === 'normal');
+    c.room.populated = true; c.room.cleared = true; g.teleport(c.room);
+    for (let i = 0; i < 4; i++) BOTA.debug.killAll();
+    const p = g.player; p.x = 480; p.y = 470;
+    const at = (x, y) => { const q = g.nearestFreePos(x, y); const e = BOTA.debug.spawn('stack_trace', q.x, q.y); e.spawnDelay = 0; return e; };
+    const a = at(250, 200), b = at(700, 200), d = at(820, 430);
+    a.params.lock = 99;   // nur dieses Exemplar (params ist eine Kopie): Ziellinie bleibt eingerastet stehen
+    Object.assign(a.state, { mode: 'trace', t: 0.7, dir: Math.atan2(p.y - a.y, p.x - a.x), aimDist: 400 });
+    Object.assign(b.state, { mode: 'hold', t: 99, ext: 1, dir: Math.atan2(p.y - b.y, p.x - b.x) - 0.4 });
+    d.hp = d.maxHp * 0.5; d.state.cd = 99; d.update(1 / 60, g);
+  });
+  await page.waitForTimeout(250);
+  await shot('15-stack-trace');
+  await page.evaluate(() => { for (let i = 0; i < 4; i++) BOTA.debug.killAll(); BOTA.game.room.projectiles.length = 0; });
 
   // Mehrfach toedlicher Schaden, weil Items wie "Retry with Backoff" den ersten Tod abfangen
   await page.evaluate(() => {

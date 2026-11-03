@@ -59,6 +59,16 @@ sand bursts and dry crunching sounds when hit.
 | ![Spinlock](images/enemy_spinlock.png) | **Spinlock** `spinlock` | 6 (Sandbox Borders only) | 16 | A desert snake coiled into a spinning ring that slowly creeps closer ("busy wait"). Its body blocks your shots; only the head can be hurt as it spins past. Then the rattle sounds, the head turns toward you and a dashed line shows its path, and it lunges along that line for a full heart. Afterwards it lies stretched out for a moment (head exposed) and coils up again. Max 2 per room | Busy-waits in a circle until you are close enough. Then it stops waiting. |
 | ![Rootkit](images/enemy_rootkit.png) | **Rootkit** `rootkit` | 6 (Sandbox Borders only) | 12 | Travels under the sand (a moving mound, even under rocks) and can't be hurt there. Surfaces near you after a warning (the mound shakes, a target ring and "!" appear), popping out with a ring of 8 shots; stays up and hittable for 1.6 s, then dives again. A bomb near the mound flushes it out, stunned for 2 s and without the ring. Max 2 per room | Lives below the surface. Has root. Comes up only to ruin your day. |
 
+### Legacy Codebase family
+
+These only appear on Legacy Codebase floors (floor 2, 13, 24, …). Old beige hardware with amber monochrome eyes,
+so they stand out on the dusty blue-grey stone. Hits puff up dust and click like old plastic; the warning sound is a
+dot-matrix printer.
+
+| | Name | First floor | HP | Behaviour | Flavour text |
+|---|---|---|---|---|---|
+| ![Stack Trace](images/enemy_stack_trace.png) | **Stack Trace** `stack_trace` | 2 (Legacy Codebase only) | 14 | A scorpion built from an old beige computer case. Its tail is a strip of fan-fold printer paper, one sheet per stack frame, with a red stinger on top. It scuttles sideways in short bursts and keeps 110–230 px away. **Trace:** it stops, a dashed amber line follows you for 0.5 s, then locks in (brighter, "!") for 0.35 s while an amber pulse runs up the tail sheet by sheet. Then the paper unfolds along the line in a flash: the stinger hits for a full heart, the unrolled paper for half a heart while it lies there; folding back up is harmless. Walls and rocks stop the tail (it reaches over pits). If you stood beyond its reach when the line locked, the stinger also throws an **uncaught exception**, a single shot that flies on along the dotted part of the line. The stack unwinds as it takes damage: at 2/3 and 1/3 HP the top sheet flies off ("pop()"), so the tail and its reach shrink from 5 sheets to 4 and then 3. When it dies, its exceptions still in flight vanish. Max 2 per room | Traceback (most recent call last): you. |
+
 ### Minions
 
 These are only spawned by other enemies or bosses.

@@ -107,6 +107,11 @@ Live state is under `BOTA.game` (`.player`, `.room`, `.floor`, `.depth`, `.state
   after its telegraph with a ring of 8 shots, and a bomb flushes it out without the ring;
 - the **Rogue Agent** never rolls before floor 7, keeps its distance, and every volley (two 3-shot fans or three
   single shots) comes after its green glow at 165–260 px/s;
+- the **Stack Trace** (Legacy Codebase): on depths 1–7 it only rolls on its floor (at most `maxPerRoom`); every sting
+  comes after the full trace telegraph (≥ `track + lock`) and its windup event; the stinger deals 2, the unrolled
+  paper 1, folding back is harmless; the exception shot (1 damage, 165–260 px/s, along the locked line) only flies
+  when the player stood beyond reach and vanishes when it dies; walls shorten the tail and stop the shot; the stack
+  unwinds 5 → 4 → 3 sheets at 2/3 and 1/3 HP; the `legacy` sounds exist; `killAll` leaves nothing behind;
 - the **Nested Infinite Loop** replaces the Infinite Loop from floor 8 (never before, and the Loop never after); it has
   rings of 14 / 9 / 5 parts, only the outermost living ring fires and can be hit, the rings break at 50 % and
   16.67 % (one `bossPhase` each), its shots stay at 165–260 px/s, its parts stay inside the room, and it dies once
@@ -403,7 +408,7 @@ Payloads usually include `game, x, y` and often `color`.
 | `shoot`, `familiarShoot` | player, familiar | audio |
 | `enemyHit`, `enemyDeath` (`boss`, `segment`) | enemy | audio, effects |
 | `enemyReveal`, `enemyRevive` | enemy behaviours | audio, effects |
-| `enemyShed` (`colors, count, big`), `enemyWindup` (`sound`?) | Stale Branch, Spinlock, Rootkit | audio (`rustle`; windup: `sound` if given, else the family's), effects (falling leaves) |
+| `enemyShed` (`colors, count, big`), `enemyWindup` (`sound`?) | Stale Branch, Spinlock, Rootkit, Stack Trace | audio (`rustle`; windup: `sound` if given, else the family's), effects (falling leaves) |
 | `enemyBurrow` (`up`) | Rootkit | audio (`sandPop`), effects (sand fountain / dust) |
 | `orphanCaught` (`count`), `enemyVanish` (`color, text`) | Orphan Commit | audio (`rescue`, `gcSweep`), effects (sparkles / puff and text) |
 | `hudGlitch` (`kind`) | game (`glitchHud`) | audio |
@@ -432,7 +437,8 @@ are game state.
 - **Effects:** use `B.FX.burst / ring / flash / smoke / debris / sparkles / text / shimmer / tint / leaves / later(game, delay, fn)`.
 - **Enemy families:** an enemy def with `family: 'branches'` gets leafy hit/death effects (`FAMILY_FX` in `effects.js`)
   and sounds (`FAMILY_SOUNDS` in `audio.js`: `leafHit`, `branchDeath`, plus `creak` on windup) instead of the
-  defaults; `family: 'sandbox'` gets sand bursts and dry crunches (`sandHit`, `sandDeath`). It's purely
+  defaults; `family: 'sandbox'` gets sand bursts and dry crunches (`sandHit`, `sandDeath`); `family: 'legacy'` gets dust
+  puffs, fluttering printer paper and old-hardware sounds (`legacyHit`, `legacyDeath`, `dotMatrix` on windup). It's purely
   presentational; a new family needs an entry in both tables.
   Each room holds at most 300 effects; "important" ones (text, rings, flashes) push out the oldest particles.
   Effects use `Math.random` only.
@@ -481,6 +487,7 @@ Item conventions:
 | orphan_commit | orphan | 3, Forgotten Branches only | 6 (bonus spawn, harmless) |
 | spinlock | spinlock (+ 4 `spinlock_segment`) | Sandbox Borders only | 16 |
 | rootkit | rootkit | Sandbox Borders only | 12 |
+| stack_trace | stack_trace | 2, Legacy Codebase only | 14 |
 
 The **Rogue Agent** (floor 7+, "outside the box") reuses the Rogue Agent Swarm's four sprites (one per agent, picked
 with `game.rng`) and its green shots. It strafes at 200–320 px and cuts inward for 0.5 s after bumping into
@@ -496,6 +503,17 @@ Rootkit. On that floor Deprecation Warnings also weigh ×2.5 and the Hallucinati
 25 % cap still applies), via `themes: { sandbox: … }` on the existing definitions. Desert enemies must be **dark**
 with a strong outline and fire non-sand colours (brick red), because the sand is the one mid-bright floor.
 The Spinlock places its body segments in `afterMove`, after its head has moved, so the chain never lags a frame.
+
+The **Stack Trace** is the first **Legacy Codebase** enemy (`themeOnly: ['legacy']`, `family: 'legacy'`, weight 6,
+cost 1.8, max 2 per room): a beige old-hardware scorpion whose tail is fan-fold printer paper (5 sheets = stack frames,
+plus a stinger). It keeps 110–230 px away and, after a 0.85 s telegraph (dashed amber line that tracks for 0.5 s,
+then locks with "!" while a pulse runs up the tail), unfolds the tail along the line up to `r + 4 + 30·sheets` px:
+stinger 2, unrolled paper 1 during the 0.4 s hold, folding back harmless. Walls and rocks cut the tail short (shot
+collision, so it reaches over pits). If the player stood beyond reach at lock time, the stinger throws one
+"uncaught exception" (200 px/s base) further along the same line. At 2/3 and 1/3 HP a sheet pops off (`enemyShed`),
+so the tail and its reach shrink to 4 and 3 sheets. The tail is **not** a separate entity: the behaviour computes its
+points (`stLayout`), draws them and checks contact itself, so nothing is left behind on death; its in-flight shots
+are removed in `onDeath`. Because the tail is drawn above the body when curled, it sets `e.sayOffset`.
 
 Minions (`spawn: false`): `leaklet`, `microservice`, `loop_segment`, `nested_loop_part`, `detached_head_tag` (Detached HEAD's head),
 `octo_arm` (Octopus Merge arm segment), `spinlock_segment` (Spinlock body; invulnerable, shields the head).
@@ -688,8 +706,8 @@ work again, the same file-ownership split works well.
     - **"Human in the Loop"** (meta joke): still just a name. Needs a concept first.
     - ~~Nested Infinite Loop~~: done 2026-11-02 (§4), as the Infinite Loop's replacement from floor 8.
   - **More Sandbox Borders enemies** (brainstorm 2026-11-02, not built yet): **Dry Run** (a translucent ghost copy
-    performs every attack first, then the real one repeats it exactly — a built-in telegraph), **Stack Trace**
-    (scorpion whose segmented tail stings at range after a target line), **Rolling Release** (tumbleweed that bounces
+    performs every attack first, then the real one repeats it exactly — a built-in telegraph), ~~Stack Trace~~ (done
+    2026-11-03 as a Legacy Codebase enemy, §4), **Rolling Release** (tumbleweed that bounces
     off walls like Friday Deploy, a little faster after every bounce), **Rate Limiter** (walking cactus: three spine
     shots, then a "429" bubble and a forced pause), **Honeypot** (antlion funnel that pulls you toward its jaws),
     **Dust Daemon** (whirlwind that bends your shots), **Port Scanner** (pops out of fixed holes in sequence).
