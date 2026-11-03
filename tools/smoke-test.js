@@ -1734,7 +1734,23 @@ const URL = 'file://' + path.join(ROOT, 'index.html').replace(/\\/g, '/') + '?se
       }
       if (!g.room.combatClosed) out.push(id + ': Tueren bleiben offen');
       if (g.pendingBossIntro) out.push(id + ': Boss-Intro vorgemerkt');
+      // Frueher gegebene Items (Daily Standup: 2 s Einfrieren beim Betreten) sollen den Test nicht verfaelschen:
+      // geprueft wird die Begegnung, nicht die Items. Ohne das blieb der Monolith (1 s Schonfrist) knapp 3 s stehen.
+      for (const e of g.room.enemies) e.frozen = 0;
       window.__start = bosses.map((b) => [b.x, b.y]);
+      // Aktivitaet laufend beobachten (nicht nur ein Schnappschuss nach 3 s): der Monolith stampft z. B. auf der
+      // Stelle, und seine Schockwellen sind keine Projektile. Bewegung, Gegnerschuss oder Moduswechsel zaehlen.
+      window.__acted = false;
+      const modes = bosses.map((b) => b.state && b.state.mode);
+      clearInterval(window.__actWatch);
+      window.__actWatch = setInterval(() => {
+        const r = BOTA.game.room;
+        if (r.projectiles.some((pr) => pr.team === 'enemy')) window.__acted = true;
+        bosses.forEach((b, i) => {
+          if (Math.hypot(b.x - window.__start[i][0], b.y - window.__start[i][1]) > 4) window.__acted = true;
+          if (b.state && b.state.mode !== modes[i]) window.__acted = true;
+        });
+      }, 50);
       return { out };
     }, id);
     problems.push(...setup.out);
@@ -1749,7 +1765,8 @@ const URL = 'file://' + path.join(ROOT, 'index.html').replace(/\\/g, '/') + '?se
       const bosses = g.room.enemies.filter((e) => e.isBoss && !e.dead);
       const moved = bosses.some((b, i) => window.__start[i] && Math.hypot(b.x - window.__start[i][0], b.y - window.__start[i][1]) > 4);
       const shots = g.room.projectiles.some((p) => p.team === 'enemy');
-      if (!moved && !shots) out.push(id + ': Zwischenboss tut nichts');
+      clearInterval(window.__actWatch);
+      if (!moved && !shots && !window.__acted) out.push(id + ': Zwischenboss tut nichts');
       return out;
     }, id));
     for (let i = 0; i < 6; i++) { await page.evaluate(() => BOTA.debug.killAll()); await page.waitForTimeout(300); }
