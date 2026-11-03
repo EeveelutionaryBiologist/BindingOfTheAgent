@@ -92,6 +92,11 @@
  *     Abstand; volle Telegraph-Dauer vor jedem Verschmelzen; Treffer bzw. totes Ziel bricht ab; HP = Summe, Max-HP
  *     und Radius wachsen (gedeckelt), der Geschluckte verschwindet ohne enemyDeath/Kill, Raum wird danach clear;
  *     ungeeignete Gegner nie gewaehlt; hoechstens 2x zusammengefasst; killAll laesst nichts zurueck
+ *   - Lost in the Middle (Context-Familie): nie vor Etage 8, auf Etage 11 haeufiger als auf anderen Etagen ab 8;
+ *     Zone = mittleres Drittel der Innenbreite; dort intangible (Schuss fliegt durch, hurt wirkungslos), kein
+ *     Kontaktschaden, nie ein Schuss; am Rand fest, nimmt Schaden, Kontakt 1; jede Salve nach vollem Telegraph mit
+ *     genau 3 korallenroten Schuessen (165–260 px/s), abgebrochen in der Mitte; Spieler 30 s in der Mitte -> er wird
+ *     trotzdem regelmaessig fest (Anti-Stillstand); bleibt im Raum; Tod/killAll lassen weder Gegner noch Zonen-Marke
  *   - Spezialraeume, Pause- und Todesbildschirm rendern
  * Screenshots landen in tools/out/ (nicht einchecken).
  *
@@ -101,11 +106,6 @@
  * (keine Admin-Rechte noetig; das Spiel selbst braucht nichts davon)
  *
  * SICHERHEIT: Der Test oeffnet nur die lokale Datei; die CSP des Spiels blockiert ohnehin jedes Netzwerk.
- *   - Lost in the Middle (Context-Familie): nie vor Etage 8, auf Etage 11 haeufiger als auf anderen Etagen ab 8;
- *     Zone = mittleres Drittel der Innenbreite; dort intangible (Schuss fliegt durch, hurt wirkungslos), kein
- *     Kontaktschaden, nie ein Schuss; am Rand fest, nimmt Schaden, Kontakt 1; jede Salve nach vollem Telegraph mit
- *     genau 3 korallenroten Schuessen (165–260 px/s), abgebrochen in der Mitte; Spieler 30 s in der Mitte -> er wird
- *     trotzdem regelmaessig fest (Anti-Stillstand); bleibt im Raum; Tod/killAll lassen weder Gegner noch Zonen-Marke
  */
 'use strict';
 

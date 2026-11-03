@@ -28,10 +28,11 @@ Secret rooms hide behind cracked walls: Force Push them. There is no ending. The
 ### What's inside
 - **50 items** (45 passive, 5 active). Examples: Blockchain (*"Does absolutely nothing. Market cap: $4B."*),
   Few-Shot Examples, Chain of Thought, Rubber Duck, Technical Debt, Regenerate Response, `rm -rf node_modules`.
-- **27 enemies** plus minions: Flaky Test, Merge Conflict, Graphics Glitch, Hallucination (it looks like loot), Zombie Process, Rogue Agent…
+- **30 enemies** plus minions: Flaky Test, Merge Conflict, Graphics Glitch, Hallucination (it looks like loot), Zombie Process, Rogue Agent…
   Forgotten Branches has its own family (Stale Branch, Detached HEAD, Cherry-Pick, Orphan Commit), and so do Sandbox
   Borders (Spinlock, Rootkit, Dust Daemon), Legacy Codebase (Stack Trace), Dependency Hell (Honeypot, Rolling Release),
-  Production (Rate Limiter, Port Scanner) and The Training Data (Dry Run).
+  Production (Rate Limiter, Port Scanner), The Training Data (Dry Run) and The Context Limit (Overflow Buffer,
+  Summarizer, Lost in the Middle).
 - **10 bosses** with distinct phases: The Monolith, The Stakeholder, Friday Deploy, The Infinite Loop, the Rogue Agent
   Swarm, The Antagonistic Reviewer and the Octopus Merge (only on Forgotten Branches). Deeper down, three of them are
   replaced by bigger versions: The Megalith and The Shareholder from floor 7, the Nested Infinite Loop from floor 8.

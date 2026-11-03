@@ -129,6 +129,19 @@ Live state is under `BOTA.game` (`.player`, `.room`, `.floor`, `.depth`, `.state
   after its telegraph with a ring of 8 shots, and a bomb flushes it out without the ring;
 - the **Rogue Agent** never rolls before floor 7, keeps its distance, and every volley (two 3-shot fans or three
   single shots) comes after its green glow at 165–260 px/s;
+- the Context Limit family never rolls before floor 8 and weighs more on The Context Limit than on any other floor
+  from 8. **Overflow Buffer:** fill rises on its own (full after 6–8 s) and by exactly `hitFill` per hit (none during
+  the telegraph); it bursts only after the full ≥ 0.6 s telegraph into exactly 8 coral droplets at 165–260 px/s along
+  the telegraphed rays, then starts empty; its puddle slows a walking player to ×0.6 inside its radius only (never
+  stacked, never flying, never after it faded at 4 s). **Summarizer:** at most 1 per room, keeps its distance, merges
+  only after the full telegraph, a hit or a dead target cancels, a merge sums HP and max HP, grows the radius within
+  its cap and removes the other without `enemyDeath` or a kill (the room still clears), ineligible enemies (bosses,
+  minions, linked pairs, Hallucinations, Dry Run, Spinlock, Port Scanner, Orphan Commit, Memory Leak, Scope Creep,
+  Jira Ticket, Stale Branch, a lying Zombie Process, other Summarizers) are never chosen, and nobody is summarized more
+  than twice. **Lost in the Middle:** intangible, harmless and silent in the middle third of the width, solid and
+  hurting at the edges, every volley after its full 0.6 s telegraph with exactly 3 coral shots at 165–260 px/s (cancelled
+  when pushed into the middle), regularly solid even with the player parked in the middle for 30 s, inside the room.
+  All three die cleanly and `killAll` leaves no enemies, puddles or zone marker behind;
 - the **Dust Daemon** and **Dry Run** roll only on their home floors within depths 1–7 (Sandbox Borders / The Training
   Data); the Dust Daemon bends player shots in its spin direction (never outside its radius, while exhausted or
   frozen, or enemy shots), shots aimed at its core always hit, some shots flying with the wind get carried into it,
@@ -389,6 +402,9 @@ The previous floor's boss is excluded, and bosses already met count `weight · t
     onOverheal, update` on all passive items and the active item, and catches errors per item.
   - **Shooting:** 4-directional (the last arrow key pressed wins); shots inherit 30 % of the player's velocity.
     `multishot` fires a fan (`spread`, default 12°), or a parallel pair when `parallel` is set and the count is 2.
+  - **Slowdowns:** `slowBy(f)` (0 ≤ f < 1) slows the player for exactly one tick, keeping the strongest factor
+    instead of multiplying (no stacking) and ignoring flying players; a source calls it every tick (Overflow Buffer
+    puddle). It is applied in `update()` via `slowNext` and is not a stat.
   - **Getting hurt:** `hurt()` sets 1 s of invulnerability (i-frames) and emits `playerHurt`. On lethal damage the
     `onLethal` hooks run, and returning `true` survives. Otherwise `game.onPlayerDeath(killer)` is called.
   - **Active items:** `giveItem` swaps the active item and returns the old one, which the pedestal keeps (agent A
@@ -413,6 +429,7 @@ The previous floor's boss is excluded, and bosses already met count `weight · t
   - **Damage forwarding:** `proxy` / `proxyMult` pass damage to another enemy (worm segments → head).
   - **Area damage:** `aoeDedupe` makes sourceless damage count once per tick.
   - **Damage taken:** `damageTakenMult` (optional) multiplies every hit (Rate Limiter: 1.5 during its "429" pause).
+  - **Sprite size:** `sizeMult` (optional) scales the sprite in `AI.drawBody` (Summarizer's merged enemies).
   - **Speech:** `sayText`.
   - **Scaling:** HP grows ×(1 + 0.15·(depth−1)).
   - **Helpers in `B.AI`:** movement (`toward, pathToward, wander, stop, turn, clampToRoom, findSpot`), shooting
@@ -474,7 +491,7 @@ The previous floor's boss is excluded, and bosses already met count `weight · t
     `prop_{crate,bush,package,carton}` (frame 1 = damaged)
   - `item_<id>`, `pickup_<type>`, `pedestal`, `trapdoor`, `bomb`, `familiar_duck`, `orbital_test`
   - `enemy_<id>`, `boss_<id>`
-  - **Count:** about 170 sprites. All of them are original pixel art written as ASCII in code.
+  - **Count:** about 175 sprites. All of them are original pixel art written as ASCII in code.
 
 ### 3.11 Event bus (who emits → who listens)
 Payloads usually include `game, x, y` and often `color`.
@@ -502,6 +519,7 @@ Payloads usually include `game, x, y` and often `color`.
 | `denied` (`reason`: credits/locked/bomb/charge) | various | audio, effects |
 | `roomEnter` (`first`), `roomClear`, `doorsOpen`, `doorsClose`, `unlock`, `secretFound`, `rockBreak` (`kind`: rock/cactus) | game, room | audio, effects |
 | `cactusPrick` | game (`checkCactus`) | audio (`prick`), effects (spines) |
+| `enemyOverflow` (`r`) | Overflow Buffer (bursts) | audio (`overflowBurst`), effects (splash, glass shards) |
 | `enemyChomp` (`r, ate`), `enemyBounce`, `enemyUnpack` | Honeypot, Rolling Release | audio (`chomp`, `bump`, `unbox`), effects (cyan ring, dust, packing peanuts) |
 | `explosion` (`radius`), `bombPlaced`, `projectileEnd` (`team, impact`) | game, projectile, player | audio, effects |
 | `activeUsed`, `activeCharged` | player | audio, HUD |
@@ -511,7 +529,7 @@ Rule: audio and effects **only listen**. Game logic never calls them directly, e
 are game state.
 
 ### 3.12 Audio (`core/audio.js`) and effects (`entities/effects.js`)
-- **Audio:** 75 synthesized SFX in total, plus a looping rain bed (two filtered noise layers) that `music.start` switches
+- **Audio:** 79 synthesized SFX in total, plus a looping rain bed (two filtered noise layers) that `music.start` switches
   on for themes with `ambient: 'rain'` and `music.stop` switches off. Every sound has a name; `audio.names()` lists them.
   - Bus routing: voices → sfx/music bus → master → compressor.
   - Per-name rate limits (`RATE`) and a 40-voice cap keep it from getting noisy.
@@ -524,7 +542,8 @@ are game state.
   defaults; `family: 'sandbox'` gets sand bursts and dry crunches (`sandHit`, `sandDeath`); `family: 'legacy'` gets dust
   puffs, fluttering printer paper and old-hardware sounds (`legacyHit`, `legacyDeath`, `dotMatrix` on windup);
   `family: 'dephell'` gets cardboard thuds and packing peanuts (`boxHit`, `boxDeath`); `family: 'production'`
-  gets metal sparks and steel debris (`clank`, `scrap`, plus `servo` on windup). It's purely
+  gets metal sparks and steel debris (`clank`, `scrap`, plus `servo` on windup); `family: 'context'` gets splashes and
+  soggy paper scraps (`dripHit`, `soggyDeath`, plus `gurgle` on windup). It's purely
   presentational; a new family needs an entry in both tables.
   Each room holds at most 300 effects; "important" ones (text, rings, flashes) push out the oldest particles.
   Effects use `Math.random` only.
@@ -585,6 +604,9 @@ Item conventions:
 | rolling_release | rolling_release | 4, Dependency Hell + Sandbox Borders (×0.6) | 18 |
 | rate_limiter | rate_limiter | 5, Production and The Context Limit only | 16 |
 | port_scanner | port_scanner (+ 4 `port_scanner_port`) | 5, Production only | 12 (max 1 per room) |
+| overflow_buffer | overflow_buffer (+ `overflow_puddle`) | 8, The Context Limit only | 18 (max 2 per room) |
+| summarizer | summarizer | 8, The Context Limit only | 16 (max 1 per room) |
+| lost_in_the_middle | lost_in_the_middle | 8, The Context Limit only | 14 (max 2 per room) |
 
 The **Rogue Agent** (floor 7+, "outside the box") reuses the Rogue Agent Swarm's four sprites (one per agent, picked
 with `game.rng`) and its green shots. It strafes at 200–320 px and cuts inward for 0.5 s after bumping into
@@ -658,9 +680,50 @@ is light steel with a dark outline, and its shots and telegraph lines are **cyan
   it never comes to you: the ports are fixed and you can pre-aim at the next one. Its ports close when it dies;
   without ports it stays up as a turret.
 
+The **Context Limit family** (`family: 'context'`, `themeOnly: ['context']`, minFloor 8, all 2026-11-03) lives in
+`entities/enemies-context.js` (one section per member). Floor 11 is past `MIX_FROM`, so the family is at home on The
+Context Limit and leaks, weaker, onto every other floor from 8. Look: pale and waterlogged (glass, ink, soggy paper,
+shared palette `B.CONTEXT_COLORS`); because the rain is light blue, **danger is never blue**: telegraphs are amber
+`#ffb347`, shots coral `#ff8a5c` (`B.CONTEXT_DANGER`). Family effects are splashes and paper scraps, family sounds
+`dripHit`, `soggyDeath` and `gurgle` (windup).
+- **Overflow Buffer** (weight 5, cost 1.8, max 2): a glass tank on legs. Its fill rises from empty to full in 7 s and
+  every damaging hit adds 7 % (`hitFill`; its `init` wraps `takeHit` on that one instance), so you burst it down fast
+  or bait the overflow and dodge. When full it stands still for 0.8 s: the glass cracks, "[OVERFLOW]", dashed amber
+  rays show the exact shot lines (ring offset from `game.rng`) and a dashed ring shows the puddle; `enemyWindup` plays
+  the gurgle. Then a ring of 8 coral droplets (200 px/s base) and a puddle, 0.6 s rest, and it fills again from 0. The
+  puddle is a minion `overflow_puddle` (static, intangible, `ignoreForClear`, no damage, `drawLayer` −1, drawn without
+  a sprite): it grows to 80 px, lives 4 s (fading over the last 1.2 s), survives its tank, and each tick in `afterMove`
+  calls `player.slowBy(0.6)` while the player's centre is inside the drawn circle. The burst emits `enemyOverflow`.
+- **Summarizer** (weight 4, cost 2, max 1): a hooded scribe that never attacks (contact 1 only) and keeps 200–320 px
+  away. Every 6–8 s (`game.rng`, `AI.cooldown`; first try after 3.5–5 s) it picks the closest pair of eligible enemies
+  at most 300 px apart (no RNG) and telegraphs for 1.5 s: a dashed amber line between them, corner brackets,
+  "compacting...", `enemyWindup`. A hit on it during the telegraph cancels it (flustered 1.3 s, next try after 3 s); a
+  target that dies or leaves cancels too. On success the smaller target (radius, then HP) is absorbed: the survivor
+  gains its `hp` and `maxHp`, radius ×1.15 (cap ×1.35 of `summaryBaseR`), `sizeMult` for the sprite, `summaries` +1
+  and a "[summary]" tag (drawn by wrapping that one instance's `draw`). The absorbed enemy is set `dead` without
+  `die()`: no `onDeath`, no `enemyDeath`, no kill, no loot; `enemyVanish` (`text: 'summarized'`) shows the puff. Only
+  behaviours on the whitelist `SUMMARY_BEHAVIORS` qualify (wander, fly_chase, blink, charge, orbit, shooter, revive (not
+  while down), zigzag, glitch, rogue_agent), plus flag checks (no boss or boss group, no `spawn: false`, `proxy`,
+  `ignoreForClear`, `static`, `invulnerable`, `noSeparate`; not intangible or spawning when picked); at most 2
+  summaries per enemy. **A new behaviour that manages its own radius or a partner must stay off the list.**
+- **Lost in the Middle** (weight 5, cost 1.6, max 2, flying): a faded chat-bubble ghost named after the LLM weakness
+  of forgetting the middle of a long context. Its zone is the middle third of the interior **width** at full height
+  (x 341.3–618.7, `B.BEHAVIORS.lost_in_the_middle.ZONE`; a band, because a context is a sequence and a central box would
+  be too small to read), judged by its centre with 6 px hysteresis. Outside it is solid: drifts toward the player at
+  70 px/s, contact 1, and every 2–3 s after a 0.6 s telegraph (amber glow, "!", dashed fan lines, `enemyWindup`) fires
+  3 coral word shots (`shot_lost_word`, 0.26 rad apart, 195 px/s base). Inside it is `intangible` with contact 0 and
+  never attacks; it turns harmless the tick it crosses in, but only solid again after its 0.3 s fade-in ("solid =
+  fully visible"); a telegraph is cancelled if it's knocked into the zone. Anti-stall: after 4 s in a row in the zone
+  it drifts out at 110 px/s (toward the player's side, else the nearer edge) and holds ≥ 40 px outside for 2.2 s, so
+  a player camping in the middle still gets a solid target about every 10 s. While one is alive a floor overlay
+  (`LostZoneMark`, an update/draw object in `room.pickups`, `drawLayer` −2, `noShadow`) draws the two boundaries as
+  dotted lines with a faint haze; it is not an enemy, so killAll and room clearing ignore it, and it removes itself
+  when none are left.
+
 Minions (`spawn: false`): `leaklet`, `microservice`, `megalith_module` (Megalith phase 2; crawls back and heals it), `loop_segment`, `nested_loop_part`, `detached_head_tag` (Detached HEAD's head),
 `octo_arm` (Octopus Merge arm segment), `spinlock_segment` (Spinlock body; invulnerable, shields the head),
-`port_scanner_port` (Port Scanner's port; intangible floor socket, doesn't count for clearing).
+`port_scanner_port` (Port Scanner's port; intangible floor socket, doesn't count for clearing), `overflow_puddle` (Overflow
+Buffer's slowing puddle; static, intangible, harmless, doesn't count for clearing).
 
 Room spawning (`rollRoomEnemies`) works on a **budget**:
 - Each enemy has a `cost`. The budget is `min(11, 2.4 + 0.9·depth + rand(0..1.5))`, and a room starts with at most

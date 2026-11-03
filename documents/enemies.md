@@ -117,6 +117,17 @@ These only appear on The Training Data floors.
 |---|---|---|---|---|---|
 | ![Dry Run](images/enemy_dry_run.png) | **Dry Run** `dry_run` | 7 (The Training Data only) | 14 | A crash-test dummy that rehearses everything first: a translucent white ghost labelled "--dry-run" walks, winds up and attacks, and exactly 1 s later the real dummy does the same thing on the same path, with the same aim and the same timing (a dotted line shows the path it is about to walk). Attacks: a dash in a straight line (full heart) or a sweep of 5 shots across a fan. Each attack starts with a 0.5 s windup (dashed line or rays), which the real one repeats. The ghost can't hurt you and can't be hit, and its shots are hollow rings. Watch the ghost and you know exactly where to stand. Max 2 per room | Rehearses every move in front of you. No changes were made. Yet. |
 
+### The Context Limit family
+
+These live on The Context Limit (floor 11) and, weaker, on every other floor from 8. They're pale and waterlogged; in
+the rain their warnings are amber and their shots coral, never blue.
+
+| | Name | First floor | HP | Behaviour | Flavour text |
+|---|---|---|---|---|---|
+| ![Overflow Buffer](images/enemy_overflow_buffer.png) | **Overflow Buffer** `overflow_buffer` | 8 (The Context Limit; weaker elsewhere from 8) | 18 | A glass tank whose fill rises on its own (7 s) and by 7 % with every hit, so burst it down fast or let it overflow and dodge. When full it cracks ("[OVERFLOW]", 0.8 s amber warning showing the shot lines and the puddle ring), then bursts into 8 coral droplets and an 80 px puddle that slows you to 60 % for 4 s (not if you fly). Then it starts over empty. Max 2 per room | Nobody checked the bounds. Hit it and it fills up faster. |
+| ![Summarizer](images/enemy_summarizer.png) | **Summarizer** `summarizer` | 8 (The Context Limit; weaker elsewhere from 8) | 16 | A hooded scribe that keeps 200–320 px away and never attacks. Every 6–8 s it links the two closest simple enemies with a dashed amber line (1.5 s, "compacting...") and merges them: the smaller vanishes, the larger gains its HP, grows and gets a [summary] tag. Hit the Summarizer during the line to cancel it. Each enemy can be summarized at most twice. Max 1 per room | TL;DR: two of your problems are now one bigger problem. |
+| ![Lost in the Middle](images/enemy_lost_in_the_middle.png) | **Lost in the Middle** `lost_in_the_middle` | 8 (The Context Limit; weaker elsewhere from 8) | 14 | A flying chat-bubble ghost. Near the room's edges it is solid: it drifts toward you, hurts on contact, and after a 0.6 s amber warning fires a fan of 3 coral word shots. In the middle third of the room's width (marked by dotted lines on the floor) it fades out: shots pass through, no contact damage, no attacks. After 4 s in the middle it drifts out and stays outside for a while, so you can't wait it out. Max 2 per room | Remembers the beginning. Remembers the end. Everything in between: gone. |
+
 ### Minions
 
 These are only spawned by other enemies or bosses.
@@ -124,6 +135,7 @@ These are only spawned by other enemies or bosses.
 | | Name | Spawned by | HP | Behaviour | Flavour text |
 |---|---|---|---|---|---|
 | ![Port](images/enemy_port_scanner_port.png) | **Port** `port_scanner_port` | Port Scanner (4 per scanner) | — | A floor socket with its port number. Harmless and can't be hit; it lights up when the scanner is about to surface there. Doesn't count for clearing the room | An open port. Something is listening. Something is also knocking. |
+| (drawn, no sprite) | **Overflow puddle** `overflow_puddle` | Overflow Buffer (on every burst) | — | A blue puddle (80 px) that slows a walking player to 60 % while they stand in it. Harmless, can't be hit, gone after 4 s. Doesn't count for clearing the room | Context, everywhere. |
 | ![Leaklet](images/enemy_leaklet.png) | **Leaklet** `leaklet` | Memory Leak (on death) | 4 | Chases you | A smaller leak. Still not freed. |
 | ![Spinlock body](images/enemy_spinlock_body.png) | **Spinlock body** `spinlock_segment` | Spinlock (4 per snake) | — | Part of the snake; blocks shots and hurts on contact; the last one is the rattle. Falls apart when the head dies | Part of the lock. Not the part you want to hit. |
 | ![Octopus Merge arm tip](images/boss_octopus_merge_tip.png) | **Arm segment** `octo_arm` | Octopus Merge (8 arms of 5) | — | Part of an arm; only the tip (a commit dot) is visible and fires. Damage goes to the knot's HP at 60 %. Doesn't count for clearing the room | One of eight branches. Soon to be one of seven. |
