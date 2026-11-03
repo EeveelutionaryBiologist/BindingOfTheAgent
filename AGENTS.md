@@ -152,6 +152,16 @@ Live state is under `BOTA.game` (`.player`, `.room`, `.floor`, `.depth`, `.state
   rings of 14 / 9 / 5 parts, only the outermost living ring fires and can be hit, the rings break at 50 % and
   16.67 % (one `bossPhase` each), its shots stay at 165–260 px/s, its parts stay inside the room, and it dies once
   with no parts left over;
+- **The Megalith** and **The Shareholder** never roll before floor 7, the Monolith and the Stakeholder never as floor
+  bosses from floor 7, and a side quest is never the floor boss or the boss it `replaces`; every Megalith row has a
+  safe gap reachable from the previous row's (checked on 400 generated functions), phase 2 has exactly one marker
+  row, and rows, search highlights, the stomp ring and falling chunks all wait for their telegraph; "Refactor
+  rejected" at 50 % brings 4 modules that land away from it, an arriving module heals exactly 4 % (never above 50 %,
+  no kill) and a shot one heals nothing; the Shareholder's `beamPath` reflects correctly and stays in the room, the
+  beam hits on the bounced segment (not beside it) and only after aim and lock, dividends burst into 6 each, coins
+  only hurt on landing, real credits stay within `coinCap` and expire, "Hostile takeover" comes at 40 %, the
+  buyback freezes all shots and sends them to him, a missed quarter stuns (and the damage factor goes away again),
+  a beaten one rings only after its tell and speeds him up; all their shots stay at 165–260 px/s and each dies once;
 - the **Octopus Merge** is only rolled on Forgotten Branches before floor 8 (at its weight share there, and anywhere from
   floor 8, on a first visit); it has 8 arms of
   5 segments that pass 60 % of their damage to the knot and stay inside the room; every sweep, slam, tip shot and
@@ -192,7 +202,7 @@ core/namespace → core/rng → core/math → core/input → core/sprites → co
 data/palette → data/text → data/sprites-core → data/sprites-enemies → data/sprites-items
 data/layouts → data/enemies → data/bosses → data/items
 world/room → world/dungeon
-entities/entity → projectile → player → enemy → boss → pickup → familiar → effects
+entities/entity → projectile → player → enemy → boss → bosses-late → pickup → familiar → effects
 render/renderer → render/hud → render/screens
 game → main
 ```
@@ -295,7 +305,7 @@ Global keys handled in every state: `M` (mute) and `F2` (debug). Holding `R` for
    (`dist ≥ 2`) or another encounter. The room is re-stamped with a `special` layout (`room.stampLayout`, the boss
    room pool: open centre), `plannedEnemies` is emptied and `room.encounterBoss` is set by `pickEncounterBosses(avoid)`
    (own stream `':encounter:boss'`, uniform from `B.ENCOUNTER_BOSSES` = Monolith, Swarm, Infinite Loop, Stakeholder,
-   never `avoid`, no duplicates). `game.assignFloorBoss` calls it again with the final floor boss. Props skip these
+   never `avoid` or the boss it `replaces`, no duplicates). `game.assignFloorBoss` calls it again with the final floor boss. Props skip these
    rooms; key, loose loot, README and pipe stay. `game.populate` → `spawnEncounter` spawns the boss in the centre with
    `hpMult: B.ENCOUNTER_HP` (0.5) and `encounter: true`, plus a banner (boss name, `TEXT.ENCOUNTER_LINES`). There is
    no intro card and no boss music (`pendingBossIntro` is only set for `type === 'boss'`), no trapdoor or boss
@@ -455,7 +465,7 @@ The previous floor's boss is excluded, and bosses already met count `weight · t
     `prop_{crate,bush,package,carton}` (frame 1 = damaged)
   - `item_<id>`, `pickup_<type>`, `pedestal`, `trapdoor`, `bomb`, `familiar_duck`, `orbital_test`
   - `enemy_<id>`, `boss_<id>`
-  - **Count:** about 160 sprites. All of them are original pixel art written as ASCII in code.
+  - **Count:** about 165 sprites. All of them are original pixel art written as ASCII in code.
 
 ### 3.11 Event bus (who emits → who listens)
 Payloads usually include `game, x, y` and often `color`.
@@ -474,6 +484,9 @@ Payloads usually include `game, x, y` and often `color`.
 | `pipeAppear`, `pipeWarp`, `pipeArrive` (`to`) | game | audio, effects |
 | `propHit`, `propBreak` (`kind, color`) | game | audio, effects |
 | `bossSpawn`, `bossIntro`, `bossPhase`, `bossStomp`, `bossBounce`, `bossBeam`, `bossMerge` (`left`) | game, boss | audio (boss music, `merge`), effects ("Merged!" pop) |
+| `bossSearch`, `bossReplace`, `bossAbsorb` | Megalith (Ctrl+F starts, a match is replaced, a module merges back in) | audio (`search`, `replace`, `merge`), effects (yellow flash, "+1 import") |
+| `bossMoney` (`kind`: coin/expire/buyback/beat/missed) | Shareholder | audio (`coinDrop`, `cash`, `denied`), effects (gold sparkles, "vested elsewhere") |
+| `bossExit` (`kind`: segfault/parachute) | Megalith, Shareholder (`onDeath`) | effects ("SEGMENTATION FAULT", golden parachute) |
 | `playerHurt`, `playerDeath` | player, game | audio, effects, HUD |
 | `pickup` (`type`), `itemGet` (`id, def`), `purchase`, `chestOpen` | pickup, player | audio, effects, HUD |
 | `denied` (`reason`: credits/locked/bomb/charge) | various | audio, effects |
@@ -488,7 +501,7 @@ Rule: audio and effects **only listen**. Game logic never calls them directly, e
 are game state.
 
 ### 3.12 Audio (`core/audio.js`) and effects (`entities/effects.js`)
-- **Audio:** 69 synthesized SFX in total. Every sound has a name; `audio.names()` lists them.
+- **Audio:** 73 synthesized SFX in total. Every sound has a name; `audio.names()` lists them.
   - Bus routing: voices → sfx/music bus → master → compressor.
   - Per-name rate limits (`RATE`) and a 40-voice cap keep it from getting noisy.
   - There is a procedural chiptune loop per floor plus a boss variant. Mute is persisted in storage; there's no
@@ -629,7 +642,7 @@ is light steel with a dark outline, and its shots and telegraph lines are **cyan
   it never comes to you: the ports are fixed and you can pre-aim at the next one. Its ports close when it dies;
   without ports it stays up as a turret.
 
-Minions (`spawn: false`): `leaklet`, `microservice`, `loop_segment`, `nested_loop_part`, `detached_head_tag` (Detached HEAD's head),
+Minions (`spawn: false`): `leaklet`, `microservice`, `megalith_module` (Megalith phase 2; crawls back and heals it), `loop_segment`, `nested_loop_part`, `detached_head_tag` (Detached HEAD's head),
 `octo_arm` (Octopus Merge arm segment), `spinlock_segment` (Spinlock body; invulnerable, shields the head),
 `port_scanner_port` (Port Scanner's port; intangible floor socket, doesn't count for clearing).
 
@@ -683,9 +696,12 @@ away from home weighs at most 3 (`BOSS_LEAK_WEIGHT` in `bosses.js`): the Octopus
 16 % on floor 16 instead of dominating. Check that themed content reads on any floor: dark floors are fine for both
 families (screenshots 2026-11-03); cacti stay a Sandbox Borders floor feature.
 
-**Bosses** (base HP): `monolith` 360, `stakeholder` 250, `friday_deploy` 240 (floor 4+), `infinite_loop` 300
-(floors 2–7), `nested_loop` 450 (floor 8+, replaces the Infinite Loop at the same weight), `rogue_swarm` 4 × 80, `reviewer` 340 (floor 4+), `octopus_merge` 330 (Forgotten Branches only, weight 12: about 52 % on
-floor 3, about 41 % on floors 14, 25, …). Friday Deploy and the Reviewer moved from floors 2 and 3 to floor 4 on
+**Bosses** (base HP): `monolith` 360 (floors 1–6), `stakeholder` 250 (floors 1–6), `friday_deploy` 240 (floor 4+),
+`infinite_loop` 300 (floors 2–7), `megalith` 460 (floor 7+, replaces the Monolith), `shareholder` 380 (floor 7+,
+replaces the Stakeholder), `nested_loop` 450 (floor 8+, replaces the Infinite Loop), `rogue_swarm` 4 × 80, `reviewer`
+340 (floor 4+), `octopus_merge` 300 (330 until 2026-11-03; Forgotten Branches only, weight 12: about 52 % on
+floor 3, about 41 % on floors 14, 25, …). Each replacement has its predecessor's weight and a `replaces` field, so
+a floor never has the predecessor as a side quest (the side quests keep the retired bosses alive past their `maxFloor`). Friday Deploy and the Reviewer moved from floors 2 and 3 to floor 4 on
 2026-11-02, which gives floor 3 to the Octopus Merge and floor 2 to Monolith, Stakeholder, Loop and Swarm.
 - **Octopus Merge** works like the Infinite Loop: the knot is the boss, its 8 arms are 5 `octo_arm` segments each
   (`proxy`, 60 %). The knot positions them every tick and draws the arms itself; only the tip (a commit dot) draws
@@ -694,6 +710,29 @@ floor 3, about 41 % on floors 14, 25, …). Friday Deploy and the Reviewer moved
 - **Side quests** (floor 8+, §3.6 step 10): Monolith, Rogue Agent Swarm, Infinite Loop (also after its `maxFloor`)
   and Stakeholder can appear as a combat-room encounter at `B.ENCOUNTER_HP` (0.5) × the floor boss HP of that depth,
   alone (they bring their own minions and segments), with no intro, trapdoor or boss pedestal.
+- **The Megalith and The Shareholder** (2026-11-03) live in `entities/bosses-late.js` (`boss.js` was too long);
+  the header there lists every attack. Shared beam code is in `B.BossHelpers` (`beamPath` with wall bounces,
+  `beamHits`, `drawBeam`); the Reviewer's laser draws through it too. A boss behaviour may define
+  `barText(e, game) → {text, color}` for a second HUD line under the boss bar (`hud.js`).
+  - **Megalith:** its main attack, *scroll*, fires rows of syntax-coloured bullets (one per 40 px slot) from the wall
+    farther from the player. A row is a line of code: indentation leaves a gap on the left, the line end a gap on the
+    right, and indentation changes by at most one level. `megaBody` only accepts a row if one of its gaps is
+    reachable from one of the previous row's gaps in the time between rows (60 % of the player's 240 px/s), and
+    falls back to repeating the previous row; the next row is always shown faintly at the wall. Phase 2 adds one
+    merge-marker row (no indentation, one 3-slot hole). *Ctrl+F* places 4/6 search highlights (the first on the
+    player) that are replaced after their tell (half a heart inside, plus a cross of 4 shots); *Ctrl+S* is the
+    Monolith's stomp (16-shot ring, doubled in phase 2) plus 3/5 falling chunks on target rings (2 damage). At 50 %
+    ("Refactor rejected") 4 `megalith_module`s land ≥ 170 px away and walk back in a straight line; each one that
+    arrives heals 4 % of max HP (never above 50 %) and disappears without counting as a kill. Up to 2 more come every
+    10 s (max 4). The HUD line counts "lines" (6,000,000 × HP share).
+  - **Shareholder:** *glint* is the Reviewer's aim → lock → fire sequence from the monocle (`MONOCLE` offset), but
+    the 14/16 px gold beam bounces off the walls 1/2 times, and the aim line shows the full path. *dividend* throws
+    3/5 slow gold orbs that swell and burst into rings of 6; *rain* drops 6/9 coins onto target rings (half a heart),
+    and about every fourth leaves a real credit for 3 s (`coinCap` 6 per fight). Below 40 % ("Hostile takeover")
+    *buyback* freezes every enemy shot in the room for 0.5 s with gold lines to him, then sends them back (each
+    vanishes on arrival via its `range`). **Quarterly earnings** run all fight: every 12 s, between attacks, he is
+    stunned for 1.5 s with `damageTakenMult` 1.25 if the player took ≥ 8 % of his max HP that quarter, otherwise he
+    fires a telegraphed 10-shot ring and gets 8 % faster (at most 3 times). The HUD line shows the quarter clock.
 - **Nested Infinite Loop:** the boss entity is an invisible, intangible controller at the centre that only holds the
   shared HP pool (so the HUD shows one bar). The three rings are `nested_loop_part` enemies with `proxy` to it,
   placed every tick in `afterMove`. Only the outermost living ring is tangible, fires and hurts on contact; the
@@ -742,8 +781,9 @@ plus per-floor extras `THEME_QUIPS` / `THEME_EPITAPHS` keyed by theme `key` (cur
 4. Check fairness: enemy shots at 165–260 px/s (the player moves at 240), contact damage of 1 half heart (2 for charges/bosses).
 
 **Add a boss:** add a `B.BOSSES.id` entry with `name`, `subtitle` (shown on the intro card), `hp`, `r`, `behavior`, `sprite`
-and `color` (optionally `themes` / `themeOnly`, §4, and `maxFloor` to retire it on deeper floors), plus a `B.BOSS_BEHAVIORS.id` entry in `boss.js`. Give it ≥ 2 attacks and a phase change at a HP threshold
-(emit `bossPhase`, show a `game.banner`), and place it with `BossHelpers.placeAwayFromPlayer`.
+and `color` (optionally `themes` / `themeOnly`, §4, `maxFloor` to retire it on deeper floors, and `replaces` on its successor), plus a `B.BOSS_BEHAVIORS.id` entry in `boss.js`. Give it ≥ 2 attacks and a phase change at a HP threshold
+(emit `bossPhase`, show a `game.banner`), and place it with `BossHelpers.placeAwayFromPlayer`. Optional: `barText(e, game)`
+for a second HUD line under the boss bar. `boss.js` is long; new bosses can go into `bosses-late.js` or a new file.
 
 **Add a layout:** use `L(id, ['normal'], weight, [7 rows × 13 chars], bias?)` in `layouts.js`. The characters are
 `. r b p s e` (`e` marks a preferred spawn point). It must pass `validateLayout(l, {strict: true})`.

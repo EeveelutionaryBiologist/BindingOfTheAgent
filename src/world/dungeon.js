@@ -261,7 +261,8 @@
 
     /**
      * Bosse fuer die Begegnungs-Raeume waehlen: gleichverteilt aus B.ENCOUNTER_BOSSES, nie der Etagen-Boss
-     * (avoid) und auf einer Etage nie zweimal derselbe. Eigener Strom (':encounter:boss'), daher beliebig oft
+     * (avoid) oder dessen Vorgaenger (avoid.replaces) und auf einer Etage nie zweimal derselbe.
+     * Eigener Strom (':encounter:boss'), daher beliebig oft
      * wiederholbar: game.assignFloorBoss ruft das mit dem endgueltigen Etagen-Boss erneut auf.
      */
     pickEncounterBosses(avoid) {
@@ -269,7 +270,10 @@
       if (!rooms.length) return;
       const rng = new B.RNG(B.hashString(String(this.seed) + ':encounter:boss'));
       const all = B.ENCOUNTER_BOSSES.filter((id) => B.BOSSES[id]);
-      let pool = all.filter((id) => id !== avoid);
+      // Auch den Vorgaenger des Etagen-Bosses meiden (replaces: Megalith -> Monolith usw.), sonst traefe man
+      // dieselbe Figur zweimal auf einer Etage, einmal gross und einmal klein
+      const prev = avoid && B.BOSSES[avoid] && B.BOSSES[avoid].replaces;
+      let pool = all.filter((id) => id !== avoid && id !== prev);
       for (const cell of rooms) {
         if (!pool.length) pool = all.slice();
         const id = rng.pick(pool);

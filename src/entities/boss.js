@@ -31,6 +31,7 @@
  *   nested_loop    The Nested Infinite Loop — ab Etage 8 statt der Infinite Loop: drei Ringe (gross/mittel/klein)
  *                                    um einen Mittelpunkt, gemeinsamer HP-Pool; nur der aeussere lebende Ring
  *                                    feuert und ist greifbar; zerfaellt bei 50 % bzw. 16,67 %.
+ *   (megalith, shareholder: spaete Abloesungen ab Etage 7, eigene Datei entities/bosses-late.js)
  *
  * Zusaetzliche Bus-Events (nur informativ): 'bossBeam' (Reviewer feuert den Laser), 'bossMerge' (Octopus Merge
  * zieht einen Arm ein: { x, y, left }).
@@ -150,6 +151,82 @@
     /** Eingefroren-Overlay fuer Bosse mit eigener draw-Funktion */
     drawFrost(e, ctx) {
       if (e.frozen > 0) AI.drawGlow(ctx, e.x, e.y, e.r + 6, 0.2, '#8cc8ff');
+    },
+
+    // ---- Strahlen (Reviewer-Laser, Shareholder-Monokel) ----
+    // Ein Strahl ist eine Punktliste (Polylinie): gerade = 2 Punkte, mit Wandabprallern entsprechend mehr.
+    // Treffertest und Zeichnung benutzen dieselbe Liste, damit er genau dort trifft, wo er zu sehen ist.
+
+    /** Abstand Punkt -> Strecke */
+    segDist(px, py, x0, y0, x1, y1) {
+      const dx = x1 - x0, dy = y1 - y0;
+      const L2 = dx * dx + dy * dy || 1;
+      const t = Math.max(0, Math.min(1, ((px - x0) * dx + (py - y0) * dy) / L2));
+      return Math.hypot(px - (x0 + dx * t), py - (y0 + dy * t));
+    },
+
+    /**
+     * Strahlverlauf ab (x, y) im Winkel a mit `bounces` Abprallern an den Innenwaenden (rect = {x0, y0, x1, y1}).
+     * Gibt bounces + 2 Punkte zurueck: Start, jeder Abprallpunkt, Endpunkt an der letzten Wand. Rein geometrisch
+     * (Felsen werden ueberstrahlt, wie beim Reviewer-Laser), deterministisch, ohne Zufall.
+     */
+    beamPath(x, y, a, bounces, rect) {
+      x = Math.max(rect.x0, Math.min(rect.x1, x));
+      y = Math.max(rect.y0, Math.min(rect.y1, y));
+      const pts = [{ x, y }];
+      let dx = Math.cos(a), dy = Math.sin(a);
+      for (let i = 0; i <= bounces; i++) {
+        const tx = dx > 1e-9 ? (rect.x1 - x) / dx : dx < -1e-9 ? (rect.x0 - x) / dx : Infinity;
+        const ty = dy > 1e-9 ? (rect.y1 - y) / dy : dy < -1e-9 ? (rect.y0 - y) / dy : Infinity;
+        const t = Math.max(0, Math.min(tx, ty));
+        x += dx * t;
+        y += dy * t;
+        pts.push({ x, y });
+        // Senkrechte Wand -> x-Richtung spiegeln, waagerechte -> y-Richtung, Ecke -> beide
+        if (Math.abs(tx - ty) < 1e-6) { dx = -dx; dy = -dy; } else if (tx < ty) dx = -dx; else dy = -dy;
+      }
+      return pts;
+    },
+
+    /** Trifft der Strahl (Breite w) den Spieler? Gleiche Toleranz wie der Reviewer-Laser (0.6 x Spielerradius) */
+    beamHits(p, pts, w) {
+      for (let i = 1; i < pts.length; i++) {
+        if (BH.segDist(p.x, p.y, pts[i - 1].x, pts[i - 1].y, pts[i].x, pts[i].y) < w / 2 + p.r * 0.6) return i;
+      }
+      return 0;
+    },
+
+    /**
+     * Strahl zeichnen. mode: 'aim' (duenne pulsierende Ziellinie), 'lock' (blinkt weiss/Farbe), 'fire' (Schichten).
+     * style = { rgb: 'r,g,b' (Ziellinie), lock: Farbe, layers: [[Farbe, Breitenfaktor, Zusatzbreite], ...] }
+     */
+    drawBeam(ctx, pts, mode, t, w, style) {
+      const path = () => {
+        ctx.beginPath();
+        ctx.moveTo(pts[0].x, pts[0].y);
+        for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
+        ctx.stroke();
+      };
+      ctx.save();
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+      if (mode === 'aim') {
+        ctx.strokeStyle = 'rgba(' + style.rgb + ',' + (0.35 + 0.2 * Math.sin(t * 18)) + ')';
+        ctx.lineWidth = 2;
+        path();
+      } else if (mode === 'lock') {
+        ctx.strokeStyle = Math.floor(t * 20) % 2 ? '#ffffff' : style.lock;
+        ctx.lineWidth = 3;
+        path();
+      } else {
+        const ww = w + Math.sin(t * 40) * 2;
+        for (const [col, k, add] of style.layers) {
+          ctx.strokeStyle = col;
+          ctx.lineWidth = ww * k + add;
+          path();
+        }
+      }
+      ctx.restore();
     },
   };
   B.BossHelpers = BH;
@@ -1421,13 +1498,11 @@
 
   function revMouth(e) { return { x: e.x, y: e.y + REV_MOUTH_Y }; }
 
-  /** Abstand Punkt -> Strecke (fuer den Laser-Treffertest) */
-  function segDist(px, py, x0, y0, x1, y1) {
-    const dx = x1 - x0, dy = y1 - y0;
-    const L2 = dx * dx + dy * dy || 1;
-    const t = Math.max(0, Math.min(1, ((px - x0) * dx + (py - y0) * dy) / L2));
-    return Math.hypot(px - (x0 + dx * t), py - (y0 + dy * t));
-  }
+  /** Abstand Punkt -> Strecke (fuer den Laser-Treffertest; gemeinsam mit dem Shareholder in BossHelpers) */
+  const segDist = BH.segDist;
+  /** Aussehen des Laser-Strahls (BH.drawBeam): rot, breit, weisser Kern */
+  const REV_BEAM_STYLE = { rgb: '255,70,70', lock: '#ff4646',
+    layers: [['rgba(255,60,60,0.3)', 1, 16], ['#ff4a3a', 1, 0], ['#fff1e6', 0.35, 0]] };
 
   function revIdle(e, game) {
     const s = e.state;
@@ -1700,26 +1775,8 @@
       // ---- Laser: Ziellinie, Einfrieren, Strahl ----
       if (charging || s.mode === 'laserFire') {
         const x1 = m.x + Math.cos(s.aim) * REV_BEAM_LEN, y1 = m.y + Math.sin(s.aim) * REV_BEAM_LEN;
-        ctx.save();
-        ctx.lineCap = 'round';
-        if (s.mode === 'laserAim') {
-          ctx.strokeStyle = 'rgba(255,70,70,' + (0.35 + 0.2 * Math.sin(e.t * 18)) + ')';
-          ctx.lineWidth = 2;
-          ctx.beginPath(); ctx.moveTo(m.x, m.y); ctx.lineTo(x1, y1); ctx.stroke();
-        } else if (s.mode === 'laserLock') {
-          ctx.strokeStyle = Math.floor(e.t * 20) % 2 ? '#ffffff' : '#ff4646';
-          ctx.lineWidth = 3;
-          ctx.beginPath(); ctx.moveTo(m.x, m.y); ctx.lineTo(x1, y1); ctx.stroke();
-        } else {
-          const w = REV.beamW[p2 ? 1 : 0] + Math.sin(e.t * 40) * 2;
-          const layers = [['rgba(255,60,60,0.3)', w + 16], ['#ff4a3a', w], ['#fff1e6', w * 0.35]];
-          for (const [col, lw] of layers) {
-            ctx.strokeStyle = col;
-            ctx.lineWidth = lw;
-            ctx.beginPath(); ctx.moveTo(m.x, m.y); ctx.lineTo(x1, y1); ctx.stroke();
-          }
-        }
-        ctx.restore();
+        const mode = s.mode === 'laserAim' ? 'aim' : s.mode === 'laserLock' ? 'lock' : 'fire';
+        BH.drawBeam(ctx, [m, { x: x1, y: y1 }], mode, e.t, REV.beamW[p2 ? 1 : 0], REV_BEAM_STYLE);
       }
 
       if (s.mode === 'wall' && s.firstTell) AI.drawMark(ctx, '!', e.x, e.y - 62, e.t, '#ff4d4d', 30);

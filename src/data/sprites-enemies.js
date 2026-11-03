@@ -659,6 +659,124 @@
     frames: [STAKE_ROWS(false), STAKE_ROWS(true)],
   });
 
+  // The Megalith (ab Etage 7 statt des Monolith) — breitere, dunklere Granitplatte mit syntaxfarbigen Codezeilen
+  // (1 px pro Zeichen, Einrueckung wie in echtem Code) und einer Bildlaufleiste am rechten Rand, deren Daumen genau
+  // ein Pixel hoch ist (6 Millionen Zeilen). Frames: 0/1 Code scrollt um eine Zeile, 2/3 dito mit gluehenden Augen.
+  // Phase 2 ("Refactor rejected"): rot gluehende Risse, Code in Fehlerfarben (eigene Palette).
+  const MEGA_W = 30;
+  const MEGA_LINES = [   // [Einrueckung in px, [[Laenge, Farbzeichen], ...]] — a Schluesselwort, c Name, b String, g Kommentar
+    [0, [[3, 'a'], [5, 'c'], [2, 'b']]],
+    [2, [[2, 'a'], [4, 'c'], [3, 'g']]],
+    [2, [[3, 'a'], [6, 'b']]],
+    [4, [[2, 'a'], [3, 'c'], [4, 'g']]],
+    [4, [[5, 'c'], [3, 'b']]],
+    [6, [[2, 'a'], [6, 'c']]],
+    [4, [[1, 'a']]],
+    [2, [[4, 'c'], [2, 'g'], [3, 'b']]],
+    [0, [[1, 'a']]],
+  ];
+  const MEGA_CRACKS = [[8, 14], [9, 15], [10, 15], [11, 14], [12, 13], [13, 13], [14, 14], [15, 14],
+    [18, 8], [19, 9], [20, 9], [21, 10], [22, 20], [23, 19], [24, 19], [25, 18]];
+  function megaRows(glow, off, cracked) {
+    const blank = (ch) => ch.repeat(MEGA_W).split('');
+    const rows = [];
+    for (let y = 0; y < 32; y++) {
+      const r = blank('.');
+      if (y === 0 || y === 28) for (let x = 2; x <= 27; x++) r[x] = 'k';
+      else if (y === 1) { r[2] = 'k'; for (let x = 3; x <= 25; x++) r[x] = 'l'; r[26] = 'd'; r[27] = 'k'; }
+      else if (y <= 26) {
+        r[2] = 'k'; r[3] = 'l';
+        for (let x = 4; x <= 23; x++) r[x] = 's';
+        r[24] = y === 3 ? 'T' : 't'; r[25] = 's'; r[26] = 'd'; r[27] = 'k';
+      } else if (y === 27) { r[2] = 'k'; r[3] = 'l'; for (let x = 4; x <= 26; x++) r[x] = 'd'; r[27] = 'k'; }
+      else if (y === 29) { r[1] = 'k'; for (let x = 2; x <= 27; x++) r[x] = 'D'; r[28] = 'k'; }
+      else if (y === 30) { r[0] = 'k'; for (let x = 1; x <= 28; x++) r[x] = 'D'; r[29] = 'k'; }
+      else for (let x = 0; x < MEGA_W; x++) r[x] = 'k';
+      rows.push(r);
+    }
+    // Augen: zwei Schlitze, spiegelsymmetrisch zur Mitte
+    for (const x0 of [7, 17]) {
+      for (let x = x0; x <= x0 + 5; x++) { rows[4][x] = 'k'; rows[6][x] = 'k'; }
+      rows[5][x0] = 'k'; rows[5][x0 + 5] = 'k';
+      for (let x = x0 + 1; x <= x0 + 4; x++) rows[5][x] = glow ? 'R' : 'r';
+    }
+    // Codezeilen (jede zweite Zeile ab 9), Frame 1 um eine Zeile weitergescrollt
+    for (let j = 0; j < 9; j++) {
+      const [ind, toks] = MEGA_LINES[(j + off) % MEGA_LINES.length];
+      let x = 5 + ind;
+      for (const [len, ch] of toks) {
+        for (let i = 0; i < len && x <= 22; i++) rows[9 + j * 2][x++] = ch;
+        x++;
+      }
+    }
+    if (cracked) for (const [y, x] of MEGA_CRACKS) rows[y][x] = 'x';
+    return rows.map((r) => r.join(''));
+  }
+  const MEGA_PAL = { k: K, l: '#6b7079', s: '#474c55', d: '#33373e', D: '#24272c', t: '#2a2d33', T: '#f2f2f2',
+    r: '#c83232', R: '#ff8a7a', a: '#ff7ab6', b: '#ffcf4d', c: '#7fd4ff', g: '#9be07a', x: '#ff5a46' };
+  const megaFrames = (cracked) => [megaRows(false, 0, cracked), megaRows(false, 1, cracked),
+    megaRows(true, 0, cracked), megaRows(true, 1, cracked)];
+  B.defineSprite('boss_megalith', { palette: MEGA_PAL, scale: 4, frames: megaFrames(false) });
+  B.defineSprite('boss_megalith_cracked', {
+    palette: Object.assign({}, MEGA_PAL, { a: '#ff5a5a', b: '#ffb070', c: '#ff9a6a', g: '#ffd27a', s: '#4b464d' }),
+    scale: 4,
+    frames: megaFrames(true),
+  });
+  // Modul des Megalith: kleiner Granitblock mit einer Codezeile, auf Beinchen (kriecht zurueck zum Boss)
+  B.defineSprite('enemy_megalith_module', {
+    palette: MEGA_PAL,
+    scale: 4,
+    frames: [
+      [
+        '.kkkkkkkk.',
+        'kllllllldk',
+        'klssssssdk',
+        'klaascccdk',
+        'klsbbbssdk',
+        'klssssssdk',
+        'kdddddddDk',
+        '.kkkkkkkk.',
+        '.k.k..k.k.',
+      ],
+      [
+        '.kkkkkkkk.',
+        'kllllllldk',
+        'klssssssdk',
+        'klsbbbssdk',
+        'klaascccdk',
+        'klssssssdk',
+        'kdddddddDk',
+        '.kkkkkkkk.',
+        'k.k....k.k',
+      ],
+    ],
+  });
+
+  // The Shareholder (ab Etage 7 statt der Stakeholderin) — derselbe Anzug-Schatten, aber mit Zylinder (Goldband),
+  // goldenem Monokel ueber dem rechten Auge, Uhrkette ueber der Weste und goldenem Aktenkoffer. Das Monokel-
+  // Funkeln (Telegraph des Strahls) zeichnet das Verhalten selbst. Phase 2: rote Augen, wie die Stakeholderin.
+  const SHARE_HAT = [
+    '.......kkkkkkkk.......',
+    '.......kHHHHHHk.......',
+    '.......kHHHHHHk.......',
+    '.......kHHHHHHk.......',
+    '.......kGGGGGGk.......',
+    '....kkkkkkkkkkkkkk....',
+  ];
+  const SHARE_STAMPS = [
+    [2, 11, 'm'], [2, 12, 'm'], [2, 13, 'm'], [3, 11, 'm'], [3, 12, 'E'], [3, 13, 'm'], [4, 11, 'm'], [4, 12, 'm'], [4, 13, 'm'],
+    [11, 12, 'G'], [12, 13, 'G'], [12, 14, 'G'], [11, 15, 'm'],
+  ];
+  const shareRows = (sway) => SHARE_HAT.concat(B.spriteTools.stamp(STAKE_ROWS(sway), SHARE_STAMPS));
+  const SHARE_PAL = Object.assign({}, STAKE_PAL, { s: '#2a2238', d: '#1c1726', h: '#3d3a46', H: '#1b1c22',
+    G: '#e0b23c', m: '#f2c84b', E: '#fff6c8', b: '#d9a92c', B: '#a77c17', g: '#fff1a8' });
+  B.defineSprite('boss_shareholder', { palette: SHARE_PAL, scale: 4, frames: [shareRows(false), shareRows(true)] });
+  B.defineSprite('boss_shareholder_angry', {
+    palette: Object.assign({}, SHARE_PAL, { e: '#ff4040', E: '#ff9a7a', h: '#4a2f36' }),
+    scale: 4,
+    frames: [shareRows(false), shareRows(true)],
+  });
+
   // The Antagonistic Reviewer — grosses schwebendes Gesicht: zerzauste schwarze Haare, buschige Brauen,
   // Brille mit weiss verspiegelten Glaesern (man sieht die Augen nie), missbilligender Mund.
   // Frame 2: Mund offen mit rotem Gluehen (Laser laedt). Phase 2: rot angelaufen (eigene Palette).

@@ -547,6 +547,19 @@
     // Zwischenboss-Begegnung (ab Etage 8): kenntlich machen, dass das nicht der Etagen-Boss ist
     const label = (boss.encounter ? 'SIDE QUEST: ' : '') + (boss.def.name || 'BOSS');
     B.pixelText(ctx, label.toUpperCase(), W / 2, y - 22, { scale: 2, align: 'center', color: '#ffd7cf', shadow: 'rgba(0,0,0,0.8)' });
+    // Optionale zweite Zeile unter dem Balken (Boss-Verhalten barText: Megalith zaehlt Codezeilen, Shareholder
+    // zeigt die Quartalsuhr). Fehler im Verhalten duerfen das HUD nicht umwerfen.
+    let sub = null;
+    try { sub = boss.behavior && boss.behavior.barText ? boss.behavior.barText(boss, game) : null; } catch (err) { sub = null; }
+    if (sub && sub.text) {
+      const txt = String(sub.text).toUpperCase().slice(0, 48);
+      const tw = B.pixelTextWidth ? B.pixelTextWidth(txt, 2) : txt.length * 12;
+      ctx.save();
+      ctx.fillStyle = 'rgba(0,0,0,0.75)';
+      rr(ctx, W / 2 - tw / 2 - 8, y + 20, tw + 16, 20, 4); ctx.fill();
+      ctx.restore();
+      B.pixelText(ctx, txt, W / 2, y + 24, { scale: 2, align: 'center', color: sub.color || '#ffd7cf' });
+    }
   }
 
   /** "R gedrueckt halten"-Fortschrittsring (auch vom Pause-Screen genutzt) */

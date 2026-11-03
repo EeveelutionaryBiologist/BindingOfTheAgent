@@ -600,6 +600,15 @@
     desc: 'One of 47. Nobody knows which one is failing.',
   };
 
+  // Modul des Megalith (Boss, ab 50 %): kriecht zurueck zum Boss und heilt ihn, wenn es ankommt
+  // ("Refactor rejected" — alles wandert zurueck in die eine Datei). Ohne Besitzer jagt es den Spieler.
+  E.megalith_module = {
+    name: 'Module', hp: 9, r: 14, speed: 72, contactDamage: 1,
+    behavior: 'megalith_module', sprite: 'enemy_megalith_module', color: '#6b707a',
+    spawn: false, cost: 0.8,
+    desc: 'A piece that tried to leave. It is being merged back in.',
+  };
+
   // Koerpersegment der Infinite Loop (Boss). Leitet Schaden an den Kopf weiter (entities/boss.js).
   E.loop_segment = {
     name: 'The Infinite Loop', hp: 1, r: 18, speed: 0, contactDamage: 1, flying: true,

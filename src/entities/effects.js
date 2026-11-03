@@ -329,6 +329,57 @@
     draw() {}
   }
 
+  /**
+   * Goldener Fallschirm (Tod des Shareholder): ein kleiner Zylinder-Schatten schwebt unter einem gestreiften
+   * Goldschirm schaukelnd nach oben davon und verblasst. Rein optisch.
+   */
+  class Parachute {
+    constructor(x, y) {
+      this.x = x; this.y = y; this.life = 3.2; this.max = this.life; this.dead = false; this.important = true;
+      this.sway = Math.random() * 6;
+    }
+    update(dt) {
+      this.life -= dt;
+      if (this.life <= 0) { this.dead = true; return; }
+      this.y -= 42 * dt;
+      this.x += Math.sin((this.max - this.life) * 1.8 + this.sway) * 18 * dt;
+    }
+    draw(ctx) {
+      const k = this.life / this.max;
+      const a = Math.sin((this.max - this.life) * 2.2 + this.sway) * 0.18;
+      ctx.save();
+      ctx.globalAlpha = Math.min(1, k * 2);
+      ctx.translate(this.x, this.y);
+      ctx.rotate(a);
+      // Schirm: Halbkreis mit abwechselnd hellen und dunklen Goldbahnen
+      for (let i = 0; i < 6; i++) {
+        ctx.fillStyle = i % 2 ? '#e0b23c' : '#fff1a8';
+        ctx.beginPath();
+        ctx.moveTo(0, -46);
+        ctx.arc(0, -46, 44, Math.PI + (i * Math.PI) / 6, Math.PI + ((i + 1) * Math.PI) / 6);
+        ctx.closePath();
+        ctx.fill();
+      }
+      ctx.strokeStyle = '#5a4410';
+      ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(0, -46, 44, Math.PI, Math.PI * 2); ctx.stroke();
+      // Leinen
+      ctx.lineWidth = 1;
+      for (const lx of [-44, -22, 22, 44]) { ctx.beginPath(); ctx.moveTo(lx, -46); ctx.lineTo(0, 0); ctx.stroke(); }
+      // Figur: Anzug, Kopf, Zylinder
+      ctx.fillStyle = '#2a2238';
+      ctx.fillRect(-7, 0, 14, 18);
+      ctx.fillStyle = '#3d3a46';
+      ctx.beginPath(); ctx.arc(0, -4, 6, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#1b1c22';
+      ctx.fillRect(-8, -11, 16, 3);
+      ctx.fillRect(-5, -21, 10, 10);
+      ctx.fillStyle = '#e0b23c';
+      ctx.fillRect(-5, -13, 10, 2);
+      ctx.restore();
+    }
+  }
+
   // ===========================================================================
   // Hinzufuegen mit Obergrenze
   // ===========================================================================
@@ -580,6 +631,49 @@
     FX.ring(e.game, e.x, e.y, 46, '#ffcf4d', 0.35, 5);
     FX.leaves(e.game, e.x, e.y, 6, leafMix(), { speedMin: 40, speedMax: 160 });
     FX.text(e.game, e.x, e.y - 24, 'Merged!', '#ffcf4d');
+  });
+
+  // Megalith: Suchtreffer ersetzt (gelber Blitz), Modul wieder eingemergt ("+1 import")
+  on('bossReplace', (e) => {
+    FX.ring(e.game, e.x, e.y, 54, e.color || '#ffe14d', 0.3, 4);
+    FX.burst(e.game, e.x, e.y, e.color || '#ffe14d', 8, 200, { vary: true, lifeMin: 0.15, lifeMax: 0.3 });
+  });
+  on('bossAbsorb', (e) => {
+    FX.ring(e.game, e.x, e.y, 40, e.color || '#9be07a', 0.35, 4);
+    FX.text(e.game, e.x, e.y - 24, '+1 import', e.color || '#9be07a');
+  });
+
+  // Shareholder: Muenzen klingeln, verfallen, Rueckkauf, Quartalszahlen
+  on('bossMoney', (e) => {
+    const g = e.game, col = e.color || '#ffcf4d';
+    if (e.kind === 'coin') {
+      FX.burst(g, e.x, e.y, col, 6, 160, { vary: true, lifeMin: 0.15, lifeMax: 0.35, sizeMin: 3, sizeMax: 5 });
+      FX.sparkles(g, e.x, e.y - 4, 4, 18, '#fff1a8');
+    } else if (e.kind === 'expire') {
+      FX.smoke(g, e.x, e.y, 3, 10, '#c9ced6');
+      FX.text(g, e.x, e.y - 20, 'vested elsewhere', '#c9ced6', { scale: 1 });
+    } else if (e.kind === 'buyback') {
+      FX.ring(g, e.x, e.y, 130, col, 0.45, 6);
+      FX.sparkles(g, e.x, e.y, 10, 60, '#fff1a8');
+    } else if (e.kind === 'beat') {
+      FX.sparkles(g, e.x, e.y, 12, 50, col);
+    } else if (e.kind === 'missed') {
+      FX.burst(g, e.x, e.y, col, 16, 220, { vary: true, lifeMin: 0.3, lifeMax: 0.6 });
+    }
+  });
+
+  // Spaete Bosse gehen ab: Megalith stuerzt ab ("Segmentation fault"), Shareholder schwebt am Goldschirm davon
+  on('bossExit', (e) => {
+    const g = e.game;
+    if (e.kind === 'segfault') {
+      FX.debris(g, e.x, e.y, 18, ['#474c55', '#33373e', '#6b7079'], 10);
+      FX.later(g, 0.9, (gg) => {
+        FX.text(gg, e.x, e.y - 40, 'SEGMENTATION FAULT', '#ff7a6a', { life: 2.2, vy: -20 });
+        FX.text(gg, e.x, e.y - 12, '(core dumped)', '#c8ccd2', { life: 2.2, vy: -20, scale: 1 });
+      });
+    } else if (e.kind === 'parachute') {
+      FX.later(g, 0.8, (gg) => add(gg, new Parachute(e.x, e.y + 20)));
+    }
   });
 
   // Orphan Commit gefangen: goldenes Funkeln und ein kurzer Text (die Credits fliegen ohnehin heraus)

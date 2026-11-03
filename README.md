@@ -31,8 +31,9 @@ Secret rooms hide behind cracked walls: Force Push them. There is no ending. The
 - **22 enemies** plus minions: Flaky Test, Merge Conflict, Graphics Glitch, Hallucination (it looks like loot), Zombie Process, Rogue Agent…
   Forgotten Branches has its own family (Stale Branch, Detached HEAD, Cherry-Pick, Orphan Commit), and so do Sandbox
   Borders (Spinlock, Rootkit) and Production (Rate Limiter, Port Scanner).
-- **8 bosses** with distinct phases: The Monolith, The Stakeholder, Friday Deploy, The Infinite Loop (later replaced by
-  the Nested Infinite Loop), the Rogue Agent Swarm, The Antagonistic Reviewer, and the Octopus Merge (only on Forgotten Branches).
+- **10 bosses** with distinct phases: The Monolith, The Stakeholder, Friday Deploy, The Infinite Loop, the Rogue Agent
+  Swarm, The Antagonistic Reviewer and the Octopus Merge (only on Forgotten Branches). Deeper down, three of them are
+  replaced by bigger versions: The Megalith and The Shareholder from floor 7, the Nested Infinite Loop from floor 8.
 - **11 themed floors** that cycle forever, from *The Backlog* through *Forgotten Branches* and the cactus-lined *Sandbox Borders* down to *The Context Limit*. **30 room layouts.**
 - All art is ASCII pixel maps in code and all sound is synthesized with Web Audio. There are no asset files.
 

@@ -25,6 +25,9 @@ can be the floor boss anywhere (at most as likely as a regular boss). The home f
 Deprecation Warnings on Sandbox Borders). Some combat rooms on these floors also hold a **side quest**: one of the early
 bosses (The Monolith, The Stakeholder, The Infinite Loop or the Rogue Agent Swarm) at half the floor boss's HP, in an
 open arena, without the intro card or the trapdoor. There's one on floors 8 and 9 and one or two from floor 10.
+By then the floor bosses have grown up: from floor 7 The Megalith and The Shareholder replace The Monolith and The
+Stakeholder, and from floor 8 the Nested Infinite Loop replaces the Infinite Loop (a side quest is never the floor
+boss or the one it replaced).
 
 **What a theme controls** (`B.FLOOR_THEMES` in `src/data/palette.js`, names in `B.TEXT.FLOORS` in `src/data/text.js`):
 - **Colours:** floor checkerboard, walls, doors, an accent colour (floor card, HUD floor name, minimap frame), a soft

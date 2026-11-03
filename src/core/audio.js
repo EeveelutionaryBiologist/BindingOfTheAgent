@@ -380,6 +380,35 @@
   Object.assign(RATE, { legacyHit: 0.04, legacyDeath: 0.03, dotMatrix: 0.3 });
   SPAMMY.legacyHit = true;
 
+  // Spaete Bosse (entities/bosses-late.js): Megalith (Suche/Ersetzen) und Shareholder (Geld)
+  Object.assign(SOUNDS, {
+    // Ctrl+F: zwei schnelle Tastenanschlaege, dann ein heller "Treffer gefunden"-Ton
+    search() {
+      noise({ dur: 0.02, vol: 0.05, filter: 'highpass', f: 3500 });
+      noise({ dur: 0.02, vol: 0.05, filter: 'highpass', f: 3500, delay: 0.07 });
+      voice({ f: 1046, f2: 1568, dur: 0.12, type: 'square', vol: 0.04, delay: 0.13 });
+    },
+    // Suchtreffer ersetzt: kurzes Zischen mit fallendem Blip
+    replace() {
+      noise({ dur: 0.08, vol: 0.07, filter: 'bandpass', f: 2400, f2: 1200, q: 1.5 });
+      voice({ f: 760, f2: 300, dur: 0.07, type: 'square', vol: 0.04 });
+    },
+    // Muenze schlaegt auf: metallisches Klingeln
+    coinDrop() {
+      voice({ f: 2093 * rnd(0.97, 1.03), dur: 0.12, type: 'triangle', vol: 0.06 });
+      voice({ f: 3136, dur: 0.08, type: 'sine', vol: 0.03, delay: 0.02 });
+      noise({ dur: 0.03, vol: 0.04, filter: 'highpass', f: 5000 });
+    },
+    // Rueckkauf / Rekordquartal: Kassen-"Ka-ching" (Schublade + Glocke)
+    cash() {
+      noise({ dur: 0.08, vol: 0.08, filter: 'lowpass', f: 1500, f2: 400 });
+      voice({ f: 2637, dur: 0.35, type: 'sine', vol: 0.07, delay: 0.08 });
+      voice({ f: 3520, dur: 0.3, type: 'sine', vol: 0.05, delay: 0.1 });
+    },
+  });
+  Object.assign(RATE, { search: 0.15, replace: 0.04, coinDrop: 0.04, cash: 0.2 });
+  SPAMMY.coinDrop = true;
+
   // ===========================================================================
   // Prozedurale Chiptune-Schleife (eine pro Etage, deterministisch aus der Tiefe)
   // ===========================================================================
@@ -649,7 +678,15 @@
   on('enemyReveal', () => p('denied'));        // Hallucination enttarnt sich ("NOT MONEY")
   on('enemyRevive', () => p('charged'));
   on('hudGlitch', () => p('glitch'));
-  on('bossBeam', () => p('beam'));            // Reviewer-Laser
+  on('bossBeam', () => p('beam'));            // Reviewer-Laser, Shareholder-Monokel
+  on('bossSearch', () => p('search'));         // Megalith: Ctrl+F
+  on('bossReplace', () => p('replace'));       // Megalith: Suchtreffer ersetzt
+  on('bossAbsorb', () => p('merge'));          // Megalith: Modul wieder eingemergt
+  on('bossMoney', (e) => {                     // Shareholder: Muenzen, Rueckkauf, Quartalszahlen
+    if (e.kind === 'coin') p('coinDrop');
+    else if (e.kind === 'buyback' || e.kind === 'beat') p('cash');
+    else if (e.kind === 'missed') p('denied');
+  });
   on('pipeAppear', () => p('pipeAppear'));     // Rohr taucht nach dem Clearing auf
   on('pipeWarp', () => p('pipeWarp'));         // durch ein Rohr gespuelt
   on('propHit', () => p('propHit'));           // Schuss trifft Kiste/Busch/...

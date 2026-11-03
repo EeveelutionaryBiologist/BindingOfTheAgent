@@ -7,6 +7,8 @@
  *     behavior: 'monolith',          // Schluessel in BOTA.BOSS_BEHAVIORS
  *     params: {}, sprite: 'boss_monolith', color: '#8a8f98', minFloor: 1, weight: 1,
  *     maxFloor: 7,                   // optional: letzte Etage, auf der er auftaucht (spaeter abgeloest)
+ *     replaces: 'infinite_loop',     // optional: dieser Boss loest jenen ab (keine Zwischenboss-Begegnung mit
+ *                                    //   dem Vorgaenger auf derselben Etage, siehe dungeon.js pickEncounterBosses)
  *     themes: { branches: 3 },       // optional: Gewichtsfaktor je Etagen-Thema (0 = dort nie)
  *     themeOnly: ['branches'],       // optional: nur auf Etagen mit diesen Themen
  *   };
@@ -35,7 +37,7 @@
     subtitle: 'Single point of failure since 1998.',
     hp: 360, r: 44, speed: 50, contactDamage: 2,
     behavior: 'monolith', sprite: 'boss_monolith', color: '#8a8f98',
-    minFloor: 1, weight: 3,
+    minFloor: 1, maxFloor: 6, weight: 3,   // ab Etage 7 abgeloest durch The Megalith (Zwischenboss bleibt er)
     desc: 'Lumbers toward you. Stomps. Refuses to be split up — until it does.',
   };
 
@@ -44,7 +46,7 @@
     subtitle: 'Just a quick question.',
     hp: 250, r: 34, speed: 85, contactDamage: 2, flying: true,
     behavior: 'stakeholder', sprite: 'boss_stakeholder', color: '#5b6178',
-    minFloor: 1, weight: 2,
+    minFloor: 1, maxFloor: 6, weight: 2,   // ab Etage 7 abgeloest durch The Shareholder (Zwischenboss bleibt sie)
     desc: 'Floats above the work. Sends requirements. Changes them.',
   };
 
@@ -92,7 +94,7 @@
   B.BOSSES.octopus_merge = {
     name: 'Octopus Merge',
     subtitle: 'Eight branches. One merge commit. Zero survivors.',
-    hp: 330, r: 38, speed: 35, contactDamage: 2, flying: true,
+    hp: 300, r: 38, speed: 35, contactDamage: 2, flying: true,
     behavior: 'octopus_merge', sprite: 'boss_octopus_merge', color: '#a3602c',
     minFloor: 3, weight: 12, themeOnly: ['branches'], family: 'branches',
     desc: 'A tangle of roots around one huge merge commit. Every branch it absorbs makes the rest angrier.',
@@ -106,8 +108,35 @@
     subtitle: 'while True { while True { println!("WHYYYYYYYY?") } }',
     hp: 450, r: 30, speed: 30, contactDamage: 0, flying: true,
     behavior: 'nested_loop', sprite: 'boss_nested_loop', color: '#3fb8c9',
-    minFloor: 8, weight: 3,
+    minFloor: 8, weight: 3, replaces: 'infinite_loop',
     desc: 'Three loops inside each other. Breaking out of one only gets you into the next.',
+  };
+
+  // Spaete Abloesungen ab Etage 7 (Verhalten in entities/bosses-late.js), gleiches Gewicht wie der Vorgaenger.
+  // The Megalith: der Monolith, nur groesser — eine einzige Datei mit 6 Millionen Zeilen. Rollt Codezeilen als
+  // Kugelreihen durch den Raum (Einrueckung = Luecke), markiert Suchtreffer (Ctrl+F) und stampft (Ctrl+S); ab 50 %
+  // "Refactor rejected": abgespaltene Module kriechen zurueck und heilen ihn, wenn sie ankommen.
+  // HP 460 (Monolith 360): grosses, langsames Ziel; auf Etage 7 x2.8 = ~1290.
+  B.BOSSES.megalith = {
+    name: 'The Megalith',
+    subtitle: '6 million lines of code. One file. What could go wrong?',
+    hp: 460, r: 56, speed: 38, contactDamage: 2,
+    behavior: 'megalith', sprite: 'boss_megalith', color: '#4c515b',
+    minFloor: 7, weight: 3, replaces: 'monolith',
+    desc: 'One file. Six million lines. Every refactor gets merged straight back in.',
+  };
+
+  // The Shareholder: wie die Stakeholderin, nur reich — Zylinder, Monokel, Goldkette. Monokel-Strahl (prallt von den
+  // Waenden ab), Dividenden (platzen in Kugelringe), "Make it rain" (Muenzen fallen auf Zielringe, ein paar bleiben
+  // als echte Credits liegen); ab 40 % "Hostile takeover" mit Aktienrueckkauf (alle Kugeln kehren zu ihm zurueck).
+  // Quartalszahlen laufen den ganzen Kampf ueber: genug Schaden im Quartal -> "Missed estimates" (betaeubt).
+  B.BOSSES.shareholder = {
+    name: 'The Shareholder',
+    subtitle: 'Has some concerns about the quarter.',
+    hp: 380, r: 34, speed: 85, contactDamage: 2, flying: true,
+    behavior: 'shareholder', sprite: 'boss_shareholder', color: '#c9a227',
+    minFloor: 7, weight: 2, replaces: 'stakeholder',
+    desc: 'Owns 0.4 % of you. Would like to discuss the quarter. Monocle included.',
   };
 
   /**

@@ -61,6 +61,16 @@
  *   - Zwischenboss-Begegnungen ab 8: Anzahl je Tiefe, Platzierung, offene Arena, nie der Etagen-Boss; jeder der vier
  *     Bosse durch eine Tuer: kein Intro, HP x ENCOUNTER_HP, agiert, raeumt den Raum, keine Falltuer/Reste
  *   - Themen-Gegner und -Bosse "nur auf ihrer Etage" gilt vor Etage 8 (danach Kakophonie)
+ *   - Spaete Bosse ab Etage 7: Megalith/Shareholder nie vorher, Monolith/Stakeholder ab 7 nie als Etagen-Boss;
+ *     Zwischenbosse nie der Vorgaenger des Etagen-Bosses (replaces). Megalith: jede Codezeile hat eine Luecke,
+ *     aufeinanderfolgende Luecken sind erreichbar, Phase 2 genau eine Markerzeile; Zeilen, Suchtreffer, Stampfring
+ *     und Brocken erst nach ihrem Telegraph; "Refactor rejected" bei 50 % mit 4 Modulen, angekommenes Modul heilt
+ *     4 % (nie ueber 50 %, kein Kill), erschossenes nicht; HUD zaehlt Zeilen; Tod nimmt die Module mit.
+ *     Shareholder: beamPath prallt korrekt ab und bleibt im Raum, der Strahl trifft auch nach dem Abprall (und nicht
+ *     daneben), erst nach Zielen + Einfrieren; Dividenden platzen in je 6; Muenzen treffen erst beim Aufschlag,
+ *     echte Credits hoechstens coinCap und sie verfallen; "Hostile takeover" bei 40 %; Rueckkauf friert ein und
+ *     schickt alle Kugeln zu ihm; Quartal verfehlt -> betaeubt (Schadensfaktor, danach weg), geschlagen -> Ring erst
+ *     nach Telegraph und schneller; alle Kugeln 165–260 px/s; je genau ein Boss-Tod
  *   - Dust Daemon / Dry Run: in Tiefe 1–7 nur auf Sandbox Borders bzw. The Training Data; Dust Daemon lenkt
  *     Spielerschuesse im Drehsinn ab (nicht ausserhalb, nicht erschoepft/eingefroren, keine Gegnerschuesse), gezielte
  *     Schuesse treffen den Kern immer, Wurf nach Telegraph mit 4 Brocken (einer auf den Spieler), bleibt im Raum;
@@ -1524,6 +1534,288 @@ const URL = 'file://' + path.join(ROOT, 'index.html').replace(/\\/g, '/') + '?se
   });
   problems.push(...nestProblems);
 
+  // --- Spaete Bosse ab Etage 7: The Megalith (statt Monolith) und The Shareholder (statt Stakeholder) ---
+  const lateProblems = await page.evaluate(() => {
+    const out = [];
+    const g = BOTA.game, AI = BOTA.AI, DT = 1 / 60, I = BOTA.C.INNER, BH = BOTA.BossHelpers, L = BH.late;
+    // 1) Abloesung: Vorgaenger bis Etage 6, Nachfolger ab 7 (und beide kommen dort auch vor)
+    const seen = {};
+    for (let d = 1; d <= 22; d++) {
+      for (let i = 0; i < 150; i++) {
+        const id = BOTA.rollBossVaried(new BOTA.RNG(BOTA.hashString('late' + d + ':' + i)), d, []);
+        seen[id] = true;
+        if ((id === 'monolith' || id === 'stakeholder') && d >= 7) { out.push(id + ' als Etagen-Boss auf Etage ' + d); break; }
+        if ((id === 'megalith' || id === 'shareholder') && d < 7) { out.push(id + ' auf Etage ' + d); break; }
+      }
+    }
+    if (!seen.megalith || !seen.shareholder) out.push('Megalith/Shareholder tauchen nie auf');
+    // 2) Zwischenbosse meiden Etagen-Boss und dessen Vorgaenger (replaces)
+    const pairs = [['megalith', 'monolith'], ['shareholder', 'stakeholder'], ['nested_loop', 'infinite_loop']];
+    let floors = 0;
+    for (let k = 0; k < 60 && floors < 25; k++) {
+      const f = new BOTA.Floor(10 + (k % 8), 'LATE-' + k);
+      if (!f.encounterRooms || !f.encounterRooms.length) continue;
+      floors++;
+      for (const [boss, prev] of pairs) {
+        f.pickEncounterBosses(boss);
+        if (f.encounterRooms.some((c) => c.room.encounterBoss === prev || c.room.encounterBoss === boss)) out.push('Begegnung ' + prev + ' auf einer Etage mit ' + boss);
+      }
+    }
+    if (!floors) out.push('Keine Etage mit Begegnung gefunden');
+    // 3) Megalith-Zeilen, aus den Kugelpositionen nachgerechnet: sichere Bereiche fuer den Spieler-Mittelpunkt
+    //    (Wandabstand 20, Trefferabstand 22, mind. 40 px Spielraum)
+    const freeOf = (xs) => {
+      const iv = [], push = (a, b) => { if (b - a >= 40) iv.push([a, b]); };
+      if (!xs.length) return [[I.x0 + 20, I.x1 - 20]];
+      push(I.x0 + 20, xs[0] - 22);
+      for (let i = 1; i < xs.length; i++) push(xs[i - 1] + 22, xs[i] - 22);
+      push(xs[xs.length - 1] + 22, I.x1 - 20);
+      return iv;
+    };
+    for (let n = 0; n < 400; n++) {
+      const p2 = n % 2 === 1;
+      const reach = L.MEGA.rowGap[p2 ? 1 : 0] * 240 * 0.6;
+      const rows = L.megaBody(new BOTA.RNG(BOTA.hashString('rows' + n)), L.MEGA.rows[p2 ? 1 : 0], p2, reach);
+      const markers = rows.filter((r) => r.marker).length;
+      let bad = '';
+      if (rows.length !== L.MEGA.rows[p2 ? 1 : 0]) bad = rows.length + ' Zeilen';
+      if (markers !== (p2 ? 1 : 0)) bad = markers + ' Markerzeilen (Phase ' + (p2 ? 2 : 1) + ')';
+      if (rows[0].L !== 0) bad = 'erste Zeile eingerueckt';
+      const free = rows.map((r) => freeOf(L.megaSlots(r).map(L.slotX)));
+      if (free.some((f) => !f.length)) bad = 'Zeile ohne Luecke';
+      for (let i = 1; i < rows.length; i++) {
+        if (!rows[i].marker && !rows[i - 1].marker && Math.abs(rows[i].L - rows[i - 1].L) > 1) bad = 'Einrueckung springt';
+        if (!free[i - 1].some((a) => free[i].some((b) => Math.max(0, b[0] - a[1], a[0] - b[1]) <= reach))) bad = 'Zeile ' + i + ' nicht erreichbar';
+      }
+      if (bad) { out.push('Megalith-Zeilen: ' + bad + ' ' + JSON.stringify(rows)); break; }
+    }
+
+    // 4) Live: Telegraphen, Schaden, Phasen (Verhalten direkt getaktet, Projektile bewegen sich dabei nicht)
+    const speeds = [];
+    let shots = [];
+    const origShoot = AI.shoot;
+    AI.shoot = function (game, e, angle, speed, o) {
+      if (e && (e.id === 'megalith' || e.id === 'shareholder')) {
+        speeds.push(speed);
+        shots.push({ speed, angle, x: o && o.x, y: o && o.y, src: o && o.source });
+      }
+      return origShoot.apply(this, arguments);
+    };
+    const ev = [];
+    const offs = ['bossPhase', 'enemyDeath', 'bossAbsorb'].map((n) => BOTA.bus.on(n, (x) => ev.push(n + (x.boss === true ? ':boss' : ''))));
+    const p = g.player;
+    const fresh = () => { p.invuln = 0; p.guardrails = 0; p.health = p.maxHealth; };
+    const clear = () => { for (let i = 0; i < 4; i++) BOTA.debug.killAll(); g.room.projectiles.length = 0; };
+    const d0 = g.depth;
+    try {
+      g.enterFloor(7); g.setState('play');
+      BOTA.debug.gotoRoom('boss'); clear();
+      // ---- Megalith ----
+      const M = BOTA.debug.spawnBoss('megalith', 480, 250);
+      M.spawnDelay = 0;
+      const S = M.state;
+      const step = (n, each) => { for (let i = 0; i < n; i++) { M.frozen = 0; M.behavior.update(M, DT, g); if (each) each(i); } };
+      BOTA.debug.god(true); p.x = 480; p.y = 480;
+      // Scroll: erste Zeile erst nach dem Telegraph, alle Kugeln da, Start an der Wand gegenueber dem Spieler
+      shots = [];
+      L.megaPick(M, g, 'scroll');
+      const rows = S.sc.rows.slice();
+      let firstAt = -1;
+      step(Math.ceil((L.MEGA.tell + (rows.length - 1) * L.MEGA.rowGap[0] + 0.1) * 60), (i) => { if (firstAt < 0 && shots.length) firstAt = i; });
+      if (firstAt < 0 || firstAt < (L.MEGA.tell - 0.02) * 60) out.push('Megalith: erste Zeile vor dem Telegraph (Tick ' + firstAt + ')');
+      const want = rows.reduce((n, r) => n + L.megaSlots(r).length, 0);
+      if (shots.length !== want) out.push('Megalith: ' + shots.length + ' Zeilenkugeln statt ' + want);
+      if (shots.some((s2) => s2.y > I.y0 + 40)) out.push('Megalith: Zeilen starten nicht an der Wand gegenueber dem Spieler');
+      // Ctrl+F: erster Treffer auf dem Spieler, Schaden erst beim Ersetzen, Kugelkreuze
+      g.room.projectiles.length = 0; shots = []; S.hl = []; S.chunks = [];
+      BOTA.debug.god(false); fresh(); p.x = 480; p.y = 470;
+      L.megaPick(M, g, 'find');
+      step(23);
+      const h0 = S.hl[0];
+      if (!h0 || Math.abs(h0.x - p.x) > 1 || Math.abs(h0.y - p.y) > 1) out.push('Megalith: erster Suchtreffer nicht auf dem Spieler');
+      if (h0) {
+        step(Math.floor((h0.t - 0.05) * 60));
+        if (p.health !== p.maxHealth) out.push('Megalith: Suchtreffer trifft vor dem Ersetzen');
+        step(6);
+        if (p.health !== p.maxHealth - 1) out.push('Megalith: Suchtreffer trifft nicht (' + (p.maxHealth - p.health) + ')');
+      }
+      step(70);
+      const fs = shots.filter((s2) => s2.src === 'a search-and-replace').length;
+      if (fs < 12 || fs % 4) out.push('Megalith: ' + fs + ' Ersetzen-Kugeln');
+      // Ctrl+S: Ring erst nach dem Anheben, erster Brocken auf dem Spieler, Schaden erst beim Aufschlag
+      g.room.projectiles.length = 0; shots = []; S.hl = []; S.chunks = []; fresh(); p.x = 480; p.y = 480;
+      L.megaPick(M, g, 'save');
+      const c0 = S.chunks[0], dur = S.dur;
+      if (!c0 || Math.hypot(c0.x - p.x, c0.y - p.y) > 1) out.push('Megalith: erster Brocken nicht auf dem Spieler');
+      step(Math.floor((dur - 0.05) * 60));
+      if (shots.length) out.push('Megalith: Stampfring vor dem Telegraph');
+      step(6);
+      if (shots.length !== 16) out.push('Megalith: Stampfring mit ' + shots.length + ' Kugeln');
+      if (c0) {
+        step(Math.max(0, Math.floor((c0.t - 0.05) * 60)));
+        if (p.health !== p.maxHealth) out.push('Megalith: Brocken trifft vor dem Aufschlag');
+        step(6);
+        if (p.health !== p.maxHealth - 2) out.push('Megalith: Brocken trifft nicht (' + (p.maxHealth - p.health) + ')');
+      }
+      // Phase 2: ein bossPhase, 4 Module weit weg, Heilung 4 % bis hoechstens 50 %, kein Kill
+      BOTA.debug.god(true);
+      g.room.projectiles.length = 0; S.hl = []; S.chunks = []; ev.length = 0;
+      M.hp = M.maxHp * 0.45;
+      step(1);
+      if (S.phase !== 2 || ev.filter((x) => x === 'bossPhase').length !== 1) out.push('Megalith: kein Phasenwechsel bei 50 %');
+      step(Math.ceil(1.35 * 60));
+      const mods = g.room.enemies.filter((m) => m.id === 'megalith_module' && !m.dead);
+      if (mods.length !== 4 || mods.some((m) => m.state.owner !== M)) out.push('Megalith: ' + mods.length + ' Module nach "Refactor rejected"');
+      if (mods.some((m) => Math.hypot(m.x - M.x, m.y - M.y) < 120)) out.push('Megalith: Modul landet direkt am Boss');
+      if (mods.length >= 3) {
+        const hpB = M.hp;
+        const m0 = mods[0];
+        m0.x = M.x + M.r + m0.r + 2; m0.y = M.y;
+        m0.behavior.update(m0, DT, g);
+        if (!m0.dead) out.push('Megalith: angekommenes Modul bleibt');
+        if (Math.abs(M.hp - hpB - M.maxHp * 0.04) > 0.5) out.push('Megalith: heilt um ' + (M.hp - hpB).toFixed(1) + ' statt 4 %');
+        if (ev.some((x) => x.startsWith('enemyDeath'))) out.push('Megalith: angekommenes Modul zaehlt als Kill');
+        if (ev.filter((x) => x === 'bossAbsorb').length !== 1) out.push('Megalith: kein bossAbsorb');
+        M.hp = M.maxHp * 0.49;
+        const m1 = mods[1];
+        m1.x = M.x - M.r - m1.r - 2; m1.y = M.y;
+        m1.behavior.update(m1, DT, g);
+        if (M.hp > M.maxHp * 0.5 + 1e-6) out.push('Megalith: heilt ueber 50 %');
+        const hp2 = M.hp;
+        mods[2].hurt(1e6, g, {});
+        if (M.hp !== hp2) out.push('Megalith: erschossenes Modul heilt');
+      }
+      const bt = M.behavior.barText(M);
+      if (!bt || !/ \/ 6,000,000 LINES$/.test(bt.text)) out.push('Megalith: HUD-Zeile ' + (bt && bt.text));
+      ev.length = 0;
+      M.hurt(1e7, g, {});
+      if (!M.dead) M.die(g);
+      if (ev.filter((x) => x === 'enemyDeath:boss').length !== 1) out.push('Megalith: ' + ev.filter((x) => x === 'enemyDeath:boss').length + ' Boss-Tode');
+      if (g.room.enemies.some((m) => m.id === 'megalith_module' && !m.dead)) out.push('Megalith: Module ueberleben ihn');
+      clear();
+
+      // ---- Shareholder ----
+      // Strahlverlauf: Abprall an der rechten Wand spiegelt x, alle Punkte im Raum, 2 Abpraller = 4 Punkte
+      const pth = BH.beamPath(480, 300, -0.4, 1, I);
+      if (pth.length !== 3) out.push('beamPath: ' + pth.length + ' Punkte statt 3');
+      if (pth.some((q) => q.x < I.x0 - 0.5 || q.x > I.x1 + 0.5 || q.y < I.y0 - 0.5 || q.y > I.y1 + 0.5)) out.push('beamPath verlaesst den Raum');
+      const a1 = Math.atan2(pth[1].y - pth[0].y, pth[1].x - pth[0].x), a2 = Math.atan2(pth[2].y - pth[1].y, pth[2].x - pth[1].x);
+      if (Math.abs(pth[1].x - I.x1) > 0.5 || Math.abs(Math.cos(a2) + Math.cos(a1)) > 1e-6 || Math.abs(Math.sin(a2) - Math.sin(a1)) > 1e-6) out.push('beamPath: falscher Abprall');
+      if (BH.beamPath(480, 300, 2.2, 2, I).length !== 4) out.push('beamPath: 2 Abpraller ergeben nicht 4 Punkte');
+      const H = BOTA.debug.spawnBoss('shareholder', 480, 220);
+      H.spawnDelay = 0;
+      const T = H.state;
+      const stepH = (n, each) => { for (let i = 0; i < n; i++) { H.frozen = 0; H.behavior.update(H, DT, g); if (each) each(i); } };
+      const hold = () => { T.mode = 'idle'; T.t = 99; T.q.t = 99; };
+      // Treffer auf dem abgeprallten Teilstueck, daneben nicht
+      BOTA.debug.god(false);
+      const path = [{ x: 200, y: 200 }, { x: 700, y: 200 }, { x: 700, y: 480 }];
+      fresh(); p.x = 700; p.y = 400; T.mode = 'fire'; T.t = 0.5; T.path = path; stepH(1);
+      if (p.health !== p.maxHealth - 2) out.push('Shareholder-Strahl trifft nach dem Abprall nicht');
+      fresh(); p.x = 600; p.y = 400; T.mode = 'fire'; T.t = 0.5; T.path = path; stepH(1);
+      if (p.health !== p.maxHealth) out.push('Shareholder-Strahl trifft neben dem Strahl');
+      // Monokel: feuert erst nach Zielen + Einfrieren und trifft einen stillstehenden Spieler
+      fresh(); p.x = 600; p.y = 460; hold();
+      L.shNext(H, g, 'glint');
+      let fireAt = -1, hurtAt = -1;
+      stepH(150, (i) => {
+        if (fireAt < 0 && T.mode === 'fire') fireAt = i;
+        if (hurtAt < 0 && p.health < p.maxHealth) hurtAt = i;
+      });
+      if (fireAt < 0 || fireAt < (L.SHARE.aim[0] + L.SHARE.lock - 0.02) * 60) out.push('Shareholder: Strahl ohne vollen Telegraph (Tick ' + fireAt + ')');
+      if (hurtAt >= 0 && hurtAt < fireAt) out.push('Shareholder: Strahl trifft vor dem Feuern');
+      if (hurtAt < 0) out.push('Shareholder: Strahl verfehlt einen stillstehenden Spieler');
+      // Dividenden: erst nach dem Telegraph, platzen nach der Lunte in je 6
+      BOTA.debug.god(true); g.room.projectiles.length = 0; shots = []; hold();
+      L.shNext(H, g, 'dividend');
+      stepH(Math.floor((L.SHARE.divTell - 0.05) * 60));
+      if (shots.length) out.push('Shareholder: Dividenden vor dem Telegraph');
+      stepH(6);
+      const orbs = shots.filter((s2) => s2.src === 'a dividend').length;
+      if (orbs !== L.SHARE.orbs[0]) out.push('Shareholder: ' + orbs + ' Dividenden');
+      stepH(Math.ceil(L.SHARE.orbFuse * 60) + 2);
+      const pay = shots.filter((s2) => s2.src === 'a dividend payout').length;
+      if (pay !== orbs * L.SHARE.payout) out.push('Shareholder: ' + pay + ' Ausschuettungs-Kugeln statt ' + orbs * L.SHARE.payout);
+      // Muenzen: erste auf dem Spieler, Schaden erst beim Aufschlag
+      BOTA.debug.god(false); fresh(); p.x = 480; p.y = 450; g.room.projectiles.length = 0; hold(); T.coins = [];
+      L.shNext(H, g, 'rain');
+      stepH(Math.floor((L.SHARE.rainTell + 0.03) * 60));
+      const k0 = T.coins[0];
+      if (!k0 || Math.hypot(k0.x - p.x, k0.y - p.y) > 1) out.push('Shareholder: erste Muenze nicht auf dem Spieler');
+      if (k0) {
+        stepH(Math.floor((k0.t - 0.05) * 60));
+        if (p.health !== p.maxHealth) out.push('Shareholder: Muenze trifft vor dem Aufschlag');
+        stepH(6);
+        if (p.health !== p.maxHealth - 1) out.push('Shareholder: Muenze trifft nicht (' + (p.maxHealth - p.health) + ')');
+      }
+      stepH(90);
+      // Echte Credits: hoechstens coinCap pro Kampf (auch ueber viele Regen), verfallen nach coinLife
+      BOTA.debug.god(true);
+      const spawned = [];
+      const origPickup = g.spawnPickup;
+      g.spawnPickup = function (type) { const pk = origPickup.apply(this, arguments); if (type === 'credit') spawned.push(pk); return pk; };
+      try {
+        for (let r = 0; r < 12; r++) { hold(); L.shNext(H, g, 'rain'); stepH(Math.ceil(2.2 * 60)); }
+      } finally { g.spawnPickup = origPickup; }
+      if (spawned.length < 1 || spawned.length > L.SHARE.coinCap) out.push('Shareholder: ' + spawned.length + ' echte Credits (Obergrenze ' + L.SHARE.coinCap + ')');
+      hold();
+      stepH(Math.ceil((L.SHARE.coinLife + 0.1) * 60));
+      if (spawned.some((pk) => !pk.dead)) out.push('Shareholder: echte Credits verfallen nicht');
+      // Phase 2 bei 40 %, dann Rueckkauf: einfrieren, dann alle Kugeln zu ihm
+      g.room.projectiles.length = 0; ev.length = 0;
+      H.hp = H.maxHp * 0.39; T.mode = 'idle'; T.t = 99;
+      stepH(1);
+      if (T.phase !== 2 || T.mode !== 'takeover' || ev.filter((x) => x === 'bossPhase').length !== 1) out.push('Shareholder: kein "Hostile takeover" bei 40 %');
+      stepH(Math.ceil(1.35 * 60));
+      hold();
+      L.shNext(H, g, 'buyback');
+      stepH(Math.ceil((L.SHARE.buyTell + 0.02) * 60));
+      const ring = g.room.projectiles.filter((q) => q.team === 'enemy' && !q.dead);
+      if (ring.length < L.SHARE.buyRing) out.push('Shareholder: Rueckkauf ohne Muenzring (' + ring.length + ')');
+      for (const q of ring) { q.x += q.vx * 0.5; q.y += q.vy * 0.5; }
+      stepH(Math.ceil((L.SHARE.buyWait + 0.02) * 60));
+      if (ring.some((q) => q.vx || q.vy)) out.push('Shareholder: Rueckkauf friert die Kugeln nicht ein');
+      stepH(Math.ceil((L.SHARE.buyFreeze + 0.02) * 60));
+      const back = ring.every((q) => Math.abs(BOTA.M.angleDiff(Math.atan2(H.y - 20 - q.y, H.x - q.x), Math.atan2(q.vy, q.vx))) < 0.01);
+      if (!back) out.push('Shareholder: zurueckgekaufte Kugeln fliegen nicht zu ihm');
+      if (ring.some((q) => Math.hypot(q.vx, q.vy) < 165 || Math.hypot(q.vx, q.vy) > 260)) out.push('Shareholder: Rueckkauf-Tempo ausserhalb 165–260');
+      // Quartal verfehlt: betaeubt mit Schadensfaktor, danach wieder normal
+      g.room.projectiles.length = 0; hold();
+      T.q.hp0 = H.hp + H.maxHp * 0.1; T.q.t = 0.001;
+      stepH(2);
+      if (T.mode !== 'stunned' || H.damageTakenMult !== L.SHARE.stunMult) out.push('Shareholder: "Missed estimates" betaeubt nicht');
+      stepH(Math.ceil((L.SHARE.stun + 0.05) * 60));
+      if (H.damageTakenMult !== undefined) out.push('Shareholder: Schadensfaktor bleibt nach der Betaeubung');
+      // Quartal geschlagen: Ring erst nach dem Telegraph, danach schneller
+      hold(); shots = []; T.q.hp0 = H.hp; T.q.t = 0.001;
+      const spd0 = T.spd;
+      stepH(2);
+      if (T.mode !== 'beat') out.push('Shareholder: "Beat estimates" startet nicht');
+      stepH(Math.floor((L.SHARE.beatTell - 0.06) * 60));
+      if (shots.length) out.push('Shareholder: Jubel-Ring vor dem Telegraph');
+      stepH(8);
+      if (shots.length !== L.SHARE.beatRing || !(T.spd > spd0)) out.push('Shareholder: Jubel-Ring ' + shots.length + ', Tempo ' + spd0 + ' -> ' + T.spd);
+      const bt2 = H.behavior.barText(H);
+      if (!bt2 || !/ESTIMATES|EARNINGS/.test(bt2.text)) out.push('Shareholder: HUD-Zeile ' + (bt2 && bt2.text));
+      ev.length = 0;
+      H.hurt(1e7, g, {});
+      if (!H.dead) H.die(g);
+      if (ev.filter((x) => x === 'enemyDeath:boss').length !== 1) out.push('Shareholder: ' + ev.filter((x) => x === 'enemyDeath:boss').length + ' Boss-Tode');
+      // Fairness: alle Kugeln beider Bosse
+      const badSp = speeds.filter((v) => v < 165 || v > 260);
+      if (badSp.length) out.push('Spaete Bosse: ' + badSp.length + ' Kugeln ausserhalb 165–260 px/s (z. B. ' + badSp[0].toFixed(0) + ')');
+    } finally {
+      AI.shoot = origShoot;
+      for (const off of offs) off();
+      clear();
+      BOTA.debug.god(true);
+      p.health = p.maxHealth;
+      g.enterFloor(d0); g.setState('play');
+    }
+    return out;
+  });
+  problems.push(...lateProblems);
+
   // --- Rogue Agent (ab Etage 7): haelt Abstand, Salven nur nach Gluehen; zwei 3er-Faecher oder drei Einzelschuesse ---
   const rogueProblems = await page.evaluate(() => {
     const out = [];
@@ -1561,6 +1853,9 @@ const URL = 'file://' + path.join(ROOT, 'index.html').replace(/\\/g, '/') + '?se
     } finally {
       AI.fan = origFan; AI.shootAt = origAt;
     }
+    // Eine Salve, die beim Ende der Schleife noch laeuft, ist unvollstaendig mitgeschnitten (kein Fehler des
+    // Gegners; trat auf, sobald sich der game.rng-Stand vorher verschob)
+    if (cur && A.state.mode !== 'move') volleys.pop();
     if (minD < def.params.near - 60 || maxD > def.params.far + 60) out.push('Rogue Agent: Abstand ' + Math.round(minD) + '–' + Math.round(maxD) + ' px');
     if (volleys.length < 5) out.push('Rogue Agent: nur ' + volleys.length + ' Salven in 25 s');
     for (const v of volleys) {
