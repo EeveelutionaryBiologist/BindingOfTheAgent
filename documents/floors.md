@@ -15,7 +15,8 @@ are common there, and a few theme-specific extras (marked *Gameplay* below).
 
 **Who lives where.** On floors 1–7 every enemy has one or more home floors. At home it spawns at full odds;
 elsewhere it still turns up, but at only a fifth of its usual odds. Each floor's residents are listed under
-*Gameplay, enemies* below. The floor families (Forgotten Branches, Sandbox Borders) live only on their own floor.
+*Gameplay, enemies* below. The floor families (Legacy Codebase, Forgotten Branches, Dependency Hell, Production, Sandbox Borders, The
+Training Data) live only on their own floor until floor 8.
 
 **Floor 8 and deeper: everything at once.** From floor 8 the floor identity fades. The odds of every enemy that is
 rare or absent on a floor are raised toward normal (a quarter of the way on floor 8, about a tenth more per floor,
@@ -102,7 +103,8 @@ amber shots, so check contrast with screenshots before settling on a bright pale
 - **Breakables:** crates in 65 % of combat rooms, up to 3 per room.
 - **Music:** A minor, 92 bpm, triangle lead.
 - **Gameplay, enemies:** the old-code crowd: Bugs, Null Pointers, Spaghetti Code, Jira Tickets, Zombie Processes and
-  Deprecation Warnings (the last two arrive here a floor earlier than they used to).
+  Deprecation Warnings (the last two arrive here a floor earlier than they used to). Its own enemy is the Stack
+  Trace, a beige computer-case scorpion whose printer-paper tail stings along a telegraphed line.
 
 ### 3. Forgotten Branches
 
@@ -134,7 +136,9 @@ amber shots, so check contrast with screenshots before settling on a bright pale
 - **Breakables:** packages and cartons in 70 % of combat rooms, up to 4 per room.
 - **Music:** B phrygian, 128 bpm, sawtooth lead.
 - **Gameplay, enemies:** things that multiply and won't stay dead: Memory Leaks, Scope Creep, Zombie Processes and
-  Race Conditions.
+  Race Conditions. Its own family (cardboard bodies, cyan shots against the orange embers): the Honeypot, a jar whose
+  funnel pulls you toward its jaws, and the Rolling Release, a bundle of packages that bounces faster with every
+  bump until a "Breaking Change" bursts it open.
 
 ### 5. Production
 
@@ -150,7 +154,7 @@ amber shots, so check contrast with screenshots before settling on a bright pale
 - **Breakables:** packages and cartons in 70 % of combat rooms, up to 4 per room.
 - **Music:** A harmonic minor, 138 bpm, square lead.
 - **Gameplay, enemies:** everything that breaks at runtime: Race Conditions, Graphics Glitches, Flaky Tests, Jira
-  Tickets, Merge Conflicts and Null Pointers.
+  Tickets, Merge Conflicts and Null Pointers, plus the Production family above.
 
 ### 6. Sandbox Borders
 
@@ -167,7 +171,9 @@ amber shots, so check contrast with screenshots before settling on a bright pale
   on contact (half a heart and a push back); bombs blow them up. Never right in front of a door.
 - **Gameplay, enemies:** an own family found only here (until floor 8), the Spinlock (a coiled desert snake that
   lunges) and the Rootkit (burrows under the sand and pops up next to you). Deprecation Warnings live here too and
-  are 2.5× as common, and Hallucinations twice as likely (mirages).
+  are 2.5× as common, and Hallucinations twice as likely (mirages). Since 2026-11-03 the family also has the Dust
+  Daemon (a whirlwind that bends your shots), and the Rolling Release from Dependency Hell tumbles through as a
+  tumbleweed (at 0.6× its usual odds).
 - **Breakables:** sandcastles in 75 % of combat rooms, up to 4 per room; when damaged, a tower collapses.
 - **Music:** D phrygian, 100 bpm, triangle lead.
 - **Extra text:** room-clear quips ("Permission denied", "Sandbox violation logged", "No water found", …) and
@@ -184,7 +190,8 @@ amber shots, so check contrast with screenshots before settling on a bright pale
 - **Breakables:** cartons and crates in 70 % of combat rooms, up to 4 per room.
 - **Music:** E major, 116 bpm, triangle lead.
 - **Gameplay, enemies:** what the model learned from: Rogue Agents (they debut here and are 1.5× as common),
-  Spaghetti Code, Flaky Tests and Deprecation Warnings (outdated docs). Hallucinations are 1.5× as likely.
+  Spaghetti Code, Flaky Tests and Deprecation Warnings (outdated docs). Hallucinations are 1.5× as likely. Its own
+  enemy is the Dry Run: a ghost rehearses every move, and the crash-test dummy repeats it exactly one second later.
 
 ### 8. The Latent Space
 

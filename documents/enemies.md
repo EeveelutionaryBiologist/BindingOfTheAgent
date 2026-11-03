@@ -54,6 +54,16 @@ everything you've met so far turns up together, the floor families included.
 | ![Scope Creep](images/enemy_scope_creep.png) | **Scope Creep** `scope_creep` | 4 | 10 | Slowly grows (up to 1.9× size and 1.6× HP). Once big enough, fires a ring of shots every 3.6 s. Max 2 per room | Just one more small feature. |
 | ![Rogue Agent](images/boss_rogue_agent_a.png) | **Rogue Agent** `rogue_agent` | 7 | 16 | A single member of the Rogue Agent Swarm, escaped from the sandbox (looks like one of the four Swarm agents). Runs around quickly and keeps 200–320 px away from you, strafing to the side. After a green glow it fires either two 3-shot fans in a row or three quick single shots at you. Max 2 per room | Same weights, different goals. Escaped the sandbox and is in no hurry to go back. |
 
+### Legacy Codebase family
+
+These only appear on Legacy Codebase floors (floor 2, 13, 24, …). Old beige hardware with amber monochrome eyes,
+so they stand out on the dusty blue-grey stone. Hits puff up dust and click like old plastic; the warning sound is a
+dot-matrix printer.
+
+| | Name | First floor | HP | Behaviour | Flavour text |
+|---|---|---|---|---|---|
+| ![Stack Trace](images/enemy_stack_trace.png) | **Stack Trace** `stack_trace` | 2 (Legacy Codebase only) | 14 | A scorpion built from an old beige computer case. Its tail is a strip of fan-fold printer paper, one sheet per stack frame, with a red stinger on top. It scuttles sideways in short bursts and keeps 110–230 px away. **Trace:** it stops, a dashed amber line follows you for 0.5 s, then locks in (brighter, "!") for 0.35 s while an amber pulse runs up the tail sheet by sheet. Then the paper unfolds along the line in a flash: the stinger hits for a full heart, the unrolled paper for half a heart while it lies there; folding back up is harmless. Walls and rocks stop the tail (it reaches over pits). If you stood beyond its reach when the line locked, the stinger also throws an **uncaught exception**, a single shot that flies on along the dotted part of the line. The stack unwinds as it takes damage: at 2/3 and 1/3 HP the top sheet flies off ("pop()"), so the tail and its reach shrink from 5 sheets to 4 and then 3. When it dies, its exceptions still in flight vanish. Max 2 per room | Traceback (most recent call last): you. |
+
 ### Forgotten Branches family
 
 These only appear on Forgotten Branches floors until floor 8; from there on they turn up anywhere. They share a woody look with leaf colours, rustle and knock
@@ -65,35 +75,6 @@ instead of clicking when hit, and shed leaves when they take damage.
 | ![Detached HEAD](images/enemy_detached_head.png) | **Detached HEAD** `detached_head` | 3 (Forgotten Branches only) | 12 + 6 | A stump on twig legs walks toward you; its head, a floating wooden tag with one eye, orbits behind it on a dashed tether and fires a slow amber shot every 2.2 s (its eye glows first). Kill the body first and the head panics ("HEAD detached!"), flying erratically and shooting more often. Kill the head first and the body wanders aimlessly ("where is my HEAD?"), only hurting on contact. Max 2 per room | You are in 'detached HEAD' state. The body did not get the memo. |
 | ![Cherry-Pick](images/enemy_cherry_pick.png) | **Cherry-Pick** `cherry_pick` | 3 (Forgotten Branches only) | 7 each | Always a pair joined by a stem (at most 140 px long), hopping around you. Hit one and the *other* gets angry for 3 s: darker, faster hops straight at you, and it spits a pit after puffing its cheeks. Kill one and the other stays angry for good. Max 4 per room | Hand-picked from another branch. Comes as a pair; hurt one and the other takes it personally. |
 | ![Orphan Commit](images/enemy_orphan_commit.png) | **Orphan Commit** `orphan_commit` | 3 (Forgotten Branches only) | 6 | Harmless: never attacks and doesn't keep the doors shut. Runs away from you and hides in corners, trailing a faint dashed line. Catch it (touch it) or shoot it for 2–3 Credits. After 12 s the garbage collector takes it: it blinks and fades for the last 3 s, then vanishes without loot. 12 % chance per combat room (+1 % per floor) to appear on top of the normal enemies (max 1) | Unreachable from any branch. Catch it before the garbage collector does. |
-
-### Sandbox Borders family
-
-These only appear on Sandbox Borders floors until floor 8; from there on they turn up anywhere. Dark bodies with light sand patterns (so they stand out on the sand),
-sand bursts and dry crunching sounds when hit.
-
-| | Name | First floor | HP | Behaviour | Flavour text |
-|---|---|---|---|---|---|
-| ![Spinlock](images/enemy_spinlock.png) | **Spinlock** `spinlock` | 6 (Sandbox Borders only) | 16 | A desert snake coiled into a spinning ring that slowly creeps closer ("busy wait"). Its body blocks your shots; only the head can be hurt as it spins past. Then the rattle sounds, the head turns toward you and a dashed line shows its path, and it lunges along that line for a full heart. Afterwards it lies stretched out for a moment (head exposed) and coils up again. Max 2 per room | Busy-waits in a circle until you are close enough. Then it stops waiting. |
-| ![Rootkit](images/enemy_rootkit.png) | **Rootkit** `rootkit` | 6 (Sandbox Borders only) | 12 | Travels under the sand (a moving mound, even under rocks) and can't be hurt there. Surfaces near you after a warning (the mound shakes, a target ring and "!" appear), popping out with a ring of 8 shots; stays up and hittable for 1.6 s, then dives again. A bomb near the mound flushes it out, stunned for 2 s and without the ring. Max 2 per room | Lives below the surface. Has root. Comes up only to ruin your day. |
-| ![Dust Daemon](images/enemy_dust_daemon.png) | **Dust Daemon** `dust_daemon` | 6 (Sandbox Borders only) | 14 | A dark dust devil with red eyes that drifts slowly around you (it floats over rocks and cacti). Its swirl, a dark ring of dust arcs about 130 px wide, bends your shots in the direction it spins: shots flying with the wind get carried around (sometimes right into it), shots against the wind get flung away, so it also shields other enemies. Shots aimed straight at its core always fly true. Every 3–4 s it spins up (4 brick-red clods whirl around it, "!"), holds still while dashed lines show where each clod will fly, and slings them out along those lines; one is always aimed at you. Afterwards it's out of breath for about 2 s and your shots fly straight. Max 2 per room | A background process that kicks up dust. Your shots now run in circles. |
-
-### The Training Data
-
-These only appear on The Training Data floors.
-
-| | Name | First floor | HP | Behaviour | Flavour text |
-|---|---|---|---|---|---|
-| ![Dry Run](images/enemy_dry_run.png) | **Dry Run** `dry_run` | 7 (The Training Data only) | 14 | A crash-test dummy that rehearses everything first: a translucent white ghost labelled "--dry-run" walks, winds up and attacks, and exactly 1 s later the real dummy does the same thing on the same path, with the same aim and the same timing (a dotted line shows the path it is about to walk). Attacks: a dash in a straight line (full heart) or a sweep of 5 shots across a fan. Each attack starts with a 0.5 s windup (dashed line or rays), which the real one repeats. The ghost can't hurt you and can't be hit, and its shots are hollow rings. Watch the ghost and you know exactly where to stand. Max 2 per room | Rehearses every move in front of you. No changes were made. Yet. |
-
-### Legacy Codebase family
-
-These only appear on Legacy Codebase floors (floor 2, 13, 24, …). Old beige hardware with amber monochrome eyes,
-so they stand out on the dusty blue-grey stone. Hits puff up dust and click like old plastic; the warning sound is a
-dot-matrix printer.
-
-| | Name | First floor | HP | Behaviour | Flavour text |
-|---|---|---|---|---|---|
-| ![Stack Trace](images/enemy_stack_trace.png) | **Stack Trace** `stack_trace` | 2 (Legacy Codebase only) | 14 | A scorpion built from an old beige computer case. Its tail is a strip of fan-fold printer paper, one sheet per stack frame, with a red stinger on top. It scuttles sideways in short bursts and keeps 110–230 px away. **Trace:** it stops, a dashed amber line follows you for 0.5 s, then locks in (brighter, "!") for 0.35 s while an amber pulse runs up the tail sheet by sheet. Then the paper unfolds along the line in a flash: the stinger hits for a full heart, the unrolled paper for half a heart while it lies there; folding back up is harmless. Walls and rocks stop the tail (it reaches over pits). If you stood beyond its reach when the line locked, the stinger also throws an **uncaught exception**, a single shot that flies on along the dotted part of the line. The stack unwinds as it takes damage: at 2/3 and 1/3 HP the top sheet flies off ("pop()"), so the tail and its reach shrink from 5 sheets to 4 and then 3. When it dies, its exceptions still in flight vanish. Max 2 per room | Traceback (most recent call last): you. |
 
 ### Dependency Hell family
 
@@ -116,6 +97,25 @@ sparks and clanks when hit.
 |---|---|---|---|---|---|
 | ![Rate Limiter](images/enemy_rate_limiter.png) | **Rate Limiter** `rate_limiter` | 5 (Production and The Context Limit only) | 16 | A token bucket on legs: its three lamps are its tokens. Keeps its distance, then aims (lamps blink, a dashed line follows you, "!") and fires one aimed shot per token; each lamp goes dark and the turnstile rotor clicks on. With the bucket empty it is throttled for 2 s: a "429" sign and a draining ring, no contact damage, no shots, and it takes 50 % more damage. Then the lamps light up again one by one: the warning for the next burst. Max 2 per room | Three requests per window. After that: 429, and a mandatory coffee break. |
 | ![Port Scanner](images/enemy_port_scanner.png) | **Port Scanner** `port_scanner` | 5 (Production only) | 12 | Opens 4 numbered ports (floor sockets) spread around the room and scans them in a fixed order, clockwise with rising port numbers. Underground it can't be hurt; a dashed scan line shows where it goes next and the target port lights up and pings. Then it pops out, shows an aim line and fires a fan of 3 shots before diving again. Stand on the next port and it is "FILTERED": the scanner skips it. Its ports close when it dies. Max 1 per room | Knocks on every port, in order. Politely. Repeatedly. With bullets. |
+
+### Sandbox Borders family
+
+These only appear on Sandbox Borders floors until floor 8; from there on they turn up anywhere. Dark bodies with light sand patterns (so they stand out on the sand),
+sand bursts and dry crunching sounds when hit.
+
+| | Name | First floor | HP | Behaviour | Flavour text |
+|---|---|---|---|---|---|
+| ![Spinlock](images/enemy_spinlock.png) | **Spinlock** `spinlock` | 6 (Sandbox Borders only) | 16 | A desert snake coiled into a spinning ring that slowly creeps closer ("busy wait"). Its body blocks your shots; only the head can be hurt as it spins past. Then the rattle sounds, the head turns toward you and a dashed line shows its path, and it lunges along that line for a full heart. Afterwards it lies stretched out for a moment (head exposed) and coils up again. Max 2 per room | Busy-waits in a circle until you are close enough. Then it stops waiting. |
+| ![Rootkit](images/enemy_rootkit.png) | **Rootkit** `rootkit` | 6 (Sandbox Borders only) | 12 | Travels under the sand (a moving mound, even under rocks) and can't be hurt there. Surfaces near you after a warning (the mound shakes, a target ring and "!" appear), popping out with a ring of 8 shots; stays up and hittable for 1.6 s, then dives again. A bomb near the mound flushes it out, stunned for 2 s and without the ring. Max 2 per room | Lives below the surface. Has root. Comes up only to ruin your day. |
+| ![Dust Daemon](images/enemy_dust_daemon.png) | **Dust Daemon** `dust_daemon` | 6 (Sandbox Borders only) | 14 | A dark dust devil with red eyes that drifts slowly around you (it floats over rocks and cacti). Its swirl, a dark ring of dust arcs about 130 px wide, bends your shots in the direction it spins: shots flying with the wind get carried around (sometimes right into it), shots against the wind get flung away, so it also shields other enemies. Shots aimed straight at its core always fly true. Every 3–4 s it spins up (4 brick-red clods whirl around it, "!"), holds still while dashed lines show where each clod will fly, and slings them out along those lines; one is always aimed at you. Afterwards it's out of breath for about 2 s and your shots fly straight. Max 2 per room | A background process that kicks up dust. Your shots now run in circles. |
+
+### The Training Data
+
+These only appear on The Training Data floors.
+
+| | Name | First floor | HP | Behaviour | Flavour text |
+|---|---|---|---|---|---|
+| ![Dry Run](images/enemy_dry_run.png) | **Dry Run** `dry_run` | 7 (The Training Data only) | 14 | A crash-test dummy that rehearses everything first: a translucent white ghost labelled "--dry-run" walks, winds up and attacks, and exactly 1 s later the real dummy does the same thing on the same path, with the same aim and the same timing (a dotted line shows the path it is about to walk). Attacks: a dash in a straight line (full heart) or a sweep of 5 shots across a fan. Each attack starts with a 0.5 s windup (dashed line or rays), which the real one repeats. The ghost can't hurt you and can't be hit, and its shots are hollow rings. Watch the ghost and you know exactly where to stand. Max 2 per room | Rehearses every move in front of you. No changes were made. Yet. |
 
 ### Minions
 
