@@ -431,6 +431,9 @@ All milestones done. What shipped, compared with this doc:
 - **Floor themes for spawns (2026-11-02):** enemies and bosses can be weighted per floor theme (`themes`) or limited
   to certain themes (`themeOnly`), so a floor like Forgotten Branches can get its own enemy family. Details in
   AGENTS.md §4. First users: Stale Branch, Detached HEAD, Cherry-Pick and Orphan Commit, which only appear on Forgotten Branches.
+- **Dependency Hell family (2026-11-03):** the Honeypot (a static jar whose funnel pulls you toward its jaws, then
+  bites) and the Rolling Release (a bundle of packages that bounces faster after every bump until a "Breaking Change"
+  leaves it unpacked and vulnerable); see AGENTS.md §4.
 
 ## 14. Stretch goals
 Gamepad support · procedural chiptune loop · seed entry on the title screen · trinkets · curse rooms

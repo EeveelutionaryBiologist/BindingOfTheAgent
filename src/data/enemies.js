@@ -326,6 +326,72 @@
   };
 
   // ---------------------------------------------------------------------------
+  // Dependency Hell (Etage 4, Thema 'dephell'): Honeypot und Rolling Release
+  // ---------------------------------------------------------------------------
+  // Gemeinsame Optik/Akustik ueber family: 'dephell' (Karton-Treffer, Verpackungschips beim Tod; effects.js
+  // FAMILY_FX, audio.js FAMILY_SOUNDS). Gefahren-Farbe der Familie ist Cyan (Komplementaer zum Orange/Glut-Boden),
+  // damit Telegraphen und Schuesse auf Dependency Hell nicht untergehen. Verhalten in entities/enemy.js.
+
+  // --- Dependency Hell: Honeypot ---
+  // Ein verdaechtig gutes Paket (goldener Honigtopf mit Sternchen-Aufkleber) mitten in einem Trichter aus
+  // transitiven Abhaengigkeiten. Steht fest (static). Zyklus: ruhen (Trichterrand schwach sichtbar) -> Deckel
+  // springt auf (Telegraph, Rand leuchtet) -> Sog: alles Laufende im Trichter wird zur Mitte gezogen (nie schneller
+  // als 55 % der Spielergeschwindigkeit, Flieger schweben darueber) -> gegen Ende Kiefer-Warnung (Zielring im
+  // Maul-Bereich) -> ZUSCHNAPPEN (volles Herz fuer den Spieler, viel Schaden fuer andere Gegner im Maul, Bomben im
+  // Maul zuenden sofort) -> kauen. Gegner in den Trichter locken lohnt sich also.
+  E.honeypot = {
+    name: 'Honeypot', hp: 22, r: 20, speed: 0, contactDamage: 1,
+    behavior: 'honeypot', params: {
+      radius: 190,              // Trichter-Radius (px): nur darin wirkt der Sog
+      jawR: 54,                 // Maul-Bereich (px): nur hier beisst es zu
+      pullEdge: 60,             // Sog am Trichterrand (px/s) ...
+      pullCore: 130,            // ... und nahe der Mitte (linear dazwischen)
+      pullCap: 0.55,            // harte Obergrenze: Anteil der aktuellen Spielergeschwindigkeit (entkommbar)
+      enemyPull: 0.7,           // andere Laeufer werden mit 70 % des Sogs mitgezogen
+      idleMin: 1.4, idleMax: 2.2,   // Ruhepause (game.rng)
+      tell: 0.7,                // Deckel springt auf: Telegraph vor dem Sog (s)
+      pull: 2.4,                // Dauer des Sogs (s) ...
+      biteTell: 0.6,            // ... davon die letzten 0.6 s mit Kiefer-Warnung
+      chew: 1.2,                // Kauen nach dem Zuschnappen (kein Sog)
+      biteDamage: 2,            // Spieler im Maul: volles Herz (klar telegraphiert)
+      enemyBite: 14,            // andere Gegner im Maul: so viel Schaden
+    },
+    sprite: 'enemy_honeypot', color: '#f0b030', noFlip: true,
+    minFloor: 4, weight: 5, cost: 2, maxPerRoom: 1, tags: ['turret'],
+    themeOnly: ['dephell'], family: 'dephell',
+    desc: '0 dependencies*, 99k stars, MIT licensed. *Terms and conditions apply.',
+  };
+
+  // --- Dependency Hell (und Sandbox Borders): Rolling Release ---
+  // Ein rollender Knaeuel aus Paketen und Versions-Anhaengern. Zielt (Telegraph: Wackeln + Richtungspfeil), rollt
+  // dann diagonal und prallt an Waenden, Felsen, Gruben und Objekten ab; jeder Abprall ist ein Versions-Sprung
+  // (v1.0 -> v1.1 ...) und macht ihn schneller (+24 px/s, Obergrenze 250). Waehrend des Rollens ist er fest
+  // verschnuert (nimmt nur halben Schaden). Nach majorAt Abprallen (oder spaetestens maxRoll s): BREAKING CHANGE —
+  // er bremst, bebt (Telegraph mit Strahlen), platzt auf (Ring aus Verpackungschips) und liegt ausgepackt da:
+  // verwundbares Fenster mit 150 % Schaden. Danach packt er sich neu und rollt wieder bei Grundtempo los.
+  // Zweite Heimat Sandbox Borders (Faktor 0.6): dort ist er schlicht ein Steppenlaeufer — nur eben aus Paketen.
+  E.rolling_release = {
+    name: 'Rolling Release', hp: 18, r: 18, speed: 130, contactDamage: 1,
+    behavior: 'rolling_release', params: {
+      aim: 0.6,                 // Zielen vor jedem Losrollen (Telegraph, s)
+      bump: 24,                 // +px/s pro Abprall (nach 5 Abprallen am Limit)
+      maxSpeed: 250,            // Obergrenze (px/s)
+      majorAt: 7,               // so viele Abpraller bis zum Breaking Change
+      maxRoll: 13,              // Sicherheitsnetz: spaetestens nach so vielen Sekunden Rollen
+      brake: 0.35,              // Abbremsen vor dem Beben (s)
+      quake: 0.6,               // Beben + Strahlen vor dem Aufplatzen (Telegraph, s)
+      open: 1.8,                // ausgepackt liegen (verwundbar, s)
+      rollTaken: 0.5,           // Schadensfaktor beim Rollen/Zielen (verschnuert)
+      openTaken: 1.5,           // Schadensfaktor ausgepackt
+      ring: 6, shotSpeed: 170,  // Verpackungschips beim Aufplatzen
+    },
+    sprite: 'enemy_rolling_release', color: '#c98a4a', noFlip: true,
+    minFloor: 4, weight: 6, cost: 1.5, maxPerRoom: 2, tags: ['melee', 'charge'],
+    themeOnly: ['dephell', 'sandbox'], themes: { sandbox: 0.6 }, family: 'dephell',
+    desc: 'Never stable, always latest. Picks up speed with every bump.',
+  };
+
+  // ---------------------------------------------------------------------------
   // Minions (spawn: false) — entstehen nur durch andere Gegner oder Bosse
   // ---------------------------------------------------------------------------
 

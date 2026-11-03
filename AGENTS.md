@@ -107,6 +107,14 @@ Live state is under `BOTA.game` (`.player`, `.room`, `.floor`, `.depth`, `.state
   after its telegraph with a ring of 8 shots, and a bomb flushes it out without the ring;
 - the **Rogue Agent** never rolls before floor 7, keeps its distance, and every volley (two 3-shot fans or three
   single shots) comes after its green glow at 165–260 px/s;
+- the Dependency Hell family (checked on depths 1–7: Honeypot only on Dependency Hell, Rolling Release only there and
+  on Sandbox Borders): the **Honeypot** only pulls after its ≥ 0.5 s telegraph, pulls inside its funnel only, never
+  faster than 60 % of the player's current speed (also at speed 0.5), a player running away escapes unbitten, one
+  standing still gets a 2-damage bite after a ≥ 0.4 s jaw warning, nobody is dragged into a pit, walkers are pulled
+  and bitten but flyers aren't, and a bomb in its jaws goes off; the **Rolling Release** aims ≥ 0.5 s before rolling,
+  bounces off walls and rocks without getting stuck, speeds up by exactly `bump` per bounce up to its cap (≤ 260 px/s),
+  takes half damage rolling and 150 % unpacked, its Breaking Change quakes ≥ 0.5 s before a ring of 6 shots at
+  165–260 px/s, and it repacks at base speed; both die cleanly;
 - the **Nested Infinite Loop** replaces the Infinite Loop from floor 8 (never before, and the Loop never after); it has
   rings of 14 / 9 / 5 parts, only the outermost living ring fires and can be hit, the rings break at 50 % and
   16.67 % (one `bossPhase` each), its shots stay at 165–260 px/s, its parts stay inside the room, and it dies once
@@ -415,6 +423,7 @@ Payloads usually include `game, x, y` and often `color`.
 | `denied` (`reason`: credits/locked/bomb/charge) | various | audio, effects |
 | `roomEnter` (`first`), `roomClear`, `doorsOpen`, `doorsClose`, `unlock`, `secretFound`, `rockBreak` (`kind`: rock/cactus) | game, room | audio, effects |
 | `cactusPrick` | game (`checkCactus`) | audio (`prick`), effects (spines) |
+| `enemyChomp` (`r, ate`), `enemyBounce`, `enemyUnpack` | Honeypot, Rolling Release | audio (`chomp`, `bump`, `unbox`), effects (cyan ring, dust, packing peanuts) |
 | `explosion` (`radius`), `bombPlaced`, `projectileEnd` (`team, impact`) | game, projectile, player | audio, effects |
 | `activeUsed`, `activeCharged` | player | audio, HUD |
 | `runStart`, `floorEnter` (`depth`), `descend` | game | audio (music), screens |
@@ -423,7 +432,7 @@ Rule: audio and effects **only listen**. Game logic never calls them directly, e
 are game state.
 
 ### 3.12 Audio (`core/audio.js`) and effects (`entities/effects.js`)
-- **Audio:** 48 synthesized SFX in total. Every sound has a name; `audio.names()` lists them.
+- **Audio:** 57 synthesized SFX in total. Every sound has a name; `audio.names()` lists them.
   - Bus routing: voices → sfx/music bus → master → compressor.
   - Per-name rate limits (`RATE`) and a 40-voice cap keep it from getting noisy.
   - There is a procedural chiptune loop per floor plus a boss variant. Mute is persisted in storage; there's no
@@ -432,7 +441,8 @@ are game state.
 - **Effects:** use `B.FX.burst / ring / flash / smoke / debris / sparkles / text / shimmer / tint / leaves / later(game, delay, fn)`.
 - **Enemy families:** an enemy def with `family: 'branches'` gets leafy hit/death effects (`FAMILY_FX` in `effects.js`)
   and sounds (`FAMILY_SOUNDS` in `audio.js`: `leafHit`, `branchDeath`, plus `creak` on windup) instead of the
-  defaults; `family: 'sandbox'` gets sand bursts and dry crunches (`sandHit`, `sandDeath`). It's purely
+  defaults; `family: 'sandbox'` gets sand bursts and dry crunches (`sandHit`, `sandDeath`); `family: 'dephell'` gets
+  cardboard thuds and packing peanuts (`boxHit`, `boxDeath`). It's purely
   presentational; a new family needs an entry in both tables.
   Each room holds at most 300 effects; "important" ones (text, rings, flashes) push out the oldest particles.
   Effects use `Math.random` only.
@@ -481,6 +491,8 @@ Item conventions:
 | orphan_commit | orphan | 3, Forgotten Branches only | 6 (bonus spawn, harmless) |
 | spinlock | spinlock (+ 4 `spinlock_segment`) | Sandbox Borders only | 16 |
 | rootkit | rootkit | Sandbox Borders only | 12 |
+| honeypot | honeypot | 4, Dependency Hell only | 22 |
+| rolling_release | rolling_release | 4, Dependency Hell + Sandbox Borders (×0.6) | 18 |
 
 The **Rogue Agent** (floor 7+, "outside the box") reuses the Rogue Agent Swarm's four sprites (one per agent, picked
 with `game.rng`) and its green shots. It strafes at 200–320 px and cuts inward for 0.5 s after bumping into
@@ -496,6 +508,22 @@ Rootkit. On that floor Deprecation Warnings also weigh ×2.5 and the Hallucinati
 25 % cap still applies), via `themes: { sandbox: … }` on the existing definitions. Desert enemies must be **dark**
 with a strong outline and fire non-sand colours (brick red), because the sand is the one mid-bright floor.
 The Spinlock places its body segments in `afterMove`, after its head has moved, so the chain never lags a frame.
+
+The **Dependency Hell family** (`family: 'dephell'`) is the Honeypot and the Rolling Release. Their danger colour is
+**cyan** (`DEP_WARN` in `enemy.js`), the complement of the orange ember floor; lines get a dark under-stroke so they
+also read on other floors. The **Honeypot** (`themeOnly: ['dephell']`, weight 5, max 1 per room) is a static golden
+jar in a 190 px funnel that is always faintly drawn (on `drawLayer` −1, under everything). Cycle: idle 1.4–2.2 s →
+lid pops (0.7 s, no pull yet) → 2.4 s pull toward the centre (60 px/s at the rim to 130 px/s near the middle, hard-capped
+at 55 % of the player's current speed; it only moves positions and then resolves tiles, so nothing is pulled into pits
+or rocks) → the last 0.6 s show a jaw ring → snap: 2 halves to the player inside 54 px, 14 damage to other enemies
+there, and bombs there explode at once → chew 1.2 s. Flyers, bosses, static or intangible enemies and anything with
+`noKnockback` (a rolling Rolling Release, a dashing Merge Conflict) aren't pulled. The **Rolling Release**
+(`themeOnly: ['dephell', 'sandbox']`, `themes: { sandbox: 0.6 }`, weight 6, max 2 per room) aims for 0.6 s (dashed
+arrow), then rolls diagonally from 130 px/s, bouncing off walls, rocks, pits and props in `afterMove`; every bounce is a
+version bump (+24 px/s, cap 250, label `V1.n` under it). After 7 bounces (or 13 s) it brakes, quakes 0.6 s with rays
+("BREAKING CHANGE"), bursts into a ring of 6 cyan shots and lies unpacked for 1.8 s, then repacks at base speed as
+`V2.0`. It takes ×0.5 damage while packed and ×1.5 unpacked (its `init` wraps `takeHit` on that one instance; the
+Enemy class is unchanged). Sandbox Borders is its second home because a rolling bundle there is simply a tumbleweed.
 
 Minions (`spawn: false`): `leaklet`, `microservice`, `loop_segment`, `nested_loop_part`, `detached_head_tag` (Detached HEAD's head),
 `octo_arm` (Octopus Merge arm segment), `spinlock_segment` (Spinlock body; invulnerable, shields the head).
@@ -689,7 +717,6 @@ work again, the same file-ownership split works well.
     - ~~Nested Infinite Loop~~: done 2026-11-02 (§4), as the Infinite Loop's replacement from floor 8.
   - **More Sandbox Borders enemies** (brainstorm 2026-11-02, not built yet): **Dry Run** (a translucent ghost copy
     performs every attack first, then the real one repeats it exactly — a built-in telegraph), **Stack Trace**
-    (scorpion whose segmented tail stings at range after a target line), **Rolling Release** (tumbleweed that bounces
-    off walls like Friday Deploy, a little faster after every bounce), **Rate Limiter** (walking cactus: three spine
-    shots, then a "429" bubble and a forced pause), **Honeypot** (antlion funnel that pulls you toward its jaws),
-    **Dust Daemon** (whirlwind that bends your shots), **Port Scanner** (pops out of fixed holes in sequence).
+    (scorpion whose segmented tail stings at range after a target line), ~~Rolling Release~~ (done 2026-11-03 on
+    Dependency Hell, §4), **Rate Limiter** (walking cactus: three spine shots, then a "429" bubble and a forced
+    pause), ~~Honeypot~~ (done 2026-11-03 on Dependency Hell, §4), **Dust Daemon** (whirlwind that bends your shots), **Port Scanner** (pops out of fixed holes in sequence).

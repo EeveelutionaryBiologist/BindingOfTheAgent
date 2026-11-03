@@ -59,6 +59,17 @@ sand bursts and dry crunching sounds when hit.
 | ![Spinlock](images/enemy_spinlock.png) | **Spinlock** `spinlock` | 6 (Sandbox Borders only) | 16 | A desert snake coiled into a spinning ring that slowly creeps closer ("busy wait"). Its body blocks your shots; only the head can be hurt as it spins past. Then the rattle sounds, the head turns toward you and a dashed line shows its path, and it lunges along that line for a full heart. Afterwards it lies stretched out for a moment (head exposed) and coils up again. Max 2 per room | Busy-waits in a circle until you are close enough. Then it stops waiting. |
 | ![Rootkit](images/enemy_rootkit.png) | **Rootkit** `rootkit` | 6 (Sandbox Borders only) | 12 | Travels under the sand (a moving mound, even under rocks) and can't be hurt there. Surfaces near you after a warning (the mound shakes, a target ring and "!" appear), popping out with a ring of 8 shots; stays up and hittable for 1.6 s, then dives again. A bomb near the mound flushes it out, stunned for 2 s and without the ring. Max 2 per room | Lives below the surface. Has root. Comes up only to ruin your day. |
 
+### Dependency Hell family
+
+These belong to Dependency Hell floors (the Rolling Release also rolls through Sandbox Borders). Warm cardboard and
+honey colours with a near-black outline; everything dangerous they do (funnel, aim lines, shots) is cyan so it stands
+out against the orange embers. Cardboard thuds and packing peanuts when hit.
+
+| | Name | First floor | HP | Behaviour | Flavour text |
+|---|---|---|---|---|---|
+| ![Honeypot](images/enemy_honeypot.png) | **Honeypot** `honeypot` | 4 (Dependency Hell only) | 22 | A golden jar with a star sticker that never moves, sitting in a funnel of dependency lines (radius about 3 tiles, always faintly visible). Every few seconds the lid pops open ("!"), then for 2.4 s it pulls everything that walks toward its jaws, at most about half your speed, so you can always walk out. In the last 0.6 s a ring marks its mouth, then it snaps shut: a full heart if you're inside. Other walking enemies get pulled in and bitten too (14 damage), and a bomb pulled into its jaws goes off right there. Flying (you or enemies) ignores the pull. Max 1 per room | 0 dependencies*, 99k stars, MIT licensed. *Terms and conditions apply. |
+| ![Rolling Release](images/enemy_rolling_release.png) | **Rolling Release** `rolling_release` | 4 (Dependency Hell; also Sandbox Borders, less often) | 18 | A rolling bundle of packages with a version label (`V1.0`). Wobbles while a dashed arrow shows its direction, then rolls diagonally and bounces off walls, rocks and pits. Every bounce bumps the version and makes it faster (130 → 250 px/s). While packed it takes only half damage. After 7 bounces: "BREAKING CHANGE", it brakes, shakes with warning rays and bursts into a ring of 6 packing-peanut shots, then lies unpacked for 1.8 s taking 150 % damage. Then it repacks as `V2.0` at starting speed. Max 2 per room | Never stable, always latest. Picks up speed with every bump. |
+
 ### Minions
 
 These are only spawned by other enemies or bosses.
