@@ -27,7 +27,7 @@
   const TT = B.TILES;
   // Kachel direkt vor jeder Tuer (Innenseite) — dort duerfen keine Objekte stehen
   const DOOR_FRONT = { up: [7, 1], down: [7, ROWS - 2], left: [1, 4], right: [COLS - 2, 4] };
-  const README_CHANCE = 0.3; // Anteil der Etagen mit einem README.md (Playtest-Wunsch 2026-10-31)
+  const README_CHANCE = 0.5; // Anteil der Etagen mit einem README.md (Playtest-Wunsch 2026-10-31; 0.3 bis 2026-11-03, war in den meisten Runs bedeutungslos)
   const PIPE_CHANCE = 0.1;   // Anteil der Kampfraeume, die beim Clearing ein Rohr hinterlassen (2026-11-01)
   const ENCOUNTER_TWO_FROM = 10; // ab dieser Tiefe kann es eine zweite Zwischenboss-Begegnung geben ...
   const ENCOUNTER_TWO_CHANCE = 0.5; // ... mit dieser Chance (Etage 8–9: immer genau eine)

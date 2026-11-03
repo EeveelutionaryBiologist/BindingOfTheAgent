@@ -16,7 +16,7 @@
  *     Vorwarnung; Koerper zuerst tot -> Kopf in Panik und schiesst oefter; Kopf zuerst tot -> Koerper irrt nur
  *     umher; Raum erst nach beiden geraeumt; killAll laesst nichts zurueck
  *   - Etagen-Bosse: nie zweimal hintereinander derselbe (300 simulierte Runs + echte Etagenfolge)
- *   - README.md: ~30 % der Etagen, nur in normalen Raeumen, deckt die Karte auf, aber nicht den Geheimraum
+ *   - README.md: ~50 % der Etagen, nur in normalen Raeumen, deckt die Karte auf, aber nicht den Geheimraum
  *   - Etagen: FLOORS und FLOOR_THEMES gleich lang; Etage 3 = Forgotten Branches mit verzweigteren Karten
  *   - Etagen-Themen (themes/themeOnly): nur bekannte Themen und gueltige Faktoren; jede Etage fuellt Raeume nur
  *     mit erlaubten Gegnern und hat einen Boss; Test-Eintraege pruefen Ausschluss, Faktor und Bonus-Chance
@@ -212,7 +212,7 @@ const URL = 'file://' + path.join(ROOT, 'index.html').replace(/\\/g, '/') + '?se
       }
     }
     if (Math.abs(pipeRooms / Math.max(1, combatRooms) - 0.1) > 0.04) out.push('Anteil Raeume mit Rohr ' + (pipeRooms / combatRooms).toFixed(3));
-    if (Math.abs(readmeFloors / 300 - 0.3) > 0.08) out.push('Anteil Etagen mit README ' + (readmeFloors / 300).toFixed(2));
+    if (Math.abs(readmeFloors / 300 - 0.5) > 0.08) out.push('Anteil Etagen mit README ' + (readmeFloors / 300).toFixed(2));
     // Boss-Abwechslung: 300 simulierte Runs a 12 Etagen, nie zweimal derselbe Boss hintereinander
     for (let r = 0; r < 300; r++) {
       const hist = [];

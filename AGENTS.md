@@ -80,7 +80,7 @@ Live state is under `BOTA.game` (`.player`, `.room`, `.floor`, `.depth`, `.state
 - the Rogue Agent Swarm spawns 4 members with one health bar, ghosts before dying, heals survivors by 10 %, goes solo
   for the last member and emits exactly one boss death;
 - bosses never repeat on consecutive floors (300 simulated runs plus a real floor sequence), and README.md appears on
-  about 30 % of floors, only in normal rooms, and reveals every room except the secret room;
+  about 50 % of floors, only in normal rooms, and reveals every room except the secret room;
 - pipes appear in about 10 % of combat rooms after clearing (never by a door), never lead to the boss room, the
   secret room or the current room, and can't ping-pong during their cooldown;
 - floor names and themes have the same length, floor 3 is Forgotten Branches, and its maps have ≥ 7 dead ends;
@@ -294,7 +294,7 @@ Global keys handled in every state: `M` (mute) and `F2` (debug). Holding `R` for
    entry. It uses its own stream too (`':loot'`); `game.populate` places them like enemies (spawn points first).
    The table `B.LOOSE_LOOT` (in `pickup.js`) is shared with the Hallucination's disguises, so that real and fake
    loot always have the same types and odds. Change both together, or the fake becomes obvious again.
-8. `assignReadme` puts a `readme` pickup (README.md) into one random normal room on 30 % of floors (`room.hasReadme`,
+8. `assignReadme` puts a `readme` pickup (README.md) into one random normal room on 50 % of floors (30 % until 2026-11-03) (`room.hasReadme`,
    `floor.readmeRoom`, own stream `':readme'`). Collecting it calls `floor.documentMap()`: every room except the secret
    room becomes `seen`, and `floor.documented` makes the minimap draw connections between unvisited rooms too.
 9. `assignPipes` marks about 10 % of combat rooms `hasPipe` (own stream `':pipe'`). `game.onRoomClear` →
