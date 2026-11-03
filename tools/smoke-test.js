@@ -86,6 +86,12 @@
  *   - Stack Trace: auf Tiefe 1–7 nur auf Legacy Codebase; Telegraph vor jedem Stich; Stachel 2, Papier 1, Einfalten
  *     harmlos; Exception nur jenseits der Reichweite (165–260 px/s), verpufft mit ihm; Waende kuerzen den Schwanz;
  *     Stack-Abbau 5 -> 4 -> 3; killAll laesst nichts zurueck
+ *   - Overflow Buffer: nie vor Etage 8, auf The Context Limit haeufiger; Pegel steigt (mit Treffern schneller), Platzen
+ *     nach vollem Telegraph in 8 Koralle-Tropfen (165–260 px/s), Pfuetze bremst x0.6 (nur innen, nicht gestapelt/fliegend)
+ *   - Summarizer (The Context Limit): nie vor Etage 8, auf Etage 11 staerker gewichtet, max. 1 pro Raum; haelt
+ *     Abstand; volle Telegraph-Dauer vor jedem Verschmelzen; Treffer bzw. totes Ziel bricht ab; HP = Summe, Max-HP
+ *     und Radius wachsen (gedeckelt), der Geschluckte verschwindet ohne enemyDeath/Kill, Raum wird danach clear;
+ *     ungeeignete Gegner nie gewaehlt; hoechstens 2x zusammengefasst; killAll laesst nichts zurueck
  *   - Spezialraeume, Pause- und Todesbildschirm rendern
  * Screenshots landen in tools/out/ (nicht einchecken).
  *
@@ -95,8 +101,6 @@
  * (keine Admin-Rechte noetig; das Spiel selbst braucht nichts davon)
  *
  * SICHERHEIT: Der Test oeffnet nur die lokale Datei; die CSP des Spiels blockiert ohnehin jedes Netzwerk.
- *   - Overflow Buffer: nie vor Etage 8, auf The Context Limit haeufiger; Pegel steigt (mit Treffern schneller), Platzen
- *     nach vollem Telegraph in 8 Koralle-Tropfen (165–260 px/s), Pfuetze bremst x0.6 (nur innen, nicht gestapelt/fliegend)
  */
 'use strict';
 
@@ -2143,7 +2147,198 @@ const URL = 'file://' + path.join(ROOT, 'index.html').replace(/\\/g, '/') + '?se
   // ---- Ende Slot 1 ----
 
   // ---- Context-Familie: Slot 2 (Summarizer) ----
-  // [[SLOT summarizer]]
+  // --- Summarizer (The Context Limit): nie vor Etage 8, auf Etage 11 haeufiger als auf anderen Etagen >= 8,
+  //     hoechstens 1 pro Raum; haelt Abstand; Telegraph (Linie, enemyWindup) volle Dauer vor jedem Verschmelzen;
+  //     Treffer im Telegraph bricht ab (verwirrt), totes Ziel bricht ab; Verschmelzen: HP = Summe, Max-HP waechst,
+  //     Radius waechst gedeckelt, der andere verschwindet ohne enemyDeath/Kill; Raum clear danach; ungeeignete
+  //     Gegner werden nie gewaehlt; hoechstens 2x zusammengefasst; killAll laesst nichts zurueck ---
+  const sumProblems = await page.evaluate(() => {
+    const out = [];
+    const g = BOTA.game, E = BOTA.ENEMIES, DT = 1 / 60, BH = BOTA.BEHAVIORS.summarizer;
+    const d0 = g.depth;
+    const CL = BOTA.FLOOR_THEMES.findIndex((t) => t.key === 'context') + 1;
+    // 1) Spawn-Regeln: nie vor Etage 8; auf The Context Limit staerker gewichtet; hoechstens 1 pro Raum
+    for (let d = 1; d <= 7; d++) {
+      if (BOTA.enemyWeightAt(E.summarizer, d) > 0) out.push('Summarizer: Gewicht > 0 auf Etage ' + d);
+      for (let i = 0; i < 150; i++) if (BOTA.rollRoomEnemies(new BOTA.RNG(BOTA.hashString('summ' + d + ':' + i)), d).includes('summarizer')) { out.push('Summarizer auf Etage ' + d); break; }
+    }
+    const other = CL === 10 ? 9 : 10;
+    const wCL = BOTA.enemyWeightAt(E.summarizer, CL), wOther = BOTA.enemyWeightAt(E.summarizer, other);
+    if (!(wCL > wOther && wOther > 0)) out.push('Summarizer: Gewicht ' + wCL + ' (Etage ' + CL + ') vs. ' + wOther + ' (Etage ' + other + ')');
+    let nCL = 0, nOther = 0;
+    for (let i = 0; i < 600; i++) {
+      const l = BOTA.rollRoomEnemies(new BOTA.RNG(BOTA.hashString('summCL:' + i)), CL).filter((x) => x === 'summarizer').length;
+      const l2 = BOTA.rollRoomEnemies(new BOTA.RNG(BOTA.hashString('summO:' + i)), other).filter((x) => x === 'summarizer').length;
+      if (l > 1 || l2 > 1) { out.push('Summarizer: ' + Math.max(l, l2) + ' in einem Raum'); break; }
+      nCL += l; nOther += l2;
+    }
+    if (!(nCL > nOther && nCL > 0)) out.push('Summarizer: ' + nCL + ' Raeume auf Etage ' + CL + ', ' + nOther + ' auf Etage ' + other);
+
+    // 2) Verhalten (direkt gesteppt; nur der Summarizer laeuft, die Ziele stehen still)
+    const ev = [];
+    const offs = ['enemyWindup', 'enemyVanish', 'enemyDeath'].map((n) => BOTA.bus.on(n, (x) => ev.push({ n, enemy: x.enemy, text: x.text })));
+    const p = g.player;
+    try {
+      g.enterFloor(CL); g.setState('play');
+      // moeglichst offener Kampfraum
+      const cells = [...g.floor.cells.values()].filter((c) => c.type === 'normal');
+      const solid = (r) => { let n = 0; for (let i = 0; i < r.tiles.length; i++) if (r.tiles[i] !== BOTA.TILES.FLOOR) n++; return n; };
+      cells.sort((a, b) => solid(a.room) - solid(b.room));
+      const room = cells[0].room;
+      room.populated = true; room.cleared = true; g.teleport(room);
+      BOTA.debug.god(true);
+      const clear = () => { for (let i = 0; i < 4; i++) BOTA.debug.killAll(); g.room.enemies = g.room.enemies.filter((x) => !x.dead); g.room.projectiles.length = 0; };
+      const spawn = (id, x, y) => { const e = BOTA.debug.spawn(id, x, y); if (e) e.spawnDelay = 0; return e; };
+      const pos = (x, y) => { const q = g.nearestFreePos(x, y); return [q.x, q.y]; };
+      const stepS = (S, n, each) => {
+        for (let i = 0; i < n; i++) {
+          if (!S.dead) S.update(DT, g);
+          g.room.enemies = g.room.enemies.filter((x) => !x.dead);
+          if (each && each(i) === false) return i;
+        }
+        return n;
+      };
+      const toTell = (S) => { S.state.t = 0.001; stepS(S, 5, () => S.state.mode !== 'tell'); return S.state.mode === 'tell'; };
+      clear();
+
+      // 2a) Abstand halten: startet nah am Spieler, steht nach 4 s im Wunschabstand (ohne andere Gegner)
+      p.x = 480; p.y = 320;
+      let S = spawn('summarizer', ...pos(560, 320));
+      const P = S.params;
+      stepS(S, 240);
+      const dS = Math.hypot(S.x - p.x, S.y - p.y);
+      if (dS < P.near - 30 || dS > P.far + 40) out.push('Summarizer: Abstand ' + dS.toFixed(0) + ' px nach 4 s');
+      if (S.state.mode !== 'walk') out.push('Summarizer: ohne Ziele nicht im Laufmodus (' + S.state.mode + ')');
+      clear();
+
+      // 2b) Telegraph volle Dauer vor dem Verschmelzen; Ergebnis pruefen
+      p.x = 160; p.y = 480;
+      S = spawn('summarizer', ...pos(700, 160));
+      let A = spawn('bug', ...pos(560, 360)), Bq = spawn('bug', ...pos(640, 380));
+      Bq.hurt(2, g, {});                      // B hat weniger HP -> wird geschluckt (gleicher Radius)
+      const hpA = A.hp, hpB = Bq.hp, maxA = A.maxHp, maxB = Bq.maxHp, rA = A.r;
+      const kills0 = g.runStats.kills;
+      ev.length = 0;
+      if (!toTell(S)) out.push('Summarizer: startet keinen Telegraph mit zwei Bugs');
+      if (!ev.some((x) => x.n === 'enemyWindup' && x.enemy === S)) out.push('Summarizer: kein enemyWindup beim Telegraph');
+      if (!((S.state.a === A && S.state.b === Bq) || (S.state.a === Bq && S.state.b === A))) out.push('Summarizer: Telegraph-Linie nicht zwischen den beiden Zielen');
+      let tellTicks = 0;
+      stepS(S, 200, () => { if (!A.dead && !Bq.dead) { tellTicks++; return true; } return false; });
+      if (tellTicks < Math.floor(P.tell * 60) - 1) out.push('Summarizer: Verschmelzen nach nur ' + (tellTicks / 60).toFixed(2) + ' s Telegraph');
+      if (A.dead || !Bq.dead) out.push('Summarizer: falscher Ueberlebender (A tot: ' + A.dead + ', B tot: ' + Bq.dead + ')');
+      else {
+        if (Math.abs(A.hp - (hpA + hpB)) > 1e-6) out.push('Summarizer: HP ' + A.hp + ' statt ' + (hpA + hpB));
+        if (A.maxHp !== maxA + maxB) out.push('Summarizer: Max-HP ' + A.maxHp + ' statt ' + (maxA + maxB));
+        if (!(A.r > rA) || A.r > rA * P.growCap + 1e-6) out.push('Summarizer: Radius ' + rA + ' -> ' + A.r);
+        if (A.summaries !== 1) out.push('Summarizer: Zaehler ' + A.summaries);
+        if (g.room.enemies.includes(Bq)) out.push('Summarizer: geschluckter Gegner noch im Raum');
+        if (ev.some((x) => x.n === 'enemyDeath')) out.push('Summarizer: Verschmelzen loest enemyDeath aus');
+        if (g.runStats.kills !== kills0) out.push('Summarizer: Verschmelzen zaehlt als Kill');
+        if (!ev.some((x) => x.n === 'enemyVanish' && x.enemy === Bq && x.text === 'summarized')) out.push('Summarizer: kein enemyVanish "summarized"');
+        try { A.draw(document.createElement('canvas').getContext('2d'), g); } catch (err) { out.push('Summarizer: Schild zeichnen: ' + err.message); }
+      }
+      // Raum wird geclearet, sobald die Uebrigen tot sind (der Geschluckte zaehlt nicht mehr)
+      g.room.cleared = false; g.room.populated = true;
+      A.die(g); S.die(g);
+      for (let i = 0; i < 5; i++) g.update(DT);
+      if (!g.room.cleared) out.push('Summarizer: Raum wird nach dem Verschmelzen nicht clear');
+      g.room.cleared = true;
+      clear();
+
+      // 2c) Treffer im Telegraph bricht ab (verwirrt), danach lange kein Verschmelzen
+      S = spawn('summarizer', ...pos(700, 160));
+      A = spawn('bug', ...pos(560, 360)); Bq = spawn('bug', ...pos(640, 380));
+      toTell(S); stepS(S, 30);
+      S.hurt(1, g, {}); stepS(S, 1);
+      if (S.state.mode !== 'fluster' || S.state.a) out.push('Summarizer: Treffer bricht den Telegraph nicht ab (' + S.state.mode + ')');
+      stepS(S, Math.ceil((P.tell + 1.5) * 60));
+      if (A.dead || Bq.dead || A.summaries || Bq.summaries) out.push('Summarizer: verschmilzt trotz Treffer im Telegraph');
+      clear();
+
+      // 2d) Totes Ziel bricht ab
+      S = spawn('summarizer', ...pos(700, 160));
+      A = spawn('bug', ...pos(560, 360)); Bq = spawn('bug', ...pos(640, 380));
+      toTell(S); stepS(S, 20);
+      const hpBq = Bq.hp;
+      ev.length = 0;
+      A.die(g); stepS(S, 1);
+      if (S.state.mode === 'tell' || S.state.a) out.push('Summarizer: totes Ziel bricht den Telegraph nicht ab');
+      stepS(S, Math.ceil(P.tell * 60));
+      if (Bq.dead || Bq.summaries || Bq.hp !== hpBq || ev.some((x) => x.n === 'enemyVanish')) out.push('Summarizer: verschmilzt mit totem Ziel');
+      clear();
+
+      // 2e) Ungeeignete Gegner werden nie gewaehlt
+      S = spawn('summarizer', ...pos(700, 160));
+      const bad = [];
+      const at = [[320, 240], [400, 260], [360, 330], [300, 420], [420, 430], [480, 360], [560, 300], [600, 420]];
+      ['hallucination', 'dry_run', 'detached_head', 'cherry_pick', 'spinlock', 'port_scanner', 'orphan_commit',
+        'memory_leak', 'scope_creep', 'jira_ticket', 'stale_branch', 'leaklet', 'microservice', 'summarizer'].forEach((id, i) => {
+        const e = spawn(id, ...pos(at[i % at.length][0] + (i >> 3) * 20, at[i % at.length][1]));
+        if (e) bad.push(e);
+      });
+      const boss = BOTA.debug.spawnBoss('monolith', ...pos(480, 300));
+      if (boss) bad.push(boss);
+      const revealed = spawn('hallucination', ...pos(380, 300));
+      if (revealed) { revealed.state.mode = 'chase'; revealed.intangible = false; revealed.ignoreForClear = false; revealed.static = false; bad.push(revealed); }
+      // alles im Raum ausser einfachen Gegnern (inkl. Kopf, Partner, Glieder, Ports)
+      for (const e of g.room.enemies) {
+        if (e === S) continue;
+        if (BH.canSummarize(e, S)) out.push('Summarizer: ' + e.id + ' gilt als geeignet');
+      }
+      if (BH.canSummarize(S, S)) out.push('Summarizer: fasst sich selbst zusammen');
+      const zombie = spawn('zombie_process', ...pos(620, 260));
+      zombie.state.down = 1; zombie.intangible = true;
+      if (BH.canSummarize(zombie, S)) out.push('Summarizer: liegender Zombie Process gilt als geeignet');
+      S.state.t = 0.001; stepS(S, 90);
+      if (S.state.mode === 'tell' || S.state.merges) out.push('Summarizer: Telegraph ohne geeignetes Paar (' + (S.state.a && S.state.a.id) + ')');
+      const one = spawn('bug', ...pos(330, 250));
+      S.state.t = 0.001; stepS(S, 30);
+      if (S.state.mode === 'tell') out.push('Summarizer: Telegraph mit nur einem geeigneten Gegner (' + S.state.a.id + '+' + S.state.b.id + ')');
+      const two = spawn('null_pointer', ...pos(345, 300));
+      toTell(S);
+      const picked = [S.state.a, S.state.b];
+      if (S.state.mode !== 'tell' || !picked.includes(one) || !picked.includes(two)) out.push('Summarizer: waehlt nicht die zwei einfachen Gegner (' + picked.map((x) => x && x.id) + ')');
+      if (boss && !boss.dead) boss.die(g);
+      clear();
+
+      // 2f) Hoechstens zweimal zusammengefasst; Radius gedeckelt
+      p.x = 160; p.y = 480;
+      S = spawn('summarizer', ...pos(760, 160));
+      const X = spawn('bug', ...pos(560, 360));
+      const r0 = X.r;
+      let partner = spawn('bug', ...pos(620, 360));
+      partner.hurt(1, g, {});
+      toTell(S); stepS(S, 200, () => S.state.mode === 'tell');
+      partner = spawn('bug', ...pos(620, 380));
+      toTell(S); stepS(S, 200, () => S.state.mode === 'tell');
+      if (X.dead || X.summaries !== 2) out.push('Summarizer: nach zwei Runden Zaehler ' + X.summaries + (X.dead ? ' (geschluckt)' : ''));
+      if (X.r > r0 * P.growCap + 1e-6) out.push('Summarizer: Radius ueber der Obergrenze (' + X.r.toFixed(1) + ')');
+      if (BH.canSummarize(X, S)) out.push('Summarizer: dreimal zusammenfassbar');
+      const D = spawn('bug', ...pos(620, 380));
+      S.state.t = 0.001; stepS(S, 30);
+      if (S.state.mode === 'tell') out.push('Summarizer: waehlt einen schon zweimal zusammengefassten Gegner');
+      const E2 = spawn('bug', ...pos(660, 420));
+      toTell(S);
+      if (S.state.mode !== 'tell' || [S.state.a, S.state.b].includes(X)) out.push('Summarizer: Paar neben dem Vollen falsch gewaehlt');
+      void D; void E2;
+
+      // 2g) killAll mitten im Telegraph laesst nichts zurueck; der Summarizer selbst schiesst nie
+      if (g.room.projectiles.some((q) => q.source === 'Summarizer')) out.push('Summarizer: hat geschossen');
+      BOTA.debug.killAll();
+      g.room.enemies = g.room.enemies.filter((x) => !x.dead);
+      if (g.room.enemies.length) out.push('Summarizer: nach killAll bleiben ' + g.room.enemies.map((x) => x.id));
+    } catch (err) {
+      out.push('Summarizer-Test: ' + err.message);
+    } finally {
+      for (const off of offs) off();
+      g.room.projectiles.length = 0;
+      BOTA.debug.god(true);
+      p.health = p.maxHealth;
+      g.enterFloor(d0); g.setState('play');
+    }
+    return out;
+  });
+  problems.push(...sumProblems);
   // ---- Ende Slot 2 ----
 
   // ---- Context-Familie: Slot 3 (Lost in the Middle) ----

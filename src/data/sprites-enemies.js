@@ -584,7 +584,58 @@
   // ---- Ende Slot 1 ----
 
   // ---- Context-Familie: Slot 2 (Summarizer) ----
-  // [[SLOT summarizer]]
+  // Summarizer — verhuellter Schreiber in einer aufgeweichten Papierkutte mit Tintenflecken; im dunklen Kapuzen-
+  // inneren zwei warme Augen (Bernstein, nie blau), rechts haelt eine blasse Hand einen weissen Federkiel.
+  // Frame 0: Kiel oben, Frame 1: Kiel eine Zeile tiefer (Schreibbewegung) und der nasse Saum schwingt.
+  // Zeichen: k Kontur, P/p Papier hell/dunkel, i Tinte (Kapuze innen, Flecken, Federspitze), e Augen,
+  // w nasser Glanz, f Feder, h Hand
+  {
+    const CC = B.CONTEXT_COLORS;
+    const SUM_PAL = {
+      k: CC.outline, P: CC.paper, p: CC.paperDark, i: CC.ink, e: CC.warn, w: CC.water, f: '#eef2f8', h: CC.glass,
+    };
+    B.defineSprite('enemy_summarizer', {
+      palette: SUM_PAL, scale: 4,
+      frames: [
+        [
+          '....kkkk........',
+          '...kPwPPk.......',
+          '..kPwPPPPk....kk',
+          '.kPPpiipPPk..kfk',
+          '.kPpiiiiipk.kffk',
+          '.kPieiieipk.kfk.',
+          '.kPpiiiipPk.kfk.',
+          '.kPPpiipPPkkfk..',
+          'kPPPppppPPkhk...',
+          'kPpPPPPPPPhhk...',
+          'kPpPPiPPPpkik...',
+          'kPpPPiiPPpPk....',
+          'kPPpPPPPPPpk....',
+          'kPpPPPPPPPpPk...',
+          'kpPpPpPpPpPpk...',
+          '.kkk.kkk.kkkk...',
+        ],
+        [
+          '....kkkk........',
+          '...kPwPPk.......',
+          '..kPwPPPPk......',
+          '.kPPpiipPPk...kk',
+          '.kPpiiiiipk..kfk',
+          '.kPieiieipk.kffk',
+          '.kPpiiiipPk.kfk.',
+          '.kPPpiipPPk.kfk.',
+          'kPPPppppPPkkfk..',
+          'kPpPPPPPPPkhk...',
+          'kPpPPiPPPhhik...',
+          'kPpPPiiPPpPk....',
+          'kPPpPPPPPPpk....',
+          'kPpPPPPPPPpPk...',
+          'kPpPpPpPpPpPk...',
+          '.kkkk.kkk.kkk...',
+        ],
+      ],
+    });
+  }
   // ---- Ende Slot 2 ----
 
   // ---- Context-Familie: Slot 3 (Lost in the Middle) ----

@@ -30,6 +30,8 @@
  *   e.noSeparate   wird nicht von anderen Gegnern weggeschoben (Bosse)
  *   e.sayText/sayT kurzer schwebender Text ueber dem Gegner (siehe AI.say)
  *   e.damageTakenMult  Faktor auf jeden erlittenen Schaden (undefined = 1; Rate Limiter waehrend "429")
+ *   e.sizeMult     zusaetzlicher Zeichen-Groessenfaktor in AI.drawBody (undefined = 1; Summarizer vergroessert
+ *                  zusammengefasste Gegner, deren Verhalten e.scale selbst verwaltet)
  *
  * Verhalten in dieser Datei: wander, chase, fly_chase, split, blink, charge, turret, orbit, shooter,
  * revive, grow, mimic, zigzag, glitch, stale (Stale Branch), detached_body + detached_tag (Detached HEAD),
@@ -230,7 +232,10 @@
       B.drawSprite(ctx, name, e.x + (o.dx || 0), e.y + (o.dy || 0), {
         flash: e.flash > 0,
         alpha: e.alpha * Math.max(0, Math.min(1, 0.3 + 0.7 * appear)) * (o.alpha !== undefined ? o.alpha : 1),
-        scale: o.scale !== undefined ? o.scale : e.scale,
+        // e.sizeMult (optional, undefined = 1): dauerhafter Groessenfaktor, den ANDERE Gegner setzen (Summarizer:
+        // zusammengefasster Gegner waechst). Wirkt zusaetzlich zu e.scale bzw. o.scale, die viele Verhalten pro
+        // Tick selbst setzen (Pumpen, Wackeln) — so bleibt die Vergroesserung auch dann sichtbar.
+        scale: (o.scale !== undefined ? o.scale : e.scale) * (e.sizeMult || 1),
         frame,
         flipX,
         rotation: o.rotation,

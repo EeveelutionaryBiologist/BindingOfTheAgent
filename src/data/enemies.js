@@ -628,7 +628,34 @@
   // ---- Ende Slot 1 ----
 
   // ---- Context-Familie: Slot 2 (Summarizer) ----
-  // [[SLOT summarizer]]
+  // --- The Context Limit: Summarizer ---
+  // Ein verhuellter Schreiber mit Federkiel (aufgeweichte Papierkutte, Tintenflecken). Greift nie selbst an (nur
+  // normaler Kontaktschaden), haelt Abstand und "kompaktiert" stattdessen andere Gegner: alle paar Sekunden waehlt
+  // er die zwei naechstgelegenen geeigneten Gegner, verbindet sie mit einer gestrichelten Bernstein-Linie
+  // ("compacting...", Telegraph) und verschmilzt sie danach: der kleinere geht im groesseren auf (HP addiert,
+  // etwas groesser, Schild "[summary]"). Trifft der Spieler ihn waehrend des Telegraphs, verliert er den Faden
+  // (Abbruch, kurz verwirrt); stirbt eines der Ziele, faellt die Zusammenfassung ebenfalls aus. Nur einfache
+  // Gegner sind geeignet (Positivliste SUMMARY_BEHAVIORS in entities/enemies-context.js). Verhalten 'summarizer'.
+  E.summarizer = {
+    name: 'Summarizer', hp: 16, r: 16, speed: 58, contactDamage: 1,
+    behavior: 'summarizer', params: {
+      near: 200, far: 320,      // Wunschabstand zum Spieler (px)
+      firstMin: 3.5, firstMax: 5,   // erste Zusammenfassung nach so vielen Sekunden (game.rng)
+      cdMin: 6, cdMax: 8,       // Pause zwischen zwei Zusammenfassungen (game.rng, AI.cooldown)
+      retry: 0.6,               // kein geeignetes Paar gefunden: so bald erneut suchen (s)
+      pairRange: 300,           // die zwei Ziele duerfen hoechstens so weit auseinander stehen (px)
+      tell: 1.5,                // Telegraph: Linie + "compacting..." (s), erst danach verschmelzen sie
+      fluster: 1.3,             // nach einem Treffer im Telegraph: verwirrt (s), danach neue Pause
+      flusterCd: 3,             // ... und so lange bis zum naechsten Versuch (s)
+      grow: 1.15,               // Radius-Faktor des Ueberlebenden je Zusammenfassung ...
+      growCap: 1.35,            // ... hoechstens so viel des urspruenglichen Radius
+      maxSummaries: 2,          // ein Gegner wird hoechstens so oft zusammengefasst
+    },
+    sprite: 'enemy_summarizer', color: '#d8d2c2',
+    minFloor: 8, weight: 4, cost: 2, maxPerRoom: 1, tags: [],
+    themeOnly: ['context'], family: 'context',
+    desc: 'TL;DR: two of your problems are now one bigger problem.',
+  };
   // ---- Ende Slot 2 ----
 
   // ---- Context-Familie: Slot 3 (Lost in the Middle) ----
