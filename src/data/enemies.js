@@ -659,7 +659,31 @@
   // ---- Ende Slot 2 ----
 
   // ---- Context-Familie: Slot 3 (Lost in the Middle) ----
-  // [[SLOT lost_in_the_middle]]
+  // --- Context: Lost in the Middle ---
+  // Verblasster Geist einer Chat-Sprechblase (die LLM-Schwaeche, die Mitte eines langen Kontexts zu vergessen).
+  // Am Rand fest: schwebt zum Spieler, Kontakt 1, nach Telegraph ein 3er-Faecher aus Wort-Schuessen. Im mittleren
+  // Drittel der Raumbreite fast unsichtbar: intangible, harmlos, greift nicht an. Bleibt er dort zu lange
+  // (maxLost), treibt er hinaus und bleibt eine Weile draussen (hold) — der Raum ist immer schaffbar.
+  // Verhalten 'lost_in_the_middle' in entities/enemies-context.js (Zone, Zeiten und Anti-Stillstand dort erklaert).
+  E.lost_in_the_middle = {
+    name: 'Lost in the Middle', hp: 14, r: 18, speed: 70, contactDamage: 1, flying: true,
+    behavior: 'lost_in_the_middle', params: {
+      fade: 0.3,            // Ein-/Ausblenden (s); fest erst, wenn wieder voll sichtbar
+      ghostAlpha: 0.16,     // Deckkraft in der Mitte
+      tell: 0.6,            // Telegraph vor dem Faecher (s)
+      fan: 3, spread: 0.26, // 3 Schuesse, ~15 Grad Abstand
+      shotSpeed: 195,       // px/s (mit Tiefen-Skalierung max. ~224)
+      cdMin: 2.0, cdMax: 3.0, // Pause zwischen zwei Salven (s, mit AI.cooldown)
+      maxLost: 4,           // so lange darf er am Stueck in der Mitte schweben (s), dann treibt er hinaus
+      surfaceSpeed: 110,    // Tempo beim Hinaustreiben (px/s)
+      hold: 2.2,            // bleibt danach so lange ausserhalb der Mitte (s)
+      keepOut: 40,          // ... mit mindestens diesem Abstand zur Zonengrenze (px)
+    },
+    sprite: 'enemy_lost_in_the_middle', color: '#b9cde6', noFlip: true,
+    minFloor: 8, weight: 5, cost: 1.6, maxPerRoom: 2, tags: ['fly', 'ranged'],
+    themeOnly: ['context'], family: 'context',
+    desc: 'Remembers the beginning. Remembers the end. Everything in between: gone.',
+  };
   // ---- Ende Slot 3 ----
 
   // Minions (spawn: false) — entstehen nur durch andere Gegner oder Bosse

@@ -639,7 +639,51 @@
   // ---- Ende Slot 2 ----
 
   // ---- Context-Familie: Slot 3 (Lost in the Middle) ----
-  // [[SLOT lost_in_the_middle]]
+  // Lost in the Middle — verblasster Geist einer Chat-Sprechblase: blasses Glas, oben und unten ein paar Zeilen
+  // ausgewaschener "Woerter", traurig haengende Brauen, eine Traene (harmloses Wasser-Blau), Mundwinkel nach unten,
+  // Sprechblasen-Schwaenzchen unten links. Frame 2: die Traene rutscht tiefer, die Woerter verschwimmen weiter,
+  // das Schwaenzchen schwingt. Die Durchsichtigkeit in der Raummitte macht das Verhalten (e.alpha), nicht das Sprite.
+  {
+    const C = B.CONTEXT_COLORS;
+    const pal = { k: C.outline, b: C.glass, h: '#e6f0ff', d: C.glassDark, e: C.ink, w: C.water };
+    // 16 x 16 Art-Pixel: ovale Blase (13 Zeilen) + Schwaenzchen (3 Zeilen)
+    const body = (wordsTop, tearRow, wordsBottom, tail) => [
+      '....kkkkkkkk....',
+      '..kkhhhbbbbbkk..',
+      '.khhbbbbbbbbbbk.',
+      wordsTop,
+      'khbbbbbbbbbbbbbk',
+      'kbbbbdbbbbdbbbbk',
+      'kbbbdbbbbbbdbbbk',
+      'kbbbeebbbbeebbbk',
+      tearRow === 8 ? 'kbbbwbbbbbbbbbbk' : 'kbbbbbbbbbbbbbbk',
+      tearRow === 9 ? 'kbbbwbeeeebbbbbk' : 'kbbbbbeeeebbbbbk',
+      '.kbbbebbbbebbbk.',
+      wordsBottom,
+      '..kkbbbkkkkkkk..',
+    ].concat(tail);
+    B.defineSprite('enemy_lost_in_the_middle', {
+      palette: pal,
+      scale: 4,
+      frames: [
+        body('.kbdddbdddbddbk.', 8, '.kbddbdddbbbbbk.', ['...kbbk.........', '...kbk..........', '..kk............']),
+        body('.kbddbbdddbbdbk.', 9, '.kbdbbddbbbbbbk.', ['...kbbk.........', '....kbk.........', '.....kk.........']),
+      ],
+    });
+    // "Wort"-Schuss: ein korallenrotes Wort-Plaettchen mit dunklen Buchstaben-Strichen (wird in Flugrichtung
+    // gedreht). Dunkle Kontur, damit es im hellblauen Regen sofort auffaellt.
+    B.defineSprite('shot_lost_word', {
+      palette: { k: C.outline, s: C.shot, l: '#ffd2bd', d: '#5a2414' },
+      scale: 3,
+      rows: [
+        '.kkkkkkk.',
+        'kllsssssk',
+        'ksdsddsdk',
+        'ksssssssk',
+        '.kkkkkkk.',
+      ],
+    });
+  }
   // ---- Ende Slot 3 ----
 
   // Microservice — kleiner grauer Wuerfel-Drohne mit Status-LED (Minion des Monolith)
