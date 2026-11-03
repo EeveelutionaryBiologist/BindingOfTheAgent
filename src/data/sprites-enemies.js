@@ -1584,4 +1584,91 @@
       rows,
     });
   })();
+
+  // ===========================================================================
+  // Production: Rate Limiter und Port Scanner
+  // ===========================================================================
+  // Familien-Optik "production": helles Stahlgrau mit kraeftiger dunkler Kontur (der Boden ist dunkel und rot),
+  // Warnstreifen, Lampen/Augen in Cyan — dieselbe Farbe wie ihre Schuesse. Kein Rot fuer Gefaehrliches.
+  const PROD_PAL = {
+    k: '#141416', L: '#c4ccd4', s: '#8c959f', d: '#565e68', h: '#2a2f36', r: '#0e1012', W: '#f2f5f8',
+    c: '#5fe0ff', C: '#d8fbff', y: '#f2c230', b: '#26262a',
+  };
+
+  // Rate Limiter — Drehkreuz-Schrank von vorn: oben drei Lampen (= Tokens, hier alle an; verbrauchte deckt das
+  // Verhalten dunkel ab), in der Mitte der dreiarmige Rotor, unten Warnstreifen und zwei Stummelfuesse.
+  // Frame 0 = Rotor als "Y" (Arm oben), Frame 1 = um 60 Grad weitergeklackt (Arm unten). Das Verhalten waehlt den
+  // Frame selbst (pro Schuss ein Klack). Lampen-Positionen: Spalten 2–4 / 6–8 / 10–12, Zeilen 2–3 (enemy.js).
+  // Zeichen: k Kontur, L/s/d Stahl hell/mittel/dunkel, h Nabe, r Nabenmitte, W Rotorarm, c/C Lampe, y/b Streifen
+  const RL_TOP = [
+    '..kkkkkkkkkkk..',
+    '.kLLLLLLLLLLLk.',
+    '.kCccLCccLCcck.',
+    '.kcccLcccLccck.',
+    '.kdddddddddddk.',
+  ];
+  // Rotor auf dunkler Frontplatte (Spalten 3–11), eingefasst von hellem (links) und mittlerem Stahl (rechts)
+  const rlFace = (mid) => '.kL' + mid + 'sk.';
+  const RL_HUB = ['hhhLLLhhh', 'hhhLrLhhh', 'hhhLLLhhh'].map(rlFace);
+  const RL_ARM_V = rlFace('hhhhWhhhh');   // senkrechter Arm (Mitte)
+  const RL_ARM_1 = rlFace('hhWhhhWhh');   // schraege Arme, nah an der Nabe
+  const RL_ARM_2 = rlFace('hWhhhhhWh');   // schraege Arme, aussen
+  const RL_BOTTOM = [
+    '.kybybybybybyk.',
+    '.kbybybybybybk.',
+    '.kkkkkkkkkkkkk.',
+    '..kddk...kddk..',
+    '..kkkk...kkkk..',
+  ];
+  const RL_FACE_Y = [RL_ARM_V, RL_ARM_V].concat(RL_HUB, [RL_ARM_1, RL_ARM_2]);
+  const RL_FACE_A = [RL_ARM_2, RL_ARM_1].concat(RL_HUB, [RL_ARM_V, RL_ARM_V]);
+  B.defineSprite('enemy_rate_limiter', {
+    palette: PROD_PAL, scale: 4,
+    frames: [RL_TOP.concat(RL_FACE_Y, RL_BOTTOM), RL_TOP.concat(RL_FACE_A, RL_BOTTOM)],
+  });
+
+  // Port Scanner — kleiner Sonden-Roboter mit Antenne (Bernstein-Spitze) und dunklem Visier, in dem ein cyanes
+  // Auge hin und her scannt (Frame 0 links, Frame 1 rechts; beim Zielen schaut es zum Spieler).
+  // Zeichen: k Kontur, a Antennenspitze, L/s/d Gehaeuse hell/mittel/dunkel, r Visier, c/C Auge, W Schrauben
+  const PS_BODY = (eyeAt) => {
+    const eye = (row) => row.slice(0, eyeAt) + 'Cc' + row.slice(eyeAt + 2);
+    return [
+      '.....kyk.....',
+      '......k......',
+      '...kkkkkkk...',
+      '..kLLLLLssk..',
+      '.kLLLsssssdk.',
+      '.krrrrrrrrrk.',
+      eye('.krrrrrrrrrk.'),
+      eye('.krrrrrrrrrk.').replace('C', 'c'),
+      '.kLsssssssdk.',
+      '.ksWsssssWdk.',
+      '.ksssssssddk.',
+      '.kdddddddddk.',
+      '.kkkkkkkkkkk.',
+    ];
+  };
+  B.defineSprite('enemy_port_scanner', { palette: PROD_PAL, scale: 4, frames: [PS_BODY(3), PS_BODY(8)] });
+
+  // Port — Netzwerkbuchse im Boden (von oben): Metallrahmen, dunkle Oeffnung mit goldenen Kontakten und der
+  // typischen Nase unten, zwei Status-LEDs. Frame 0 = aus, Frame 1 = an (wird gerade gescannt).
+  // Zeichen: k Kontur, L/s Rahmen hell/dunkel, r Oeffnung, g Kontakte, o/O LEDs aus, c/y LEDs an
+  const PORT_ROWS = [
+    '.kkkkkkkkkk.',
+    'kLLLLLLLLLsk',
+    'kLrrrrrrrrsk',
+    'kLrgrgrgrgsk',
+    'kLrrrrrrrrsk',
+    'kLrrrrrrrrsk',
+    'kLkrrrrrrksk',
+    'kLskkrrkkssk',
+    'kooLLLLLLOOk',
+    '.kkkkkkkkkk.',
+  ];
+  B.defineSprite('enemy_port_scanner_port', {
+    // Gedaempfte Farben: die Buchse ist Teil des Bodens und soll nicht wie ein Gegner aussehen
+    palette: Object.assign({}, PROD_PAL, { L: '#6d747c', s: '#454b53', r: '#0b0c0e', g: '#9a7a32', o: '#26343a', O: '#3a3222' }),
+    scale: 4,
+    frames: [PORT_ROWS, PORT_ROWS.map((r) => r.replace(/o/g, 'c').replace(/O/g, 'y'))],
+  });
 })(window.BOTA);

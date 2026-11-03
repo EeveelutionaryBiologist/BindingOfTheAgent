@@ -29,6 +29,7 @@
  *   e.aoeDedupe    Flaechenschaden ohne Quelle (Explosion, Aktiv-Items) zaehlt max. einmal pro Tick
  *   e.noSeparate   wird nicht von anderen Gegnern weggeschoben (Bosse)
  *   e.sayText/sayT kurzer schwebender Text ueber dem Gegner (siehe AI.say)
+ *   e.damageTakenMult  Faktor auf jeden erlittenen Schaden (undefined = 1; Rate Limiter waehrend "429")
  *
  * Verhalten in dieser Datei: wander, chase, fly_chase, split, blink, charge, turret, orbit, shooter,
  * revive, grow, mimic, zigzag, glitch, stale (Stale Branch), detached_body + detached_tag (Detached HEAD),
@@ -36,7 +37,8 @@
  * Forgotten-Branches-Familie; spinlock + spinlock_segment (Spinlock) und rootkit (Rootkit) zur Sandbox-Borders-Familie;
  * rogue_agent (einzelnes Swarm-Mitglied, ab Etage 7); dust_daemon (Dust Daemon, Sandbox Borders, lenkt Schuesse
  * ab); dry_run (Dry Run, The Training Data: Geist probt, Koerper wiederholt exakt); stack_trace (Stack Trace,
- * Legacy Codebase); honeypot (Honeypot) und rolling_release (Rolling Release) zur Dependency-Hell-Familie.
+ * Legacy Codebase); honeypot (Honeypot) und rolling_release (Rolling Release) zur Dependency-Hell-Familie;
+ * rate_limiter (Rate Limiter) sowie port_scanner + scanner_port (Port Scanner) zur Production-Familie.
  * Boss-Verhalten (und das Wurm-Segment) stehen in entities/boss.js.
  *
  * Zusaetzliche Bus-Events (nur informativ, z. B. fuer Sound/Effekte): 'enemyRevive' (Zombie steht auf),
@@ -47,6 +49,8 @@
  * Probe 'rehearse' / Ernstfall 'replay'); 'enemyChomp' (Honeypot schnappt zu: { r, ate: null|'you'|'enemy'|'push' }),
  * 'enemyBounce' (Rolling Release prallt ab), 'enemyUnpack' (Rolling Release platzt auf); aus boss.js: 'bossPhase',
  * 'bossStomp', 'bossBounce'.
+ * Production: 'enemyThrottle' (Rate Limiter geht in die "429"-Pause), 'portScan' (Port Scanner: { kind: 'open' |
+ * 'filtered' } — taucht an einem Port auf bzw. ueberspringt ihn, weil der Spieler darauf steht).
  * 'enemyDeath' kann zusaetzlich { segment: true } tragen (platzende Wurm-Segmente, ohne Kill-Zaehlung).
  *
  * SICHERHEIT: reine Spiellogik, kein DOM-Zugriff (ausser Canvas-Zeichnen), kein eval/innerHTML,
@@ -421,6 +425,8 @@
       const hitBody = at || this;
       if (this.dead) return false;
       if (this.invulnerable) { hitBody.flash = 0.04; return false; }
+      // Schadensfaktor (optional, z. B. Rate Limiter in der "429"-Pause: nimmt mehr Schaden)
+      if (this.damageTakenMult !== undefined) amount *= this.damageTakenMult;
       // Flaechenschaden (keine Quelle) nur einmal pro Tick — verhindert, dass eine Explosion
       // ueber viele Wurm-Segmente den Boss in einem Frame mehrfach trifft
       if (!source && this.aoeDedupe) {
@@ -3688,6 +3694,493 @@
       }
       if (s.mode === 'quake') AI.drawMark(ctx, '!', e.x, e.y - e.r - 10, e.t, '#ff4d4d', 22);
       AI.drawSay(e, ctx);
+    },
+  };
+
+  // ===========================================================================
+  // Production: Rate Limiter ('rate_limiter')
+  // ===========================================================================
+  //
+  // Ein Token-Bucket auf Beinen. Die drei Lampen auf dem Schrank SIND die Tokens. Zustaende (state.mode):
+  //   walk       stapft auf Wunschabstand (near..far) zum Spieler, dazwischen seitliches Ausweichen; Eimer voll
+  //   aim        Telegraph (params.aim): bleibt stehen, Lampen blinken, gestrichelte Ziellinie folgt dem Spieler,
+  //              cyanes Gluehen und "!" ('enemyWindup' ohne sound -> Familien-Sound 'servo')
+  //   burst      pro Token ein gezielter Schuss im Abstand params.gap; je Schuss erlischt eine Lampe und der
+  //              Drehkreuz-Rotor klackt um 60 Grad weiter (Sprite-Frame wechselt)
+  //   throttled  "429" (params.throttle s): Schild ueber dem Kopf, ablaufender Retry-After-Ring, Rotor steht;
+  //              kein Kontaktschaden, keine Schuesse, nimmt throttledMult-fachen Schaden ('enemyThrottle')
+  //   refill     Lampen gehen nacheinander wieder an (je params.refill s, 'enemyWindup' mit sound 'token');
+  //              ab hier wieder Kontaktschaden — die Lampen sind die Vorwarnung fuer die naechste Salve; dann walk
+  // Gezielt wird erst mit Sichtlinie; ohne Sicht laeuft er weiter auf den Spieler zu (nach 3 s zielt er trotzdem,
+  // damit er nicht ewig wandert — dann treffen die Schuesse eben den Felsen).
+
+  const PROD_CYAN = '#5fe0ff';    // Production-Schuesse/-Lampen: Cyan hebt sich vom roten Boden ab
+  const PROD_AMBER = '#ffcf4d';   // Warnfarbe (Schild, Ringe, "!")
+  const PROD_SHOT = { color: PROD_CYAN };
+
+  /** Gestrichelte Ziellinie (Production-Telegraph); k = Fortschritt 0..1 */
+  function prodAimLine(ctx, x, y, ang, len, k) {
+    ctx.save();
+    ctx.globalAlpha = 0.3 + 0.6 * B.M.clamp(k, 0, 1);
+    ctx.lineCap = 'round';
+    ctx.setLineDash([10, 8]);
+    ctx.lineDashOffset = -k * 36;
+    ctx.strokeStyle = 'rgba(0,0,0,0.6)';
+    ctx.lineWidth = 6;
+    ctx.beginPath();
+    ctx.moveTo(x, y);
+    ctx.lineTo(x + Math.cos(ang) * len, y + Math.sin(ang) * len);
+    ctx.stroke();
+    ctx.strokeStyle = PROD_CYAN;
+    ctx.lineWidth = 3;
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  B.BEHAVIORS.rate_limiter = {
+    init(e, game) {
+      const s = e.state, P = e.params;
+      s.mode = 'walk';
+      s.tokens = P.tokens;
+      s.rotor = 0;            // Rotor-Stellung (zaehlt Schuesse; gerade/ungerade = Sprite-Frame)
+      s.shots = 0;            // Schuesse der laufenden Salve
+      s.side = game && game.rng && game.rng.chance(0.5) ? 1 : -1;
+      s.t = game && game.rng ? game.rng.float(0.6, 1.2) : 1;   // erste Salve nicht sofort beim Betreten
+      e.damageTakenMult = 1;
+    },
+    update(e, dt, game) {
+      const s = e.state, P = e.params, p = game.player, room = game.room;
+      s.t -= dt;
+      switch (s.mode) {
+        case 'walk': {
+          const d = AI.dist(e, p), sp = e.speed;
+          if (d > P.far) AI.pathToward(e, game, p.x, p.y, sp);
+          else if (d < P.near) {
+            const n = B.M.norm(e.x - p.x, e.y - p.y);
+            e.vx = n.x * sp;
+            e.vy = n.y * sp;
+          } else {
+            // Im Wunschabstand: langsam seitlich, bei Kontakt mit Hindernissen Richtung wechseln
+            if (s.bumped) { s.side = -s.side; s.bumped = false; }
+            const n = B.M.norm(p.x - e.x, p.y - e.y);
+            e.vx = -n.y * sp * 0.6 * s.side;
+            e.vy = n.x * sp * 0.6 * s.side;
+          }
+          if (s.t <= 0 && (s.t < -3 || room.lineOfSight(e.x, e.y, p.x, p.y))) {
+            AI.stop(e);
+            s.mode = 'aim';
+            s.t = P.aim;
+            B.bus.emit('enemyWindup', { game, enemy: e, x: e.x, y: e.y });
+          }
+          break;
+        }
+        case 'aim':
+          AI.stop(e);
+          if (s.t <= 0) { s.mode = 'burst'; s.t = 0; s.shots = 0; }
+          break;
+        case 'burst':
+          AI.stop(e);
+          if (s.t > 0) break;
+          if (s.tokens > 0) {
+            AI.shootAt(game, e, p, AI.shotSpeed(game, P.shotSpeed), PROD_SHOT);
+            s.tokens--;
+            s.rotor++;
+            s.shots++;
+            s.t = P.gap;
+          } else {
+            // Eimer leer: 429 Too Many Requests
+            s.mode = 'throttled';
+            s.t = P.throttle;
+            e.contactDamage = 0;
+            e.damageTakenMult = P.throttledMult;
+            B.bus.emit('enemyThrottle', { game, enemy: e, x: e.x, y: e.y - e.r });
+          }
+          break;
+        case 'throttled':
+          AI.stop(e);
+          if (s.t <= 0) {
+            s.mode = 'refill';
+            s.t = P.refill;
+            e.contactDamage = e.def.contactDamage;
+            e.damageTakenMult = 1;
+          }
+          break;
+        case 'refill':
+          AI.stop(e);
+          if (s.t > 0) break;
+          s.tokens = Math.min(P.tokens, s.tokens + 1);
+          s.lampFlash = 0.15;
+          B.bus.emit('enemyWindup', { game, enemy: e, x: e.x, y: e.y - e.r, sound: 'token' });
+          if (s.tokens >= P.tokens) {
+            s.mode = 'walk';
+            s.t = AI.cooldown(game, game.rng.float(P.walkMin, P.walkMax));
+          } else s.t = P.refill;
+          break;
+      }
+      if (s.lampFlash > 0) s.lampFlash -= dt;
+    },
+    draw(e, ctx, game) {
+      const s = e.state, P = e.params, p = game.player;
+      const walking = s.mode === 'walk' && Math.hypot(e.vx, e.vy) > 5;
+      const dy = walking ? -Math.abs(Math.sin(e.t * 9)) * 3 : 0;
+      const dx = s.mode === 'aim' ? Math.sin(e.t * 70) * 1.2 : 0;
+      if (s.mode === 'aim' && p) {
+        const k = 1 - Math.max(0, s.t) / P.aim;
+        const ang = Math.atan2(p.y - e.y, p.x - e.x);
+        prodAimLine(ctx, e.x + Math.cos(ang) * 24, e.y + Math.sin(ang) * 24, ang, Math.min(240, AI.dist(e, p)), k);
+        AI.drawGlow(ctx, e.x, e.y - 22, 14 + 8 * k, k, PROD_CYAN);
+      }
+      if (s.mode === 'throttled') {
+        // Retry-After: Ring laeuft im Uhrzeigersinn ab
+        const k = B.M.clamp(s.t / P.throttle, 0, 1);
+        ctx.save();
+        ctx.lineCap = 'round';
+        for (const [col, w] of [['rgba(0,0,0,0.55)', 7], [PROD_AMBER, 3]]) {
+          ctx.strokeStyle = col;
+          ctx.lineWidth = w;
+          ctx.beginPath();
+          ctx.arc(e.x, e.y + 2, e.r + 16, -Math.PI / 2, -Math.PI / 2 + TAU * k);
+          ctx.stroke();
+        }
+        ctx.restore();
+      }
+      AI.drawBody(e, ctx, { frame: s.rotor % 2, dx, dy, flipX: false });
+      // Lampen = Tokens (Sprite 15x16 Art-Pixel, Massstab 4; Lampe i belegt Spalten 2+4i..4+4i, Zeilen 2..3).
+      // Im Sprite leuchten alle; verbrauchte werden dunkel ueberdeckt, beim Zielen blinken die vollen weiss.
+      const ox = e.x + dx - 30, oy = e.y + dy - 32;
+      const blink = s.mode === 'aim' && Math.floor(e.t * 12) % 2 === 0;
+      for (let i = 0; i < P.tokens; i++) {
+        const x = ox + (2 + 4 * i) * 4, y = oy + 8;
+        if (i >= s.tokens) {
+          ctx.fillStyle = '#1b2328';
+          ctx.fillRect(x, y, 12, 8);
+          ctx.fillStyle = '#2f3d44';
+          ctx.fillRect(x, y, 4, 4);
+        } else if (blink || (s.lampFlash > 0 && i === s.tokens - 1)) {
+          ctx.fillStyle = 'rgba(255,255,255,0.8)';
+          ctx.fillRect(x, y, 12, 8);
+        }
+      }
+      if (s.mode === 'aim') AI.drawMark(ctx, '!', e.x, e.y - 40, e.t, PROD_AMBER, 22);
+      if (s.mode === 'throttled' && typeof B.pixelText === 'function') {
+        // "429"-Schild (wackelt leicht)
+        const sx = e.x, sy = e.y - 52 + Math.sin(e.t * 5) * 1.5;
+        ctx.fillStyle = '#141416';
+        ctx.fillRect(sx - 25, sy - 13, 50, 26);
+        ctx.fillStyle = PROD_AMBER;
+        ctx.fillRect(sx - 22, sy - 10, 44, 20);
+        B.pixelText(ctx, '429', sx, sy, { scale: 2, color: '#141416', align: 'center', baseline: 'middle', shadow: '' });
+      }
+      AI.drawSay(e, ctx);
+    },
+  };
+
+  // ===========================================================================
+  // Production: Port Scanner ('port_scanner' + Ports 'scanner_port')
+  // ===========================================================================
+  //
+  // init legt params.ports Ports an (eigene Minion-Gegner, siehe scannerPickPorts) und sortiert sie im
+  // Uhrzeigersinn um die Raummitte; die Portnummern steigen in dieser Reihenfolge. state.ports = Port-Gegner,
+  // state.idx = aktueller/naechster Zielport. Zustaende (state.mode):
+  //   dive     taucht ab (am Anfang: am eigenen Spawnpunkt), danach unsichtbar -> travel zum naechsten Port
+  //   travel   unter dem Boden die Scanlinie entlang (unverwundbar, harmlos); der Zielport leuchtet schon
+  //   tell     Ping am Zielport (Zielring, "!", 'enemyWindup' sound 'portPing'); steht der Spieler am Ende darauf
+  //            (filterR), ist der Port "FILTERED" ('portScan' kind 'filtered') -> weiter zum naechsten Port
+  //   rise     ploppt heraus ('portScan' kind 'open'); ab hier verwundbar, Kontakt 1
+  //   aim      Ziellinie zum Spieler (params.aim), dann 3er-Faecher
+  //   linger   bleibt kurz oben, dann dive
+  // Die Reihenfolge ist fest und sichtbar (gestrichelte Scanlinie zum naechsten Port, Port-LED) — wer
+  // aufpasst, zielt schon auf den naechsten Port. Sind keine Ports mehr da (z. B. per killAll), bleibt er
+  // als Geschuetz oben (state.turret). Stirbt er, schliessen sich die Ports (scanner_port.afterMove).
+
+  // Vorplaetze der Tueren (wie DOOR_FRONT in world/dungeon.js, dort privat)
+  const PS_DOOR_FRONT = { up: [7, 1], down: [7, B.C.ROWS - 2], left: [1, 4], right: [B.C.COLS - 2, 4] };
+  const PS_PORT_NUMBERS = [21, 22, 25, 53, 80, 443, 3000, 5432, 6379, 8080, 8443];
+  const PS_UP = { rise: true, aim: true, linger: true, dive: true };   // Zustaende, in denen er sichtbar ist
+
+  /**
+   * Port-Plaetze waehlen. Nur freie Bodenkacheln (keine Stacheln, Gruben, Felsen, Objekte, Kakteen), nicht auf
+   * Spawnpunkten, nicht in der Raummitte, nicht im 3x3-Bereich vor einer Tuer und nicht auf einem Port eines
+   * anderen Scanners. Weit verteilt: der erste zufaellig (game.rng), dann jeweils der Kandidat mit dem groessten
+   * Abstand zu den bisherigen (farthest point), solange der mindestens params.minGap betraegt.
+   * @returns {{x, y, num}[]} im Uhrzeigersinn sortiert, Portnummern aufsteigend
+   */
+  function scannerPickPorts(e, game) {
+    const room = game.room, P = e.params, rng = game.rng;
+    const { TILE, COLS, ROWS, ROOM_W, ROOM_H } = B.C;
+    const key = (x, y) => Math.floor(x / TILE) + ',' + Math.floor(y / TILE);
+    const blocked = new Set(room.spawnPoints.map((sp) => key(sp.x, sp.y)));
+    for (const o of room.enemies) if (o.id === 'port_scanner_port' && !o.dead) blocked.add(key(o.x, o.y));
+    const fronts = Object.keys(room.doors).map((d) => PS_DOOR_FRONT[d]).filter(Boolean);
+    const cands = [];
+    for (let r = 1; r < ROWS - 1; r++) {
+      for (let c = 1; c < COLS - 1; c++) {
+        if (room.tileAt(c, r) !== B.TILES.FLOOR) continue;
+        const pos = room.tileCenter(c, r);
+        if (blocked.has(key(pos.x, pos.y)) || (c === 7 && r === 4)) continue;
+        if (fronts.some(([fc, fr]) => Math.abs(fc - c) <= 1 && Math.abs(fr - r) <= 1)) continue;
+        cands.push(pos);
+      }
+    }
+    if (!cands.length) return [];
+    const out = [cands[rng.int(0, cands.length - 1)]];
+    while (out.length < P.ports) {
+      let best = null, bestD = -1;
+      for (const c of cands) {
+        let m = Infinity;
+        for (const o of out) m = Math.min(m, Math.hypot(c.x - o.x, c.y - o.y));
+        if (m > bestD) { bestD = m; best = c; }
+      }
+      if (!best || bestD < P.minGap) break;
+      out.push(best);
+    }
+    // Uhrzeigersinn um die Raummitte (y waechst nach unten -> steigender Winkel = im Uhrzeigersinn)
+    const cx = ROOM_W / 2, cy = ROOM_H / 2;
+    out.sort((a, b) => Math.atan2(a.y - cy, a.x - cx) - Math.atan2(b.y - cy, b.x - cx));
+    const nums = rng.shuffle(PS_PORT_NUMBERS.slice()).slice(0, out.length).sort((a, b) => a - b);
+    return out.map((pos, i) => ({ x: pos.x, y: pos.y, num: nums[i] }));
+  }
+
+  /** Index des naechsten lebenden Ports nach `from` (zyklisch; der Port selbst zaehlt zuletzt), sonst -1 */
+  function psNextIdx(s, from) {
+    const n = s.ports.length;
+    for (let k = 1; k <= n; k++) {
+      const i = (((from + k) % n) + n) % n;
+      if (!s.ports[i].dead) return i;
+    }
+    return -1;
+  }
+  function psBury(e) {
+    e.intangible = true;
+    e.contactDamage = 0;
+    e.noShadow = true;
+    e.noHpBar = true;
+  }
+  function psSurface(e) {
+    e.intangible = false;
+    e.contactDamage = e.def.contactDamage;
+    e.noShadow = false;
+    e.noHpBar = false;
+  }
+  /** Gestrichelte Scanlinie zwischen zwei Punkten (Reihenfolge der Ports) */
+  function psScanLine(ctx, x0, y0, x1, y1, alpha, t) {
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.setLineDash([4, 8]);
+    ctx.lineDashOffset = -t * 40;
+    ctx.lineCap = 'round';
+    ctx.strokeStyle = 'rgba(0,0,0,0.5)';
+    ctx.lineWidth = 5;
+    ctx.beginPath();
+    ctx.moveTo(x0, y0);
+    ctx.lineTo(x1, y1);
+    ctx.stroke();
+    ctx.strokeStyle = PROD_CYAN;
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  B.BEHAVIORS.port_scanner = {
+    init(e, game) {
+      const s = e.state, P = e.params;
+      s.ports = [];
+      s.idx = -1;
+      s.mode = 'dive';
+      s.t = P.dive;
+      s.aimA = 0;
+      s.turret = false;
+      s.scans = 0;            // wie oft er aufgetaucht ist (Tests)
+      e.static = true;        // Position setzt das Verhalten direkt
+      e.flying = true;
+      e.noKnockback = true;
+      e.noSeparate = true;
+      const def = B.ENEMIES.port_scanner_port;
+      if (!def || !game || !game.room || !game.rng) return;
+      for (const pt of scannerPickPorts(e, game)) {
+        const port = new B.Enemy(def, 'port_scanner_port', pt.x, pt.y, game, 1);
+        port.state.owner = e;
+        port.state.num = pt.num;
+        port.spawnDelay = 0;
+        game.room.enemies.push(port);
+        s.ports.push(port);
+      }
+      // Erster Zielport: der naechstgelegene (idx steht einen davor, weil dive "weiterzaehlt")
+      let best = Infinity, near = 0;
+      s.ports.forEach((pt, i) => { const d = Math.hypot(pt.x - e.x, pt.y - e.y); if (d < best) { best = d; near = i; } });
+      if (s.ports.length) s.idx = (near + s.ports.length - 1) % s.ports.length;
+    },
+    update(e, dt, game) {
+      const s = e.state, P = e.params, p = game.player;
+      AI.stop(e);
+      s.t -= dt;
+      let port = s.idx >= 0 ? s.ports[s.idx] : null;
+      // Zielport verschwunden (killAll o. ae.): naechsten nehmen oder als Geschuetz auftauchen
+      if ((s.mode === 'travel' || s.mode === 'tell') && (!port || port.dead)) {
+        const ni = psNextIdx(s, s.idx);
+        if (ni < 0) {
+          s.turret = true;
+          psSurface(e);
+          s.mode = 'aim';
+          s.t = P.aim;
+          return;
+        }
+        s.idx = ni;
+        port = s.ports[ni];
+        s.mode = 'travel';
+      }
+      switch (s.mode) {
+        case 'dive':
+          if (s.t > 0) break;
+          psBury(e);
+          s.idx = psNextIdx(s, s.idx);
+          if (s.idx < 0) { s.turret = true; psSurface(e); s.mode = 'aim'; s.t = P.aim; break; }
+          s.mode = 'travel';
+          break;
+        case 'travel': {
+          const dx = port.x - e.x, dy = port.y - e.y, d = Math.hypot(dx, dy), step = P.travel * dt;
+          if (d <= step) {
+            e.x = port.x;
+            e.y = port.y;
+            s.mode = 'tell';
+            s.t = P.tell;
+            B.bus.emit('enemyWindup', { game, enemy: e, x: e.x, y: e.y, sound: 'portPing' });
+          } else {
+            e.x += (dx / d) * step;
+            e.y += (dy / d) * step;
+          }
+          break;
+        }
+        case 'tell':
+          if (s.t > 0) break;
+          if (Math.hypot(p.x - port.x, p.y - port.y) < P.filterR) {
+            // Spieler steht auf dem Port: gefiltert -> weiter zum naechsten (taucht nie unter ihm auf)
+            port.state.filteredT = 1;
+            B.bus.emit('portScan', { game, enemy: e, x: port.x, y: port.y, kind: 'filtered' });
+            s.idx = psNextIdx(s, s.idx);
+            s.mode = 'travel';
+          } else {
+            psSurface(e);
+            s.mode = 'rise';
+            s.t = P.rise;
+            s.scans++;
+            B.bus.emit('portScan', { game, enemy: e, x: e.x, y: e.y, kind: 'open' });
+          }
+          break;
+        case 'rise':
+          if (s.t <= 0) { s.mode = 'aim'; s.t = P.aim; }
+          break;
+        case 'aim':
+          s.aimA = AI.angleTo(e, p);
+          if (s.t > 0) break;
+          AI.fanAngle(game, e, s.aimA, P.fan, P.spread, AI.shotSpeed(game, P.shotSpeed), PROD_SHOT);
+          s.mode = 'linger';
+          s.t = P.linger;
+          break;
+        case 'linger':
+          if (s.t > 0) break;
+          if (s.turret) { s.mode = 'aim'; s.t = P.aim + AI.cooldown(game, 0.8); }
+          else { s.mode = 'dive'; s.t = P.dive; }
+          break;
+      }
+    },
+    draw(e, ctx, game) {
+      const s = e.state, P = e.params;
+      const port = s.idx >= 0 ? s.ports[s.idx] : null;
+      // Scanlinie: unter dem Boden zum Zielport (mit wanderndem "Paket"), oben schwach zum naechsten Port
+      if (s.mode === 'travel' && port && !port.dead) {
+        psScanLine(ctx, e.x, e.y, port.x, port.y, 0.85, e.t);
+        ctx.fillStyle = '#141416';
+        ctx.fillRect(e.x - 6, e.y - 6, 12, 12);
+        ctx.fillStyle = PROD_CYAN;
+        ctx.fillRect(e.x - 4, e.y - 4, 8, 8);
+        return;
+      }
+      if (PS_UP[s.mode] && !s.turret && port) {
+        const ni = psNextIdx(s, s.idx);
+        if (ni >= 0 && ni !== s.idx) psScanLine(ctx, e.x, e.y, s.ports[ni].x, s.ports[ni].y, 0.3, e.t);
+      }
+      if (s.mode === 'tell') {
+        const k = 1 - Math.max(0, s.t) / P.tell;
+        AI.drawTargetRing(ctx, e.x, e.y + 4, 30, k, PROD_CYAN);
+        AI.drawMark(ctx, '!', e.x, e.y - 22, e.t, PROD_AMBER, 22);
+        return;
+      }
+      if (!PS_UP[s.mode]) return;
+      let up = 1;
+      if (s.mode === 'rise') up = 1 - Math.max(0, s.t) / P.rise;
+      else if (s.mode === 'dive') up = Math.max(0, s.t) / P.dive;
+      if (s.mode === 'aim') {
+        const k = 1 - Math.max(0, s.t) / P.aim;
+        prodAimLine(ctx, e.x + Math.cos(s.aimA) * 22, e.y + Math.sin(s.aimA) * 22, s.aimA, 200, k);
+      }
+      // Faehrt aus dem Port heraus: unterhalb der Lochkante abgeschnitten
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(e.x - 40, e.y - 100, 80, 106);
+      ctx.clip();
+      const frame = s.mode === 'aim' ? (Math.cos(s.aimA) < 0 ? 0 : 1) : Math.floor(e.t * 4) % 2;
+      AI.drawBody(e, ctx, { dy: -14 + (1 - up) * 48, frame, flipX: false });
+      ctx.restore();
+      AI.drawSay(e, ctx);
+    },
+  };
+
+  B.BEHAVIORS.scanner_port = {
+    init(e) {
+      e.static = true;
+      e.noKnockback = true;
+      e.noHpBar = true;
+      e.noSeparate = true;
+      e.noShadow = true;
+      e.ignoreForClear = true;   // nur der Scanner zaehlt fuers Clearing
+      e.intangible = true;       // Schuesse fliegen darueber hinweg
+      e.contactDamage = 0;
+      e.drawLayer = -1;          // Bodenbuchse: unter allen anderen Figuren
+      e.state.closeT = 0;
+      e.state.filteredT = 0;
+    },
+    update(e) { AI.stop(e); },
+    // afterMove laeuft jeden Tick (auch eingefroren): Filter-Anzeige ablaufen lassen, nach dem Scanner schliessen
+    afterMove(e, dt) {
+      const s = e.state;
+      if (s.filteredT > 0) s.filteredT -= dt;
+      if (s.owner && !s.owner.dead) return;
+      s.closeT += dt;
+      if (s.closeT >= 0.4) e.dead = true;   // still verschwinden: kein Kill, keine Beute
+    },
+    draw(e, ctx) {
+      const s = e.state, o = s.owner, os = o && !o.dead ? o.state : null;
+      const k = os ? 1 : Math.max(0, 1 - s.closeT / 0.4);
+      const mine = !!os && os.ports[os.idx] === e;
+      const target = mine && (os.mode === 'travel' || os.mode === 'tell');
+      const here = mine && !!PS_UP[os.mode];
+      const ni = os ? psNextIdx(os, os.idx) : -1;
+      const next = !!os && !mine && ni >= 0 && os.ports[ni] === e;
+      // LED an, wenn er hier ist oder hierher unterwegs ist; beim Ping blinkt sie
+      const lit = here || (target && (os.mode === 'travel' || Math.floor(o.t * 10) % 2 === 0));
+      B.drawSprite(ctx, 'enemy_port_scanner_port', e.x, e.y, { frame: lit ? 1 : 0, alpha: k, scale: 0.6 + 0.4 * k });
+      if (s.filteredT > 0) {
+        // Gefiltert: bernsteinfarbenes X ueber der Buchse
+        ctx.save();
+        ctx.globalAlpha = Math.min(1, s.filteredT * 2);
+        ctx.lineCap = 'round';
+        for (const [col, w] of [['#141416', 8], [PROD_AMBER, 4]]) {
+          ctx.strokeStyle = col;
+          ctx.lineWidth = w;
+          ctx.beginPath();
+          ctx.moveTo(e.x - 14, e.y - 12);
+          ctx.lineTo(e.x + 14, e.y + 12);
+          ctx.moveTo(e.x + 14, e.y - 12);
+          ctx.lineTo(e.x - 14, e.y + 12);
+          ctx.stroke();
+        }
+        ctx.restore();
+      }
+      if (typeof B.pixelText === 'function' && s.num) {
+        const col = target || here ? PROD_CYAN : next ? '#c4ced8' : '#8a929c';
+        B.pixelText(ctx, String(s.num), e.x, e.y + 26, { scale: 2, color: col, align: 'center', baseline: 'middle', alpha: k });
+      }
     },
   };
 

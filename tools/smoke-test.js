@@ -44,6 +44,11 @@
  *   - Nested Infinite Loop: ab Etage 8 statt der Infinite Loop; nur der aeussere lebende Ring feuert und ist
  *     greifbar; Ringe zerfallen bei 50 % / 16,67 %; Schuesse 165–260 px/s; Teile bleiben im Raum; ein Boss-Tod
  *   - Rogue Agent: nie vor Etage 7; haelt Abstand; jede Salve nach Gluehen, zwei 3er-Faecher oder drei Einzelschuesse
+ *   - Production-Familie (Etage 1–7 nur auf Production): Rate Limiter (Telegraph, genau 3 Schuesse je Salve, Lampen
+ *     erloeschen einzeln, "429"-Pause harmlos mit 1,5-fachem Schaden, Lampen fuellen sich einzeln wieder);
+ *     Port Scanner (Ports nie auf Hindernissen/Spawnpunkten/Mitte/vor Tueren, Mindestabstand, Nummern aufsteigend im
+ *     Uhrzeigersinn; feste Reihenfolge, Ping vor jedem Auftauchen, Faecher nach Ziellinie, "FILTERED" unter dem
+ *     Spieler; Tod und killAll hinterlassen keine Ports; ohne Ports Geschuetz-Modus); Schuesse cyan, 165–260 px/s
  *   - Dependency-Hell-Familie (Tiefe 1–7: Honeypot nur auf Dependency Hell, Rolling Release dort und auf Sandbox
  *     Borders): Honeypot zieht erst nach dem Telegraph, nur im Trichter, nie schneller als 60 % des Spielertempos;
  *     Wegrennen klappt, Stehenbleiben kostet nach der Kiefer-Warnung einen 2er-Biss; keine Gruben; Laeufer ja,
@@ -2454,6 +2459,278 @@ const URL = 'file://' + path.join(ROOT, 'index.html').replace(/\\/g, '/') + '?se
   });
   await page.waitForTimeout(250);
   await shot('06-dephell-enemies');
+  await page.evaluate(() => { for (let i = 0; i < 4; i++) BOTA.debug.killAll(); });
+
+  // --- Production-Familie (Etage 5): Rate Limiter und Port Scanner ---------------------------------------------
+  //     nur auf Production (geprueft fuer Etage 1–7); Rate Limiter: Telegraph -> genau 3 Schuesse (Lampen
+  //     erloeschen) -> "429" (harmlos, mehr Schaden) -> Lampen fuellen sich einzeln -> naechste Salve;
+  //     Port Scanner: Ports gueltig platziert, feste Reihenfolge, Ping vor jedem Auftauchen, Faecher nach Ziellinie,
+  //     "FILTERED", wenn der Spieler auf dem Port steht; Tod/killAll hinterlassen keine Ports ---
+  await page.evaluate(() => {
+    const g = BOTA.game; g.enterFloor(5); g.setState('play');
+    // Production-Raum mit moeglichst vielen Hindernissen (anspruchsvoll fuer die Port-Platzierung)
+    const cells = [...g.floor.cells.values()].filter((x) => x.type === 'normal');
+    const solid = (r) => { let n = 0; for (let i = 0; i < r.tiles.length; i++) if (r.tiles[i] !== BOTA.TILES.FLOOR) n++; return n; };
+    cells.sort((a, b) => solid(b.room) - solid(a.room));
+    const c = cells[0];
+    c.room.populated = true; c.room.cleared = true; g.teleport(c.room);
+    window.__prodRoom = c.room;
+  });
+  const prodProblems = await page.evaluate(() => {
+    const out = [];
+    const g = BOTA.game, AI = BOTA.AI, E = BOTA.ENEMIES, DT = 1 / 60, T = BOTA.TILES, TILE = BOTA.C.TILE;
+    const PR = BOTA.FLOOR_THEMES.findIndex((t) => t.key === 'production') + 1;
+    const ids = ['rate_limiter', 'port_scanner'];
+    // 1) Nur auf Production (Etage 1–7; ab Etage 8 duerfen Themen-Gegner spaeter anderswo auftauchen)
+    for (let d = 1; d <= 7; d++) {
+      const seen = { rate_limiter: 0, port_scanner: 0 };
+      for (let i = 0; i < 300; i++) {
+        const list = BOTA.rollRoomEnemies(new BOTA.RNG(BOTA.hashString('prod' + d + ':' + i)), d);
+        for (const id of ids) seen[id] += list.filter((x) => x === id).length;
+        if (list.filter((x) => x === 'port_scanner').length > 1) out.push('Port Scanner: mehr als einer pro Raum');
+      }
+      for (const id of ids) {
+        if (d === PR && !seen[id]) out.push(id + ': taucht auf Production (Etage ' + d + ') nie auf');
+        if (d !== PR && seen[id]) out.push(id + ': taucht auf Etage ' + d + ' auf');
+      }
+    }
+
+    const p = g.player;
+    BOTA.debug.god(true);
+    const clearRoom = () => { for (let i = 0; i < 4; i++) BOTA.debug.killAll(); g.room.enemies = g.room.enemies.filter((en) => !en.dead); g.room.projectiles.length = 0; };
+    const stepAll = (n, each) => {
+      for (let i = 0; i < n; i++) {
+        for (const en of g.room.enemies.slice()) { if (!en.dead) { en.frozen = 0; en.update(DT, g); } }
+        g.room.enemies = g.room.enemies.filter((en) => !en.dead);
+        if (g.room.projectiles.length > 150) g.room.projectiles.length = 0;
+        if (each && each(i) === false) break;
+      }
+    };
+    const events = [];
+    const offs = ['enemyWindup', 'enemyThrottle', 'portScan'].map((n) => BOTA.bus.on(n, (e) => events.push(n + ':' + (e.sound || e.kind || ''))));
+    const origShootAt = AI.shootAt, origFanAngle = AI.fanAngle;
+    try {
+      // 2) Rate Limiter (Startraum: freie Sicht)
+      BOTA.debug.gotoRoom('start'); clearRoom();
+      p.x = 640; p.y = 380;
+      const RL = BOTA.debug.spawn('rate_limiter', 260, 200);
+      RL.spawnDelay = 0;
+      const S = RL.state, P = RL.params;
+      const shots = [];
+      AI.shootAt = function (game, e, t, speed, opts) {
+        const pr = origShootAt.apply(this, arguments);
+        if (e === RL) shots.push({ mode: S.mode, tokensAfter: S.tokens - 1, speed, color: opts && opts.color, aimT: aimT });
+        return pr;
+      };
+      let aimT = 0, throttleT = 0, prevMode = S.mode, prevTokens = S.tokens, tokenJump = 0;
+      const bursts = [];
+      let cur = null, dmgFree = null, dmgThrottled = null, contactInThrottle = 0, refillDuringThrottle = false;
+      stepAll(60 * 16, () => {
+        if (S.mode === 'aim') aimT += DT;
+        if (S.mode === 'throttled') {
+          throttleT += DT;
+          contactInThrottle = Math.max(contactInThrottle, RL.contactDamage);
+          if (S.tokens !== 0) refillDuringThrottle = true;
+          if (dmgThrottled === null && throttleT > 0.5) { const h = RL.hp; RL.hurt(2, g, {}); dmgThrottled = h - RL.hp; }
+        }
+        if (S.mode === 'walk' && dmgFree === null && bursts.length) { const h = RL.hp; RL.hurt(2, g, {}); dmgFree = h - RL.hp; }
+        if (S.tokens > prevTokens) tokenJump = Math.max(tokenJump, S.tokens - prevTokens);
+        if (prevMode !== 'burst' && S.mode === 'burst') { cur = { shots: shots.length, aim: aimT }; }
+        if (prevMode === 'burst' && S.mode === 'throttled') { cur.n = shots.length - cur.shots; bursts.push(cur); throttleT = 0; }
+        if (prevMode === 'throttled' && S.mode !== 'throttled') { cur.throttle = throttleT; cur.contactAfter = RL.contactDamage; }
+        if (prevMode === 'refill' && S.mode === 'walk') { cur.refilled = S.tokens; aimT = 0; }
+        prevMode = S.mode; prevTokens = S.tokens;
+      });
+      AI.shootAt = origShootAt;
+      if (bursts.length < 2) out.push('Rate Limiter: nur ' + bursts.length + ' Salven in 16 s');
+      for (const b of bursts) {
+        if (b.n !== P.tokens) out.push('Rate Limiter: Salve mit ' + b.n + ' statt ' + P.tokens + ' Schuessen');
+        if (b.aim < P.aim - 0.02) out.push('Rate Limiter: Salve nach nur ' + b.aim.toFixed(2) + ' s Telegraph');
+        if (b.throttle !== undefined && b.throttle < P.throttle - 0.02) out.push('Rate Limiter: 429-Pause nur ' + b.throttle.toFixed(2) + ' s');
+        if (b.contactAfter !== undefined && b.contactAfter !== 1) out.push('Rate Limiter: Kontaktschaden nach der Pause ' + b.contactAfter);
+        if (b.refilled !== undefined && b.refilled !== P.tokens) out.push('Rate Limiter: Eimer vor dem Weiterlaufen nicht voll (' + b.refilled + ')');
+      }
+      if (shots.some((s) => s.mode !== 'burst')) out.push('Rate Limiter: Schuss ausserhalb der Salve');
+      if (shots.some((s) => s.speed < 165 || s.speed > 260)) out.push('Rate Limiter: Schussgeschwindigkeit ausserhalb 165–260');
+      if (shots.some((s) => s.color !== '#5fe0ff')) out.push('Rate Limiter: Schussfarbe nicht Cyan');
+      if (shots.slice(0, P.tokens).map((s) => s.tokensAfter).join(',') !== '2,1,0') out.push('Rate Limiter: Lampen erloeschen nicht je Schuss (' + shots.slice(0, 3).map((s) => s.tokensAfter).join(',') + ')');
+      if (contactInThrottle !== 0) out.push('Rate Limiter: in der 429-Pause nicht harmlos');
+      if (refillDuringThrottle) out.push('Rate Limiter: fuellt schon waehrend der Pause auf');
+      if (tokenJump > 1) out.push('Rate Limiter: Lampen fuellen sich nicht einzeln');
+      if (!(P.throttledMult > 1) || dmgThrottled !== 2 * P.throttledMult) out.push('Rate Limiter: in der Pause ' + dmgThrottled + ' statt ' + 2 * P.throttledMult + ' Schaden');
+      if (dmgFree !== 2) out.push('Rate Limiter: ausserhalb der Pause ' + dmgFree + ' statt 2 Schaden');
+      const throttles = events.filter((x) => x === 'enemyThrottle:').length;
+      if (throttles !== bursts.length) out.push('Rate Limiter: ' + throttles + ' 429-Events fuer ' + bursts.length + ' Salven');
+      if (events.filter((x) => x === 'enemyWindup:token').length < P.tokens) out.push('Rate Limiter: keine Token-Events beim Auffuellen');
+      if (!events.includes('enemyWindup:')) out.push('Rate Limiter: kein Ziel-Telegraph-Event');
+      RL.hurt(1e6, g, {});
+      stepAll(5);
+      if (g.room.enemies.length) out.push('Rate Limiter: Reste nach dem Tod');
+
+      // 3) Port-Platzierung auf vielen echten Production-Raeumen (nie auf Hindernissen, Spawnpunkten, Mitte,
+      //    vor Tueren; verschiedene Kacheln mit Mindestabstand; Nummern aufsteigend im Uhrzeigersinn)
+      const FRONT = { up: [7, 1], down: [7, BOTA.C.ROWS - 2], left: [1, 4], right: [BOTA.C.COLS - 2, 4] };
+      const realRoom = g.room;
+      let rooms = 0, full = 0;
+      try {
+        for (let i = 0; i < 12; i++) {
+          const fl = new BOTA.Floor(PR, 'ports' + i);
+          for (const cell of fl.cells.values()) {
+            if (cell.type !== 'normal') continue;
+            const room = cell.room;
+            g.room = room;
+            const sp = room.spawnPoints[0] || room.tileCenter(7, 4);
+            const sc = new BOTA.Enemy(E.port_scanner, 'port_scanner', sp.x, sp.y, g, 1);
+            const ports = sc.state.ports, PP = sc.params;
+            rooms++;
+            if (ports.length === PP.ports) full++;
+            if (ports.length < 3) out.push('Port Scanner: nur ' + ports.length + ' Ports in Raum ' + room.layout.id);
+            const spawnKeys = new Set(room.spawnPoints.map((q) => Math.floor(q.x / TILE) + ',' + Math.floor(q.y / TILE)));
+            const ang = (q) => Math.atan2(q.y - BOTA.C.ROOM_H / 2, q.x - BOTA.C.ROOM_W / 2);
+            ports.forEach((pt, k) => {
+              const tc = Math.floor(pt.x / TILE), tr = Math.floor(pt.y / TILE);
+              if (room.tileAt(tc, tr) !== T.FLOOR) out.push('Port Scanner: Port auf Kacheltyp ' + room.tileAt(tc, tr));
+              if (spawnKeys.has(tc + ',' + tr)) out.push('Port Scanner: Port auf einem Spawnpunkt');
+              if (tc === 7 && tr === 4) out.push('Port Scanner: Port in der Raummitte');
+              for (const dir of Object.keys(room.doors)) {
+                const [fc, fr] = FRONT[dir];
+                if (Math.abs(fc - tc) <= 1 && Math.abs(fr - tr) <= 1) out.push('Port Scanner: Port vor der Tuer ' + dir);
+              }
+              for (let j = 0; j < k; j++) if (Math.hypot(pt.x - ports[j].x, pt.y - ports[j].y) < PP.minGap) out.push('Port Scanner: Ports zu dicht');
+              if (k && !(pt.state.num > ports[k - 1].state.num)) out.push('Port Scanner: Portnummern nicht aufsteigend');
+              if (k && !(ang(pt) >= ang(ports[k - 1]))) out.push('Port Scanner: Ports nicht im Uhrzeigersinn sortiert');
+              if (!pt.intangible || pt.contactDamage !== 0 || !pt.ignoreForClear) out.push('Port Scanner: Port ist greifbar/gefaehrlich/zaehlt fuers Clearing');
+            });
+            room.enemies.length = 0;
+          }
+        }
+      } finally {
+        g.room = realRoom;
+      }
+      if (full < rooms * 0.9) out.push('Port Scanner: nur ' + full + '/' + rooms + ' Raeume mit allen Ports');
+
+      // 4) Ablauf im echten Production-Raum: feste Reihenfolge, Ping vor jedem Auftauchen, Faecher nach Ziellinie
+      g.teleport(window.__prodRoom); clearRoom();
+      const room = g.room;
+      const sp0 = room.spawnPoints[0] || g.nearestFreePos(480, 288);
+      const PS = BOTA.debug.spawn('port_scanner', sp0.x, sp0.y);
+      PS.spawnDelay = 0;
+      const PSS = PS.state, PSP = PS.params, ports = PSS.ports;
+      // Spieler auf die freie Kachel, die am weitesten von allen Ports weg ist (kein Filtern im Normalablauf)
+      let bestPos = null, bestD = -1;
+      for (let r = 1; r < BOTA.C.ROWS - 1; r++) for (let c2 = 1; c2 < BOTA.C.COLS - 1; c2++) {
+        if (room.tileAt(c2, r) !== T.FLOOR) continue;
+        const q = room.tileCenter(c2, r);
+        const m = Math.min(...ports.map((pt) => Math.hypot(pt.x - q.x, pt.y - q.y)));
+        if (m > bestD) { bestD = m; bestPos = q; }
+      }
+      p.x = bestPos.x; p.y = bestPos.y;
+      const fans = [];
+      let psAim = 0;
+      AI.fanAngle = function (game, e, base, n, spr, speed) {
+        if (e === PS) fans.push({ n, speed, aim: psAim, color: arguments[6] && arguments[6].color });
+        return origFanAngle.apply(this, arguments);
+      };
+      const ups = [];
+      let tellT = 0, prev = PSS.mode, buriedHarmful = false, upIntangible = false, livingWhileBuried = true;
+      stepAll(60 * 14, () => {
+        if (PSS.mode === 'tell') tellT += DT;
+        if (PSS.mode === 'aim') psAim += DT;
+        if (PSS.mode === 'travel' || PSS.mode === 'tell') {
+          if (!PS.intangible || PS.contactDamage !== 0) buriedHarmful = true;
+          if (!room.hasLivingEnemies()) livingWhileBuried = false;
+        }
+        if ((PSS.mode === 'aim' || PSS.mode === 'linger') && PS.intangible) upIntangible = true;
+        if (prev === 'tell' && PSS.mode === 'rise') {
+          const port = ports[PSS.idx];
+          ups.push({ idx: PSS.idx, tell: tellT, onPort: Math.hypot(PS.x - port.x, PS.y - port.y) < 1 });
+          tellT = 0; psAim = 0;
+        }
+        prev = PSS.mode;
+      });
+      AI.fanAngle = origFanAngle;
+      if (ups.length < 4) out.push('Port Scanner: nur ' + ups.length + ' mal aufgetaucht in 14 s');
+      for (let k = 0; k < ups.length; k++) {
+        if (!ups[k].onPort) out.push('Port Scanner: taucht nicht genau am Port auf');
+        if (ups[k].tell < PSP.tell - 0.02) out.push('Port Scanner: Ping nur ' + ups[k].tell.toFixed(2) + ' s vor dem Auftauchen');
+        if (k && ups[k].idx !== (ups[k - 1].idx + 1) % ports.length) out.push('Port Scanner: Reihenfolge ' + ups.map((u) => u.idx).join(','));
+      }
+      if (fans.length < ups.length - 1) out.push('Port Scanner: ' + fans.length + ' Faecher bei ' + ups.length + ' Auftauchern');
+      for (const f of fans) {
+        if (f.n !== PSP.fan) out.push('Port Scanner: Faecher mit ' + f.n + ' Schuessen');
+        if (f.aim < PSP.aim - 0.02) out.push('Port Scanner: Faecher nach nur ' + f.aim.toFixed(2) + ' s Ziellinie');
+        if (f.speed < 165 || f.speed > 260) out.push('Port Scanner: Schussgeschwindigkeit ausserhalb 165–260');
+        if (f.color !== '#5fe0ff') out.push('Port Scanner: Schussfarbe nicht Cyan');
+      }
+      if (buriedHarmful) out.push('Port Scanner: unter dem Boden greifbar oder gefaehrlich');
+      if (upIntangible) out.push('Port Scanner: oben nicht verwundbar');
+      if (!livingWhileBuried) out.push('Port Scanner: Raum gilt als geraeumt, waehrend er unter dem Boden ist');
+      if (!events.includes('enemyWindup:portPing') || !events.includes('portScan:open')) out.push('Port Scanner: Ping-/Auftauch-Events fehlen');
+
+      // 5) "FILTERED": Spieler steht auf dem naechsten Zielport -> uebersprungen, taucht nicht unter ihm auf
+      stepAll(600, () => PSS.mode !== 'travel');
+      const blockIdx = PSS.idx, blockPort = ports[blockIdx];
+      p.x = blockPort.x; p.y = blockPort.y;
+      let surfacedOnPlayer = false, filtered = false, nextUp = -1;
+      stepAll(60 * 6, () => {
+        if (PSS.mode === 'rise') {
+          if (PSS.idx === blockIdx) surfacedOnPlayer = true;
+          else { nextUp = PSS.idx; return false; }
+        }
+        if (blockPort.state.filteredT > 0) filtered = true;
+      });
+      if (surfacedOnPlayer) out.push('Port Scanner: taucht unter dem Spieler auf');
+      if (!filtered || !events.includes('portScan:filtered')) out.push('Port Scanner: Port wird nicht als FILTERED markiert');
+      const expectNext = (blockIdx + 1) % ports.length;
+      if (nextUp !== expectNext) out.push('Port Scanner: nach FILTERED an Port ' + nextUp + ' statt ' + expectNext);
+
+      // 6) Tod: Ports schliessen sich; killAll laesst nichts zurueck; ohne Ports wird er zum Geschuetz
+      PS.hurt(1e6, g, {});
+      stepAll(60);
+      if (g.room.enemies.length) out.push('Port Scanner: ' + g.room.enemies.length + ' Reste nach dem Tod (' + g.room.enemies.map((en) => en.id).join(',') + ')');
+      BOTA.debug.spawn('port_scanner', sp0.x, sp0.y);
+      BOTA.debug.spawn('rate_limiter', 300, 300);
+      BOTA.debug.killAll();
+      stepAll(30);
+      if (g.room.enemies.length) out.push('killAll: ' + g.room.enemies.map((en) => en.id).join(',') + ' bleiben uebrig');
+      const PT = BOTA.debug.spawn('port_scanner', sp0.x, sp0.y);
+      PT.spawnDelay = 0;
+      for (const pt of PT.state.ports) pt.dead = true;
+      let turretShots = 0;
+      AI.fanAngle = function (game, e) { if (e === PT) turretShots++; return origFanAngle.apply(this, arguments); };
+      stepAll(60 * 4);
+      AI.fanAngle = origFanAngle;
+      if (!PT.state.turret || PT.intangible || !turretShots) out.push('Port Scanner: ohne Ports kein Geschuetz-Modus');
+    } finally {
+      AI.shootAt = origShootAt;
+      AI.fanAngle = origFanAngle;
+      for (const off of offs) off();
+      clearRoom();
+    }
+    return out;
+  });
+  problems.push(...prodProblems);
+  // Optik: beide im Production-Raum, Rate Limiter in der 429-Pause, Port Scanner beim Zielen (Bild pruefen!)
+  await page.evaluate(() => {
+    const g = BOTA.game;
+    const room = g.room;
+    const sp = room.spawnPoints[0] || g.nearestFreePos(480, 288);
+    const PS = BOTA.debug.spawn('port_scanner', sp.x, sp.y);
+    PS.spawnDelay = 0;
+    // Port nahe der Raummitte (nicht unter der Minikarte)
+    const port = PS.state.ports.slice().sort((a, b) => Math.hypot(a.x - 480, a.y - 288) - Math.hypot(b.x - 480, b.y - 288))[0];
+    PS.x = port.x; PS.y = port.y; PS.state.idx = PS.state.ports.indexOf(port);
+    PS.state.mode = 'aim'; PS.state.t = 0.2; PS.intangible = false; PS.noShadow = false;
+    const q = g.nearestFreePos(480, 288);
+    g.player.x = q.x; g.player.y = q.y;
+    const RL = BOTA.debug.spawn('rate_limiter', q.x + 150, q.y);
+    RL.spawnDelay = 0; RL.state.mode = 'throttled'; RL.state.t = 1.2; RL.state.tokens = 0;
+    for (const e of [PS, RL]) e.update = function () {};   // Pose fuer das Bild halten
+    g.bannerState = null;                                   // Banner frueherer Bloecke wuerde die Pose verdecken
+    g.room.effects.length = 0;
+  });
+  await page.waitForTimeout(300);
+  await shot('15-production');
   await page.evaluate(() => { for (let i = 0; i < 4; i++) BOTA.debug.killAll(); });
 
   // Mehrfach toedlicher Schaden, weil Items wie "Retry with Backoff" den ersten Tod abfangen

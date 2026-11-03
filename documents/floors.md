@@ -50,13 +50,13 @@ secret); rocks and blocks too, except on Sandbox Borders.
 | ![Legacy Codebase](images/floor_legacy_swatch.png) | 2 | **Legacy Codebase** `legacy` | Irregular stone slabs | Cobwebs in corners | Crates | A minor, 92 bpm, triangle | — |
 | ![Forgotten Branches](images/floor_branches_swatch.png) | 3 | **Forgotten Branches** `branches` | Moss, soil and grass | Roots drawn like a `git log --graph` | Bushes | G dorian, 98 bpm, triangle, bird calls | Ivy, fireflies, branchier maps, own enemy family and boss |
 | ![Dependency Hell](images/floor_dephell_swatch.png) | 4 | **Dependency Hell** `dephell` | Square tiles | Glowing cracks and embers | Packages, cartons | B phrygian, 128 bpm, sawtooth | — |
-| ![Production](images/floor_production_swatch.png) | 5 | **Production** `production` | Checker plate with rivets | Hazard stripes at doors, cables | Packages, cartons | A harmonic minor, 138 bpm, square | — |
+| ![Production](images/floor_production_swatch.png) | 5 | **Production** `production` | Checker plate with rivets | Hazard stripes at doors, cables | Packages, cartons | A harmonic minor, 138 bpm, square | Own enemy family |
 | ![Sandbox Borders](images/floor_sandbox_swatch.png) | 6 | **Sandbox Borders** `sandbox` | Rippled sand | Bleached bones, pebbles, dry grass | Sandcastles | D phrygian, 100 bpm, triangle | Cacti (solid, prick), border fences, sandstone, tumbleweeds, own enemy family |
 | ![The Training Data](images/floor_training_swatch.png) | 7 | **The Training Data** `training` | Graph paper | Scattered characters (`0 1 {} lol tl;dr nan`) | Cartons, crates | E major, 116 bpm, triangle | — |
 | ![The Latent Space](images/floor_latent_swatch.png) | 8 | **The Latent Space** `latent` | Dot grid | Stars and a constellation | Bushes, packages | C lydian, 96 bpm, sine | — |
 | ![Undefined Behavior](images/floor_undefined_swatch.png) | 9 | **Undefined Behavior** `undefined` | Square tiles | Shifted colour stripes (glitches) | All four kinds | B♭ locrian, 144 bpm, square | — |
 | ![/dev/null](images/floor_devnull_swatch.png) | 10 | **/dev/null** `devnull` | Dot grid | Almost nothing: a few lost bits | Crates, packages | G minor, 80 bpm, triangle | — |
-| ![The Context Limit](images/floor_context_swatch.png) | 11 | **The Context Limit** `context` | Square tiles | Fading fragments of earlier context | All four kinds | C♯ mixolydian, 108 bpm, square | — |
+| ![The Context Limit](images/floor_context_swatch.png) | 11 | **The Context Limit** `context` | Square tiles | Fading fragments of earlier context | All four kinds | C♯ mixolydian, 108 bpm, square | Rate Limiters |
 
 The swatch is a tiny room in the theme's colours: wall, floor checkerboard, door (top) and accent (centre dot).
 
@@ -144,6 +144,9 @@ amber shots, so check contrast with screenshots before settling on a bright pale
 
 - **Look:** industrial grey checker plate with diagonal studs and riveted seams; dark red walls; yellow-black hazard
   stripes in front of the doors and cables across the floor. Accent: signal red `#e05a4f`.
+- **Gameplay, enemies:** an own family found only here (since 2026-11-03), the Rate Limiter (fires three shots, then
+  sits out a "429" pause; also on The Context Limit) and the Port Scanner (pops out of numbered floor ports in a
+  fixed order). Steel bodies, cyan shots: red would vanish on this floor.
 - **Breakables:** packages and cartons in 70 % of combat rooms, up to 4 per room.
 - **Music:** A harmonic minor, 138 bpm, square lead.
 - **Gameplay, enemies:** everything that breaks at runtime: Race Conditions, Graphics Glitches, Flaky Tests, Jira
@@ -225,6 +228,7 @@ amber shots, so check contrast with screenshots before settling on a bright pale
 
 - **Look:** pale fog blue tiles with soft fog patches; faint, half-faded fragments of earlier context on the floor
   ("[...]", "(truncated)", "as I said earlier", "[context compacted]", …). Accent: light blue `#9ec5ff`.
+- **Gameplay, enemies:** the Rate Limiter from Production also lives here (a floor about tokens and limits).
 - **Breakables:** all four kinds in 80 % of combat rooms, up to 5 per room.
 - **Music:** C♯ mixolydian, 108 bpm, square lead.
 

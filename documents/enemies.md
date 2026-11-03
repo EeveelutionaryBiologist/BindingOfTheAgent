@@ -106,12 +106,24 @@ out against the orange embers. Cardboard thuds and packing peanuts when hit.
 | ![Honeypot](images/enemy_honeypot.png) | **Honeypot** `honeypot` | 4 (Dependency Hell only) | 22 | A golden jar with a star sticker that never moves, sitting in a funnel of dependency lines (radius about 3 tiles, always faintly visible). Every few seconds the lid pops open ("!"), then for 2.4 s it pulls everything that walks toward its jaws, at most about half your speed, so you can always walk out. In the last 0.6 s a ring marks its mouth, then it snaps shut: a full heart if you're inside. Other walking enemies get pulled in and bitten too (14 damage), and a bomb pulled into its jaws goes off right there. Flying (you or enemies) ignores the pull. Max 1 per room | 0 dependencies*, 99k stars, MIT licensed. *Terms and conditions apply. |
 | ![Rolling Release](images/enemy_rolling_release.png) | **Rolling Release** `rolling_release` | 4 (Dependency Hell; also Sandbox Borders, less often) | 18 | A rolling bundle of packages with a version label (`V1.0`). Wobbles while a dashed arrow shows its direction, then rolls diagonally and bounces off walls, rocks and pits. Every bounce bumps the version and makes it faster (130 → 250 px/s). While packed it takes only half damage. After 7 bounces: "BREAKING CHANGE", it brakes, shakes with warning rays and bursts into a ring of 6 packing-peanut shots, then lies unpacked for 1.8 s taking 150 % damage. Then it repacks as `V2.0` at starting speed. Max 2 per room | Never stable, always latest. Picks up speed with every bump. |
 
+### Production family
+
+These appear on Production floors (the Rate Limiter also on The Context Limit). Light steel bodies with a dark
+outline and hazard stripes; their shots and aim lines are cyan so they stand out on the red factory floor. Metal
+sparks and clanks when hit.
+
+| | Name | First floor | HP | Behaviour | Flavour text |
+|---|---|---|---|---|---|
+| ![Rate Limiter](images/enemy_rate_limiter.png) | **Rate Limiter** `rate_limiter` | 5 (Production and The Context Limit only) | 16 | A token bucket on legs: its three lamps are its tokens. Keeps its distance, then aims (lamps blink, a dashed line follows you, "!") and fires one aimed shot per token; each lamp goes dark and the turnstile rotor clicks on. With the bucket empty it is throttled for 2 s: a "429" sign and a draining ring, no contact damage, no shots, and it takes 50 % more damage. Then the lamps light up again one by one: the warning for the next burst. Max 2 per room | Three requests per window. After that: 429, and a mandatory coffee break. |
+| ![Port Scanner](images/enemy_port_scanner.png) | **Port Scanner** `port_scanner` | 5 (Production only) | 12 | Opens 4 numbered ports (floor sockets) spread around the room and scans them in a fixed order, clockwise with rising port numbers. Underground it can't be hurt; a dashed scan line shows where it goes next and the target port lights up and pings. Then it pops out, shows an aim line and fires a fan of 3 shots before diving again. Stand on the next port and it is "FILTERED": the scanner skips it. Its ports close when it dies. Max 1 per room | Knocks on every port, in order. Politely. Repeatedly. With bullets. |
+
 ### Minions
 
 These are only spawned by other enemies or bosses.
 
 | | Name | Spawned by | HP | Behaviour | Flavour text |
 |---|---|---|---|---|---|
+| ![Port](images/enemy_port_scanner_port.png) | **Port** `port_scanner_port` | Port Scanner (4 per scanner) | — | A floor socket with its port number. Harmless and can't be hit; it lights up when the scanner is about to surface there. Doesn't count for clearing the room | An open port. Something is listening. Something is also knocking. |
 | ![Leaklet](images/enemy_leaklet.png) | **Leaklet** `leaklet` | Memory Leak (on death) | 4 | Chases you | A smaller leak. Still not freed. |
 | ![Spinlock body](images/enemy_spinlock_body.png) | **Spinlock body** `spinlock_segment` | Spinlock (4 per snake) | — | Part of the snake; blocks shots and hurts on contact; the last one is the rattle. Falls apart when the head dies | Part of the lock. Not the part you want to hit. |
 | ![Octopus Merge arm tip](images/boss_octopus_merge_tip.png) | **Arm segment** `octo_arm` | Octopus Merge (8 arms of 5) | — | Part of an arm; only the tip (a commit dot) is visible and fires. Damage goes to the knot's HP at 60 %. Doesn't count for clearing the room | One of eight branches. Soon to be one of seven. |
