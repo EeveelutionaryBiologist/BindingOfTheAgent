@@ -95,6 +95,11 @@
  * (keine Admin-Rechte noetig; das Spiel selbst braucht nichts davon)
  *
  * SICHERHEIT: Der Test oeffnet nur die lokale Datei; die CSP des Spiels blockiert ohnehin jedes Netzwerk.
+ *   - Lost in the Middle (Context-Familie): nie vor Etage 8, auf Etage 11 haeufiger als auf anderen Etagen ab 8;
+ *     Zone = mittleres Drittel der Innenbreite; dort intangible (Schuss fliegt durch, hurt wirkungslos), kein
+ *     Kontaktschaden, nie ein Schuss; am Rand fest, nimmt Schaden, Kontakt 1; jede Salve nach vollem Telegraph mit
+ *     genau 3 korallenroten Schuessen (165–260 px/s), abgebrochen in der Mitte; Spieler 30 s in der Mitte -> er wird
+ *     trotzdem regelmaessig fest (Anti-Stillstand); bleibt im Raum; Tod/killAll lassen weder Gegner noch Zonen-Marke
  */
 'use strict';
 
@@ -1939,7 +1944,196 @@ const URL = 'file://' + path.join(ROOT, 'index.html').replace(/\\/g, '/') + '?se
   // ---- Ende Slot 2 ----
 
   // ---- Context-Familie: Slot 3 (Lost in the Middle) ----
-  // [[SLOT lost_in_the_middle]]
+  // --- Lost in the Middle (Context-Familie, ab Etage 8): fest am Rand, Geist in der Mitte, Anti-Stillstand ---
+  const lostProblems = await page.evaluate(() => {
+    const out = [];
+    const g = BOTA.game, AI = BOTA.AI, E = BOTA.ENEMIES, DT = 1 / 60, I = BOTA.C.INNER;
+    const def = E.lost_in_the_middle;
+    if (!def || !BOTA.BEHAVIORS.lost_in_the_middle) return ['Lost in the Middle: Definition oder Verhalten fehlt'];
+    const P = def.params, Z = BOTA.BEHAVIORS.lost_in_the_middle.ZONE;
+    const CX = BOTA.FLOOR_THEMES.findIndex((t) => t.key === 'context') + 1;
+    // 0) Zone = mittleres Drittel der Innenraum-Breite
+    const W = I.x1 - I.x0;
+    if (Math.abs(Z.x0 - (I.x0 + W / 3)) > 1e-6 || Math.abs(Z.x1 - (I.x0 + 2 * W / 3)) > 1e-6) out.push('Lost in the Middle: Zone ' + Z.x0 + '–' + Z.x1);
+    // 1) Spawn: nie vor Etage 8; auf The Context Limit (11) dabei und schwerer gewichtet als auf anderen Etagen ab 8
+    for (let d = 1; d <= 7; d++) {
+      for (let i = 0; i < 300; i++) {
+        if (BOTA.rollRoomEnemies(new BOTA.RNG(BOTA.hashString('lost' + d + ':' + i)), d).includes('lost_in_the_middle')) { out.push('Lost in the Middle auf Etage ' + d); break; }
+      }
+    }
+    let seen = 0;
+    for (let i = 0; i < 400; i++) {
+      const l = BOTA.rollRoomEnemies(new BOTA.RNG(BOTA.hashString('lost11:' + i)), CX);
+      const n = l.filter((x) => x === 'lost_in_the_middle').length;
+      seen += n;
+      if (n > def.maxPerRoom) out.push('Lost in the Middle: ' + n + ' in einem Raum');
+    }
+    if (!seen) out.push('Lost in the Middle: taucht auf Etage ' + CX + ' nie auf');
+    for (const d of [8, 10, 12, 15]) {
+      if (!(BOTA.enemyWeightAt(def, CX) > BOTA.enemyWeightAt(def, d))) out.push('Lost in the Middle: Etage ' + CX + ' nicht schwerer als Etage ' + d);
+    }
+    if (AI.shotSpeed({ depth: 99 }, P.shotSpeed) > 260 || AI.shotSpeed({ depth: 1 }, P.shotSpeed) < 165) out.push('Lost in the Middle: Schusstempo ausserhalb 165–260');
+
+    const p = g.player;
+    const realHurt = p.hurt, realShoot = AI.shoot;
+    const events = [];
+    const off = BOTA.bus.on('enemyWindup', (ev) => events.push(ev));
+    BOTA.debug.god(true);
+    const clearRoom = () => {
+      for (let i = 0; i < 4; i++) BOTA.debug.killAll();
+      g.room.enemies = g.room.enemies.filter((en) => !en.dead);
+      g.room.projectiles.length = 0;
+    };
+    let L = null;
+    const hurts = [];      // Treffer am Spieler durch ihn: { solid }
+    const shots = [];      // { tick, solid, mode, tell, speed, color, sprite }
+    let tick = 0, tellT = 0;
+    const inRoom = (e) => e.x >= I.x0 + e.r - 0.5 && e.x <= I.x1 - e.r + 0.5 && e.y >= I.y0 + e.r - 0.5 && e.y <= I.y1 - e.r + 0.5;
+    let outside = 0;
+    const step = (n, park, each) => {
+      for (let i = 0; i < n; i++) {
+        tick++;
+        p.x = park.x; p.y = park.y; p.vx = p.vy = 0; p.kbx = p.kby = 0;
+        for (const en of g.room.enemies) en.frozen = 0;
+        g.room.update(DT, g);
+        if (L && !L.dead) {
+          if (L.state.mode === 'tell') tellT += DT;
+          if (!inRoom(L)) outside++;
+        }
+        if (each && each(i) === false) break;
+      }
+    };
+    try {
+      p.hurt = function (amount, source) {
+        if (L && source === def.name) hurts.push({ solid: L.state.solid, intangible: L.intangible, amount });
+        return realHurt.apply(this, arguments);
+      };
+      AI.shoot = function (game, e, angle, speed, opts) {
+        if (L && e === L) shots.push({ tick, solid: L.state.solid, lost: L.state.lost, mode: L.state.mode, tell: tellT, speed, color: opts && opts.color, sprite: opts && opts.sprite });
+        return realShoot.apply(this, arguments);
+      };
+
+      // 2) Spieler campt 30 s in der Mitte: in der Zone nie fest/gefaehrlich, aber er wird immer wieder fest
+      BOTA.debug.gotoRoom('start'); clearRoom();
+      const mid = { x: (Z.x0 + Z.x1) / 2, y: 300 };
+      L = BOTA.debug.spawn('lost_in_the_middle', mid.x + 30, 160);
+      L.spawnDelay = 0;
+      const S = L.state;
+      if (!S.lost || !L.intangible || L.contactDamage !== 0) out.push('Lost in the Middle: in der Mitte gespawnt, aber fest');
+      let lostRun = 0, maxLostRun = 0, solidRuns = 0, wasSolid = S.solid, badFlags = 0, hurtTried = false, shotTried = false;
+      step(60 * 30, mid, () => {
+        g.room.projectiles = g.room.projectiles.filter((pr) => pr.team !== 'enemy');   // seine Schuesse treffen hier nie
+        const inZone = L.x > Z.x0 + Z.hyst && L.x < Z.x1 - Z.hyst;
+        if (inZone && (S.solid || !L.intangible || L.contactDamage !== 0)) badFlags++;
+        if (S.lost) { lostRun += DT; maxLostRun = Math.max(maxLostRun, lostRun); } else lostRun = 0;
+        if (S.solid && !wasSolid) solidRuns++;
+        wasSolid = S.solid;
+        if (inZone && S.lost && !hurtTried && S.vis <= 0) {
+          hurtTried = true;
+          const h = L.hp;
+          if (L.hurt(5, g, {}) !== false || L.hp !== h) out.push('Lost in the Middle: in der Mitte verwundbar');
+        }
+        if (inZone && S.lost && !shotTried && S.vis <= 0 && tick > 200) {
+          // Spielerschuss quer durch ihn hindurch: fliegt weiter, kein Schaden
+          shotTried = true;
+          const h = L.hp;
+          const pr = g.spawnProjectile({ x: L.x - 40, y: L.y, vx: 900, vy: 0, team: 'player', damage: 3 });
+          for (let k = 0; k < 6; k++) { L.frozen = 1; g.room.update(DT, g); }
+          L.frozen = 0;
+          if (L.hp !== h || (pr.dead && pr.x < L.x)) out.push('Lost in the Middle: Spielerschuss in der Mitte nicht durchgeflogen');
+          pr.dead = true;
+        }
+      });
+      if (badFlags) out.push('Lost in the Middle: ' + badFlags + ' Ticks fest/gefaehrlich in der Zone');
+      if (!hurtTried || !shotTried) out.push('Lost in the Middle: Mitte-Pruefungen nicht erreicht');
+      if (hurts.some((h) => !h.solid || h.intangible)) out.push('Lost in the Middle: Kontaktschaden in der Mitte');
+      if (shots.some((s) => !s.solid || s.lost)) out.push('Lost in the Middle: schiesst aus der Mitte');
+      if (maxLostRun > P.maxLost + 2.5) out.push('Lost in the Middle: ' + maxLostRun.toFixed(2) + ' s am Stueck in der Mitte');
+      if (solidRuns < 2) out.push('Lost in the Middle: in 30 s Mitte-Campen nur ' + solidRuns + 'x fest geworden');
+      if (!shots.length) out.push('Lost in the Middle: beschiesst einen Mitte-Camper nie');
+
+      // 3) Am Rand: fest, nimmt Schaden, Kontakt 1; Salven nur nach vollem Telegraph, 3 korallenrote Schuesse
+      clearRoom(); shots.length = 0; hurts.length = 0; events.length = 0; tellT = 0;
+      const edge = { x: I.x0 + 90, y: 300 };
+      L = BOTA.debug.spawn('lost_in_the_middle', I.x0 + 200, 440);
+      L.spawnDelay = 0;
+      const S2 = L.state;
+      if (S2.lost || L.intangible || L.contactDamage !== def.contactDamage) out.push('Lost in the Middle: am Rand nicht fest');
+      const h0 = L.hp;
+      L.hurt(2, g, {});
+      if (h0 - L.hp !== 2) out.push('Lost in the Middle: am Rand ' + (h0 - L.hp) + ' statt 2 Schaden');
+      {
+        const sx = L.x, sy = L.y;
+        L.x = p.x = edge.x; L.y = p.y = edge.y;
+        hurts.length = 0;
+        L.touchPlayer(g);
+        if (!hurts.length || hurts[0].amount !== 1) out.push('Lost in the Middle: kein Kontaktschaden 1 am Rand');
+        L.x = sx; L.y = sy; hurts.length = 0;
+      }
+      const volleys = [];
+      let prevMode = S2.mode;
+      step(60 * 20, edge, () => {
+        g.room.projectiles = g.room.projectiles.filter((pr) => pr.team !== 'enemy' || pr.t < 0.05);
+        if (prevMode !== 'tell' && S2.mode === 'tell') tellT = DT;
+        prevMode = S2.mode;
+      });
+      for (const s of shots) {
+        let v = volleys[volleys.length - 1];
+        if (!v || v.tick !== s.tick) { v = { tick: s.tick, n: 0, tell: s.tell, ok: true }; volleys.push(v); }
+        v.n++;
+        if (!s.solid || s.lost || s.mode !== 'tell') v.ok = false;
+        if (s.speed < 165 || s.speed > 260) out.push('Lost in the Middle: Schuss mit ' + Math.round(s.speed) + ' px/s');
+        if (s.color !== BOTA.CONTEXT_DANGER.shot) out.push('Lost in the Middle: Schussfarbe ' + s.color);
+      }
+      if (volleys.length < 3) out.push('Lost in the Middle: nur ' + volleys.length + ' Salven in 20 s am Rand');
+      for (const v of volleys) {
+        if (v.n !== P.fan) out.push('Lost in the Middle: Salve mit ' + v.n + ' Schuessen');
+        if (v.tell < P.tell - 0.02) out.push('Lost in the Middle: Salve nach nur ' + v.tell.toFixed(2) + ' s Telegraph');
+        if (!v.ok) out.push('Lost in the Middle: Salve nicht aus festem Zustand');
+      }
+      const winds = events.filter((ev) => ev.enemy === L);
+      if (winds.length < volleys.length) out.push('Lost in the Middle: ' + winds.length + ' Warn-Events fuer ' + volleys.length + ' Salven');
+      if (winds.some((ev) => ev.sound)) out.push('Lost in the Middle: Warn-Event mit eigenem Sound statt Familien-Warnton');
+      if (!BOTA.hasSprite('enemy_lost_in_the_middle') || !BOTA.hasSprite('shot_lost_word')) out.push('Lost in the Middle: Sprite fehlt');
+
+      // 4) Telegraph bricht ab, wenn er in die Mitte geschubst wird
+      S2.cd = 0;
+      let started = false;
+      step(120, edge, () => { if (S2.mode === 'tell') { started = true; return false; } });
+      if (started) {
+        const n0 = shots.length;
+        L.x = (Z.x0 + Z.x1) / 2;
+        step(Math.ceil(P.tell * 60) + 10, edge);
+        if (shots.length !== n0) out.push('Lost in the Middle: feuert nach dem Schubs in die Mitte trotzdem');
+      } else out.push('Lost in the Middle: Telegraph nicht gestartet');
+      if (outside) out.push('Lost in the Middle: ' + outside + ' Ticks ausserhalb des Raums');
+      if (!g.room.pickups.some((pk) => pk.lostZoneMark)) out.push('Lost in the Middle: keine Zonen-Marke im Raum');
+
+      // 5) Tod und killAll: keine Gegner, keine Zonen-Marke, keine Reste
+      L.x = edge.x + 60; step(40, edge);
+      L.hurt(1e6, g, {});
+      if (!L.dead) out.push('Lost in the Middle: stirbt nicht');
+      step(60, edge);
+      if (g.room.enemies.length || g.room.pickups.some((pk) => pk.lostZoneMark)) out.push('Lost in the Middle: Reste nach dem Tod');
+      L = null;
+      BOTA.debug.spawn('lost_in_the_middle', 200, 200);
+      BOTA.debug.spawn('lost_in_the_middle', 480, 300);
+      step(5, edge);
+      clearRoom();
+      step(60, edge);
+      if (g.room.enemies.length || g.room.pickups.some((pk) => pk.lostZoneMark)) out.push('Lost in the Middle: Reste nach killAll');
+    } finally {
+      off();
+      AI.shoot = realShoot;
+      delete p.hurt;
+      if (p.hurt !== realHurt) p.hurt = realHurt;
+      L = null;
+      clearRoom();
+      p.health = p.maxHealth;
+    }
+    return out;
+  });
+  problems.push(...lostProblems);
   // ---- Ende Slot 3 ----
 
   // --- Rogue Agent (ab Etage 7): haelt Abstand, Salven nur nach Gluehen; zwei 3er-Faecher oder drei Einzelschuesse ---
