@@ -685,7 +685,6 @@ work again, the same file-ownership split works well.
     this needs its own placement code, and the walkability check must treat the stash entrance as a door.
   - **Bosses:**
     - ~~Octopus Merge~~: done 2026-11-02 (§4).
-    - **"Human in the Loop"** (meta joke): still just a name. Needs a concept first.
     - ~~Nested Infinite Loop~~: done 2026-11-02 (§4), as the Infinite Loop's replacement from floor 8.
   - **More Sandbox Borders enemies** (brainstorm 2026-11-02, not built yet): **Dry Run** (a translucent ghost copy
     performs every attack first, then the real one repeats it exactly — a built-in telegraph), **Stack Trace**
