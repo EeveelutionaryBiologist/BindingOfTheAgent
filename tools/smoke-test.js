@@ -78,6 +78,8 @@
  *     echte Credits hoechstens coinCap und sie verfallen; "Hostile takeover" bei 40 %; Rueckkauf friert ein und
  *     schickt alle Kugeln zu ihm; Quartal verfehlt -> betaeubt (Schadensfaktor, danach weg), geschlagen -> Ring erst
  *     nach Telegraph und schneller; alle Kugeln 165–260 px/s; je genau ein Boss-Tod
+ *   - Verschaerfte Grundgegner: gleiche Werte wie Bug und Null Pointer ausser 2 Kontaktschaden, nie vor Etage 8, auf
+ *     den Etagen 8–22 je 2.5–9 % der Gegner; ein Treffer kostet ein volles Herz
  *   - Team-Items: Pools; Von Neumann: Werte; Sharp Left Turn: Kurve einmal, 90 Grad links in jeder Richtung, Strecke
  *     140–200 px; Calculator: reine Funktion, Grenzen, leichtes Plus, Rechnung ohne game.rng, zaehlt keine getarnte
  *     Hallucination, leere Raeume aendern nichts; Deep Packet Inspection: Boss und Geheimraum markiert, room.seen
@@ -2074,6 +2076,55 @@ const URL = 'file://' + path.join(ROOT, 'index.html').replace(/\\/g, '/') + '?se
     return out;
   });
   problems.push(...teamItemProblems);
+
+  // --- Verschaerfte Grundgegner: Game-breaking Bug und Dangling Pointer (ab Etage 8) ---
+  const eliteProblems = await page.evaluate(() => {
+    const out = [], E = BOTA.ENEMIES, g = BOTA.game, DT = 1 / 60;
+    const pairs = [['game_breaking_bug', 'bug'], ['dangling_pointer', 'null_pointer']];
+    for (const [id, base] of pairs) {
+      const a = E[id], b = E[base];
+      for (const k of ['hp', 'r', 'speed', 'behavior', 'flying']) if (a[k] !== b[k]) out.push(id + ': ' + k + ' weicht vom Grundgegner ab');
+      if (a.contactDamage !== 2) out.push(id + ': Kontaktschaden ' + a.contactDamage);
+      if (BOTA.spriteFrameCount(a.sprite) !== BOTA.spriteFrameCount(b.sprite)) out.push(id + ': andere Frame-Zahl');
+      if (a.color === b.color) out.push(id + ': gleiche Farbe wie der Grundgegner');
+    }
+    // Nie vor Etage 8, danach ein stabiler Anteil (die Kakophonie hebt alle anderen mit an)
+    const share = (d) => {
+      const n = {}; let all = 0;
+      for (let i = 0; i < 800; i++) {
+        for (const id of BOTA.rollRoomEnemies(new BOTA.RNG(BOTA.hashString('elite' + d + ':' + i)), d)) { n[id] = (n[id] || 0) + 1; all++; }
+      }
+      return pairs.map(([id]) => (n[id] || 0) / all);
+    };
+    for (let d = 1; d <= 7; d++) if (share(d).some((x) => x > 0)) out.push('Verschaerfte Gegner schon auf Etage ' + d);
+    for (let d = 8; d <= 22; d++) for (const x of share(d)) if (x < 0.025 || x > 0.09) out.push('Verschaerfte Gegner auf Etage ' + d + ': Anteil ' + x.toFixed(3));
+
+    // Ein Treffer kostet wirklich ein volles Herz (Grundgegner: ein halbes)
+    const d0 = g.depth, p0 = g.player;
+    try {
+      g.enterFloor(8); g.setState('play');
+      BOTA.debug.gotoRoom('boss');
+      for (let i = 0; i < 4; i++) BOTA.debug.killAll();
+      g.room.projectiles.length = 0;
+      g.room.stampLayout(BOTA.LAYOUTS.find((l) => l.id === 'empty'));
+      for (const [id, want] of [['game_breaking_bug', 2], ['dangling_pointer', 2], ['bug', 1], ['null_pointer', 1]]) {
+        const pl = new BOTA.Player(480, 290); pl.recalcStats(); g.player = pl;
+        const h = pl.health;
+        const e = BOTA.debug.spawn(id, 480, 290); e.spawnDelay = 0;
+        for (let i = 0; i < 3 && pl.health === h; i++) g.update(DT);
+        if (h - pl.health !== want) out.push(id + ': Treffer kostet ' + (h - pl.health) + ' statt ' + want);
+        e.die(g);
+        g.room.enemies.length = 0;
+      }
+    } finally {
+      g.player = p0;
+      for (let i = 0; i < 4; i++) BOTA.debug.killAll();
+      g.room.projectiles.length = 0;
+      g.enterFloor(d0); g.setState('play');
+    }
+    return out;
+  });
+  problems.push(...eliteProblems);
 
   // --- The Memory Hog (Etage 4–9): reservierter Boden, Page Fault, Quill Dump, Stop-the-World ---
   const hogProblems = await page.evaluate(() => {

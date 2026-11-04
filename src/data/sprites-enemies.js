@@ -30,75 +30,91 @@
   // ===========================================================================
 
   // Bug — gruener Kaefer von oben: Fuehler, Augen, geteilter Panzer, 6 Beine (wackeln)
+  const BUG_FRAMES = [
+    sym([
+      '..k...',
+      '...k..',
+      '...kkk',
+      '..kwkd',
+      'k.kddd',
+      '.kklgk',
+      '..kglk',
+      'kkkggk',
+      '..kggk',
+      '.kkggk',
+      'k.kddk',
+      '...kkk',
+    ]),
+    sym([
+      '.k....',
+      '..k...',
+      '...kkk',
+      '..kwkd',
+      '.kkddd',
+      'k.klgk',
+      '..kglk',
+      '.kkggk',
+      'k.kggk',
+      '..kggk',
+      '.kkddk',
+      '...kkk',
+    ]),
+  ];
   B.defineSprite('enemy_bug', {
     palette: { k: K, d: '#3d6b2c', g: '#6aa84f', l: '#9fd67f', w: W },
     scale: 4,
-    frames: [
-      sym([
-        '..k...',
-        '...k..',
-        '...kkk',
-        '..kwkd',
-        'k.kddd',
-        '.kklgk',
-        '..kglk',
-        'kkkggk',
-        '..kggk',
-        '.kkggk',
-        'k.kddk',
-        '...kkk',
-      ]),
-      sym([
-        '.k....',
-        '..k...',
-        '...kkk',
-        '..kwkd',
-        '.kkddd',
-        'k.klgk',
-        '..kglk',
-        '.kkggk',
-        'k.kggk',
-        '..kggk',
-        '.kkddk',
-        '...kkk',
-      ]),
-    ],
+    frames: BUG_FRAMES,
+  });
+
+  // Game-breaking Bug — derselbe Kaefer in Blau (spaete Etagen, trifft mit einem vollen Herz)
+  B.defineSprite('enemy_game_breaking_bug', {
+    palette: { k: K, d: '#2456b8', g: '#3f8cf0', l: '#a5d4ff', w: W },
+    scale: 4,
+    frames: BUG_FRAMES,
   });
 
   // Null Pointer — kleiner Pfeil-Geist (Cursor-Spitze oben), zeigt ins Leere; wehender Saum
+  const POINTER_FRAMES = [
+    sym([
+      '.....k',
+      '....kw',
+      '...kww',
+      '..kwww',
+      '.kwwww',
+      'kkkwww',
+      '..kwew',
+      '..kwew',
+      '..kwww',
+      '..kggw',
+      '..kwgw',
+      '..kk.k',
+    ]),
+    sym([
+      '.....k',
+      '....kw',
+      '...kww',
+      '..kwww',
+      '.kwwww',
+      'kkkwww',
+      '..kwew',
+      '..kwew',
+      '..kwww',
+      '..kggw',
+      '..kgwk',
+      '...k.k',
+    ]),
+  ];
   B.defineSprite('enemy_null_pointer', {
     palette: { k: K, w: '#d9dde3', g: '#9aa0a8', e: '#2b2f36' },
     scale: 4,
-    frames: [
-      sym([
-        '.....k',
-        '....kw',
-        '...kww',
-        '..kwww',
-        '.kwwww',
-        'kkkwww',
-        '..kwew',
-        '..kwew',
-        '..kwww',
-        '..kggw',
-        '..kwgw',
-        '..kk.k',
-      ]),
-      sym([
-        '.....k',
-        '....kw',
-        '...kww',
-        '..kwww',
-        '.kwwww',
-        'kkkwww',
-        '..kwew',
-        '..kwew',
-        '..kwww',
-        '..kggw',
-        '..kgwk',
-        '...k.k',
-      ]),
-    ],
+    frames: POINTER_FRAMES,
+  });
+
+  // Dangling Pointer — derselbe Pfeil-Geist in Rot (spaete Etagen, trifft mit einem vollen Herz)
+  B.defineSprite('enemy_dangling_pointer', {
+    palette: { k: K, w: '#ff5148', g: '#b3202a', e: '#fff0d8' },
+    scale: 4,
+    frames: POINTER_FRAMES,
   });
 
   // Memory Leak — tropfender lila Blob mit Augen; Tropfen laufen nach unten

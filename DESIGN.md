@@ -158,8 +158,10 @@ function. Difficulty scales enemy HP by `1 + 0.15 · (depth − 1)` and unlocks 
 | **Hallucination** | mimic | looks like a Credit, Half Heart or Approval until you get close (real ones lie around too) | *"Looked real. Was, in fact, not real."* |
 | **Graphics Glitch** | glitch | jumps 1–3 tiles at a time; touching you scrambles part of the HUD for 7 s | *"Is it supposed to look like this...?"* |
 | **Race Condition** | zigzag | always spawns in pairs, erratic | *"Sometimes it hits first. Sometimes you do. Sometimes both."* |
+| **Game-breaking Bug** (floor 8+) | wander | a blue Bug, 1 heart on contact | *"Severity: critical. Status: won't fix."* |
+| **Dangling Pointer** (floor 8+) | fly-chase | a red Null Pointer, 1 heart on contact | *"Used to point at something. It's taking that out on you."* |
 
-Contact damage: half a heart. Enemy shots: half a heart.
+Contact damage: half a heart (the two floor-8 variants: a full heart). Enemy shots: half a heart.
 
 ## 8. Bosses
 

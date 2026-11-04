@@ -10,6 +10,7 @@ floor. Their attacks also come a little faster and their shots fly a little quic
 The HP values below are floor-1 values.
 
 **Damage.** Touching an enemy or getting hit by its shot costs half a heart; touching a boss costs a full heart.
+The Game-breaking Bug and the Dangling Pointer also cost a full heart to touch.
 For comparison, the player has 3 hearts at the start and moves at 240 px/s; enemy shots fly at 165–260 px/s.
 
 ---
@@ -53,6 +54,8 @@ everything you've met so far turns up together, the floor families included.
 | ![Zombie Process](images/enemy_zombie_process.png) | **Zombie Process** `zombie_process` | 2 | 14 | Chases you. When killed, it lies down for 1.8 s and gets back up once with half its HP, angrier | `kill -9` recommended. |
 | ![Scope Creep](images/enemy_scope_creep.png) | **Scope Creep** `scope_creep` | 4 | 10 | Slowly grows (up to 1.9× size and 1.6× HP). Once big enough, fires a ring of shots every 3.6 s. Max 2 per room | Just one more small feature. |
 | ![Rogue Agent](images/boss_rogue_agent_a.png) | **Rogue Agent** `rogue_agent` | 7 | 16 | A single member of the Rogue Agent Swarm, escaped from the sandbox (looks like one of the four Swarm agents). Runs around quickly and keeps 200–320 px away from you, strafing to the side. After a green glow it fires either two 3-shot fans in a row or three quick single shots at you. Max 2 per room | Same weights, different goals. Escaped the sandbox and is in no hurry to go back. |
+| ![Game-breaking Bug](images/enemy_game_breaking_bug.png) | **Game-breaking Bug** `game_breaking_bug` | 8 | 8 | A blue Bug: wanders the same way, but touching it costs a full heart. About 1 in 20 enemies from floor 8 on | Severity: critical. Status: won't fix. |
+| ![Dangling Pointer](images/enemy_dangling_pointer.png) | **Dangling Pointer** `dangling_pointer` | 8 | 5 | A red Null Pointer: flies straight at you, fast but fragile, and touching it costs a full heart. About 1 in 20 enemies from floor 8 on | Used to point at something. It's taking that out on you. |
 
 ### Legacy Codebase family
 

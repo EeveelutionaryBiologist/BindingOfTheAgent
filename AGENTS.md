@@ -118,6 +118,8 @@ Live state is under `BOTA.game` (`.player`, `.room`, `.floor`, `.depth`, `.state
   draws from `game.rng`, ignores disguised Hallucinations and doesn't change in empty rooms; Deep Packet Inspection
   marks the boss and secret room without changing `room.seen` and drops a mark once visited; To the Moon ignores
   spikes, cacti and puddles (checked against a player without it) while cacti, pits and rocks stay solid;
+- the Game-breaking Bug and Dangling Pointer match the Bug and Null Pointer except for 2 contact damage, never roll
+  before floor 8, stay at 2.5–9 % of enemies on floors 8–22, and one touch costs a full heart;
 - the Off-Brand GPU turns about 12 % of shots into duds that deal no damage, and the GPU prices are 30¢ / 20¢;
 - the Forgotten Branches family (see §4):
   - **Stale Branch** appears only on its floor (before floor 8), ages through its leaf stages, speeds up, counts up its counter,
@@ -635,6 +637,8 @@ Item conventions:
 | zombie_process | revive | 2 (was 3 until 2026-11-03) | 14 |
 | scope_creep | grow | 4 | 10 |
 | rogue_agent | rogue_agent | 7 | 16 |
+| game_breaking_bug | wander | 8 | 8 |
+| dangling_pointer | fly_chase | 8 | 5 |
 | stale_branch | stale | 3, Forgotten Branches only | 12 |
 | detached_head | detached_body (+ head `detached_tag`) | 3, Forgotten Branches only | 12 + 6 |
 | cherry_pick | cherry | 3, Forgotten Branches only | 7 (pair of 2) |
@@ -651,6 +655,11 @@ Item conventions:
 | overflow_buffer | overflow_buffer (+ `overflow_puddle`) | 8, The Context Limit only | 18 (max 2 per room) |
 | summarizer | summarizer | 8, The Context Limit only | 16 (max 1 per room) |
 | lost_in_the_middle | lost_in_the_middle | 8, The Context Limit only | 14 (max 2 per room) |
+
+The **Game-breaking Bug** and **Dangling Pointer** (2026-11-04) are recoloured Bug and Null Pointer for floors 8+: same
+stats and behaviour (they share `BUG_FRAMES` / `POINTER_FRAMES`), but contact damage 2 and cost 1.5. They have no `home`
+on purpose: floors 8+ have no home crowd, so they count fully everywhere. Their weight is 3 + 1 per floor (max 12) because the cacophony lifts everything else too:
+that holds each at about 5 % of enemies (a flat weight let the share fall).
 
 The **Rogue Agent** (floor 7+, "outside the box") reuses the Rogue Agent Swarm's four sprites (one per agent, picked
 with `game.rng`) and its green shots. It strafes at 200–320 px and cuts inward for 0.5 s after bumping into
@@ -807,7 +816,7 @@ each have their own crowd (spawn shares measured with 2,000 rooms per floor, 202
 
 The Hallucination has no home (bonus spawn everywhere; ×2 on sandbox, ×1.5 on training). Floors 4, 6 and 7 have
 the thinnest home crowd and the highest away share; the themed enemies planned for them fill that gap. A new generic
-enemy needs a `home` and an entry in the smoke test's `ROSTER` table.
+enemy that can appear before floor 8 needs a `home` and an entry in the smoke test's `ROSTER` table.
 
 **Cacophony from floor 8** (`B.MIX_FROM`): `B.mixAt(depth)` is 0 before 8, then 0.25, +0.1 per floor, 1 from 16.
 `B.themeWeight(def, theme, depth)` lifts any factor below 1 (AWAY, `themeOnly` exclusion, explicit 0) to

@@ -59,7 +59,7 @@
  *
  * Etagen-Freischaltung (DESIGN.md §7): Etage 1 ist sanft (Bug, Null Pointer, Memory Leak, selten eine
  * Hallucination), ab 2 kommen Fernkaempfer, Charger, der Graphics Glitch und (fuer Legacy Codebase) Orbiter und
- * Zombies dazu, ab 4 Scope Creep, ab 7 der Rogue Agent.
+ * Zombies dazu, ab 4 Scope Creep, ab 7 der Rogue Agent, ab 8 die verschaerften Bug und Null Pointer.
  */
 'use strict';
 
@@ -84,6 +84,24 @@
     minFloor: 1, weight: 7, weightPerFloor: -0.3, minWeight: 4, cost: 1, tags: ['fly', 'melee'],
     home: ['backlog', 'legacy', 'production'],
     desc: 'Points at nothing. Charges at you anyway.',
+  };
+
+  // Verschaerfte Varianten der beiden Grundgegner fuer spaete Etagen: gleiches Verhalten, gleiche Werte, aber ein
+  // volles Herz Kontaktschaden. Bewusst ohne home: ab Etage 8 gibt es keine Etagen-Besetzung mehr, sie zaehlen
+  // ueberall voll. Das Gewicht steigt pro Etage, weil die Kakophonie alle anderen mit anhebt: so bleibt jeder bei etwa
+  // 5 % der Gegner (bei festem Gewicht fiele der Anteil). cost 1.5 statt 1, weil sie doppelt so weh tun.
+  E.game_breaking_bug = {
+    name: 'Game-breaking Bug', hp: 8, r: 18, speed: 70, contactDamage: 2,
+    behavior: 'wander', sprite: 'enemy_game_breaking_bug', color: '#3f8cf0',
+    minFloor: 8, weight: 3, weightPerFloor: 1, maxWeight: 12, cost: 1.5, tags: ['melee'],
+    desc: 'Severity: critical. Status: won\'t fix.',
+  };
+
+  E.dangling_pointer = {
+    name: 'Dangling Pointer', hp: 5, r: 14, speed: 140, contactDamage: 2, flying: true,
+    behavior: 'fly_chase', sprite: 'enemy_dangling_pointer', color: '#ff5148',
+    minFloor: 8, weight: 3, weightPerFloor: 1, maxWeight: 12, cost: 1.5, tags: ['fly', 'melee'],
+    desc: "Used to point at something. It's taking that out on you.",
   };
 
   E.memory_leak = {
