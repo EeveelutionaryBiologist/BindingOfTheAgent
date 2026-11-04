@@ -54,9 +54,9 @@
   PT.guardrail = { name: 'Guardrail', sprite: 'pickup_guardrail', color: '#5b8def', r: 14, weight: 4, price: 6,
     collect: (p) => p.addGuardrails(2) };
   PT.credit = { name: 'Credit', sprite: 'pickup_credit', color: '#f2c14e', r: 11, weight: 34,
-    collect: (p) => { p.credits = clamp99(p.credits + 1); return true; } };
+    collect: (p, game) => { p.credits = clamp99(p.credits + 1); if (game) game.addScore('coins', 1); return true; } };
   PT.credit5 = { name: 'Credit Stack', sprite: 'pickup_credit5', color: '#f7d774', r: 13, weight: 4,
-    collect: (p) => { p.credits = clamp99(p.credits + 5); return true; } };
+    collect: (p, game) => { p.credits = clamp99(p.credits + 5); if (game) game.addScore('coins', 5); return true; } };
   PT.push = { name: 'Force Push', sprite: 'pickup_push', color: '#6b6b6b', r: 13, weight: 11, price: 5,
     collect: (p) => { p.pushes = clamp99(p.pushes + 1); return true; } };
   PT.push2 = { name: 'Double Force Push', sprite: 'pickup_push2', color: '#6b6b6b', r: 14, weight: 2,
@@ -93,6 +93,7 @@
         return false;
       }
       p.approvals--;
+      if (game) game.addScore('keys');
       B.bus.emit('unlock', { game, x: pk.x, y: pk.y });
       const res = B.openChest(game, pk.x, pk.y, { locked: true });
       if (res && res.item) pk.noShell = true; // Truhe "wird" zum Podest -> keine Huelle liegen lassen
@@ -328,6 +329,8 @@
       this.itemId = null;
       this.itemCharge = undefined;
       const dropped = p.giveItem(id, game);
+      // Score: nur neue Items. Ein hier abgelegtes Aktiv-Item hat itemCharge; sonst liesse es sich endlos tauschen
+      if (storedCharge === undefined && game) game.addScore('items');
       // Wurde hier frueher ein Aktiv-Item abgelegt, behaelt es seine damalige Ladung
       // (sonst koennte man durch Hin-und-her-Tauschen unendlich oft voll aufladen).
       if (storedCharge !== undefined && p.active && p.active.id === id) p.active.charge = storedCharge;

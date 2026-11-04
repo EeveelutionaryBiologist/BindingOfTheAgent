@@ -1549,6 +1549,7 @@
         case 'bossIntro': B.Screens.bossIntro(ctx, game); break;
         case 'pause': B.Screens.pause(ctx, game); break;
         case 'dead': B.Screens.dead(ctx, game); break;
+        case 'scoreCard': B.Screens.scoreCard(ctx, game); break;
         case 'floorTransition': drawIris(ctx, game); break;
         default: break;
       }

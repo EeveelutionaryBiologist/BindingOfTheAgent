@@ -15,7 +15,8 @@ ideas live in `ENEMY_IDEAS.md`; remove an entry there once it's built.
 ## 0. TL;DR
 
 - **What it is:** a Binding-of-Isaac-style roguelite in which a small Claude avatar descends random dungeon floors
-  forever. It's an internal team distraction, with no ending and no meta-progression.
+  forever. It's an internal team distraction with no meta-progression. There's no real ending: after the 11th floor a
+  score card offers to keep going (The Backlog II) or start over.
 - **Stack:** vanilla JavaScript (ES2020), Canvas 2D and Web Audio, with **zero dependencies and no build step**.
   `index.html` loads about 30 classic `<script>` files in a fixed order, and everything hangs off `window.BOTA`.
 - **Run:** open `index.html` directly from disk (`file://`). Use `?seed=ABCD-1234` for a fixed run and `?debug` for cheats.
@@ -190,6 +191,11 @@ Live state is under `BOTA.game` (`.player`, `.room`, `.floor`, `.depth`, `.state
   stream has its telegraph first; an arm merges every 12 % of HP (at least one stays), phase 2 starts once at 50 %
   with opposing streams; arms hurt on contact along their whole length; the death is a single boss death and no
   segments survive it;
+- the Final Score: the values match `B.SCORE_VALUES`; coins count by value (not hearts or Seed Funding), kills leave
+  out bosses, boss segments and boss minions, Approvals count at doors and locked chests, an item counts once (taking a
+  swapped active item back doesn't), floor bosses and side quests count once via `onRoomClear`; the score card comes
+  after floor 11 and 22 but not floor 10, ignores keys for 0.8 s, doesn't touch `game.rng`, Enter leads to The Backlog II
+  keeping score and cycles, R starts at zero; the post-mortem shows the same score;
 - the door transition, special rooms, pause screen and death screen work.
 
 Screenshots go to `tools/out/` (scratch; don't commit or ship). One-time setup without admin rights:
@@ -266,7 +272,7 @@ depend on load order.
 | `themeKeyAt, themeFactor, themeWeight, mixAt, AWAY, MIX_FROM, enemyWeightAt, rollRoomEnemies, bossWeightAt, rollBoss, rollBossVaried, validateLayout` | data | spawn and layout logic (floor themes, rosters, cacophony: §4) |
 | `ENCOUNTER_BOSSES, ENCOUNTER_HP, ENCOUNTER_FROM` | bosses | side-quest bosses from floor 8 (§3.6 step 10) |
 | `Renderer, text`, `HUD, pixelText, pixelTextWidth`, `Screens` | render | drawing |
-| `Game`, `game`, `debug` | game, main | state machine instance and debug API |
+| `Game`, `game`, `debug`, `SCORE_VALUES`, `SCORE_ROWS` | game, main | state machine instance, debug API, Final Score table (§4) |
 | `spriteTools` | sprites-core | `shiftRow, stamp, mirror, padRows` helpers for composing sprites |
 | `BRANCH_LEAVES` | sprites-enemies | shared Forgotten Branches palette (`outline, bark, green, yellow, brown`); use it for new family members |
 
@@ -281,16 +287,20 @@ title ─Enter─▶ floorCard ─(2.2 s or key)─▶ play ◀──Esc/P──
                    │                          │ ├─ trapdoor ─▶ floorTransition (0.6 s) ─▶ enterFloor(depth+1) ─▶ floorCard
                    └──── newRun(seed) ◀──R────┴─ hp 0 ─▶ dead
 ```
+On the last floor of a cycle (`isCycleEnd()`: depth divisible by the number of themes) `floorTransition` leads to
+`scoreCard` instead of `enterFloor`: after 0.8 s Enter continues with `enterFloor(depth + 1)` and R calls `newRun`.
 Global keys handled in every state: `M` (mute) and `F2` (debug). Holding `R` for 1 s in play or pause restarts the run
 (`game.restartHold` drives the HUD ring).
 
 ### 3.5 World API (`game` is passed to every behaviour and hook)
-`game.player · game.room · game.floor · game.depth · game.rng · game.followers · game.seed · game.runStats`
+`game.player · game.room · game.floor · game.depth · game.rng · game.followers · game.seed · game.runStats ·
+game.score · game.cycles`
 - `spawnProjectile(opts)`, `spawnEnemy(id, x, y, room?)`, `spawnBoss(id, x, y, room?, opts?)` (`opts = {hpMult,
   encounter}`; kept in `game.bossSpawnOpts` during the constructor, so bosses spawned in `init`, i.e. the Swarm, inherit it)
 - `spawnPickup(type, x, y, opts?, room?)`, `spawnPedestal(itemId, x, y, {price}?, room?)`
 - `explode(x, y, radius, damage, source)`: damages enemies and the player (2 halves), breaks rocks and cacti (8 % loot), reveals
   hidden doors, flings pickups, shakes the screen, emits `explosion`
+- `addScore(kind, n?)` · `scoreTotal()` (Final Score, §4)
 - `shake(intensity, seconds)` · `banner(title, subtitle)` · `freezeEnemies(seconds)` · `rollItem(pool)` ·
   `nearestFreePos(x, y, room?)` · `nextFloor()` · `teleport(room)` · `pipeWarp(pipe)` · `glitchHud(seconds)` (scrambles one HUD area,
   stored in `game.hudGlitch`; a new call restarts the timer instead of stacking)
@@ -476,7 +486,7 @@ The previous floor's boss is excluded, and bosses already met count `weight · t
   bar, and the hold-R ring. While `game.hudGlitch` is set, one area (hearts, active item, stats or minimap) is drawn
   as static or scrambled text; the noise is purely visual.
 - **Screens (`screens.js`):** title, floor card, boss intro VS card, pause (item grid browsed with the arrow keys),
-  and the death "POST-MORTEM".
+  the death "POST-MORTEM" (with final score and cycles), and the end-of-cycle score card.
   - Note: the pause screen registers its **own `window` keydown listener** for arrow-key browsing. It's display only,
     and it's the one input listener outside `input.js`.
 
@@ -524,6 +534,7 @@ Payloads usually include `game, x, y` and often `color`.
 | `explosion` (`radius`), `bombPlaced`, `projectileEnd` (`team, impact`) | game, projectile, player | audio, effects |
 | `activeUsed`, `activeCharged` | player | audio, HUD |
 | `runStart`, `floorEnter` (`depth`), `descend` | game | audio (music), screens |
+| `cycleComplete` (`cycles, score`) | game (`showScoreCard`) | audio (`itemGet`) |
 
 Rule: audio and effects **only listen**. Game logic never calls them directly, except `game.shake`/`banner`, which
 are game state.
@@ -821,6 +832,14 @@ a floor never has the predecessor as a side quest (the side quests keep the reti
 
 Each has 2 phases and
 telegraphed attacks; enemy bullets travel at 165–260 px/s.
+
+**Final Score** (2026-11-04): `game.score` counts events, `game.scoreTotal()` multiplies them by `B.SCORE_VALUES` (top of
+`game.js`): coins 1 (a Credit Stack is 5 coins), kills 2, Approvals used 6, items taken 25, floor bosses 80, side quests
+40, rooms cleared 4. It's shown on the post-mortem and the score card, and it survives "keep going"; there's no
+live HUD display and nothing is stored between runs. Only credits from pickups count. Kills skip anything in
+`B.BOSSES`, `proxy` or `ignoreForClear` parts and minions with `state.owner` (boss-refilled, so they can't be farmed);
+keep that in mind when a new enemy respawns things. Bosses and rooms count in `onRoomClear`, so the Swarm's four
+entities score once. `game.cycles` counts finished cycles and resets with the run.
 
 **Pickups:** `heart_half heart guardrail credit credit5 push push2 approval chest chest_locked readme` (`readme` is never
 a random drop; see §3.6 step 8).

@@ -473,9 +473,11 @@
       ['Bugs fixed', String(d.kills || 0) + ' kills', ink],
       ['Uptime', fmtTime(d.time), ink],
       ['Final title', rank, ink],
+      ['Cycles done', String(d.cycles || 0), ink],
+      ['Final score', fmtScore(d.score || 0), '#a8261a'],
     ];
     fields.forEach(([k, v, col], i) => {
-      const y = py + 168 + i * 26;
+      const y = py + 164 + i * 21;
       B.text(ctx, k + ':', px + 86, y, { size: 15, color: '#7a6a5c', shadow: false, bold: false });
       B.text(ctx, v, px + 236, y, { size: 15, color: col, shadow: false, maxWidth: pw - 260 });
     });
@@ -517,7 +519,53 @@
     ctx.restore();
   }
 
+  /** Zahl mit Tausenderkommas */
+  function fmtScore(n) { return String(Math.max(0, Math.round(n))).replace(/\B(?=(\d{3})+(?!\d))/g, ','); }
+
+  /**
+   * Score-Karte am Ende eines Durchgangs (Zustand 'scoreCard', nach der letzten Etage): Aufschluesselung, Final Score
+   * (zaehlt kurz hoch) und die Wahl zwischen Weitermachen und Neustart. Nur Anzeige; die Tasten wertet game.js aus.
+   */
+  function drawScoreCard(ctx, game) {
+    const age = game.stateT;
+    dim(ctx, 0.93, '6,10,18');
+    const accent = (B.themeFor(game.depth) || {}).accent || '#9ec5ff';
+    const pw = 560, px = W / 2 - pw / 2;
+    B.pixelText(ctx, 'CONTEXT LIMIT REACHED', W / 2, 56, { scale: 4, align: 'center', color: accent, shadow: '#000' });
+    B.text(ctx, game.cycles === 1 ? 'You made it through every floor. Nobody remembers how.' : 'All of this has happened before.',
+      W / 2, 100, { size: 16, align: 'center', color: B.COLORS.textDim, bold: false });
+
+    // Aufschluesselung: Anzahl x Punkte = Summe, Zeile fuer Zeile eingeblendet
+    B.SCORE_ROWS.forEach(([key, label], i) => {
+      const a = clamp01((age - i * 0.06) / 0.2);
+      if (a <= 0) return;
+      const y = 142 + i * 30, n = game.score[key] || 0, v = B.SCORE_VALUES[key];
+      const o = { size: 17, color: B.COLORS.text, shadow: false, bold: false, alpha: a };
+      B.text(ctx, label, px, y, o);
+      B.text(ctx, fmtScore(n) + ' × ' + v, px + 370, y, Object.assign({}, o, { align: 'right', color: B.COLORS.textDim }));
+      B.text(ctx, fmtScore(n * v), px + pw, y, Object.assign({}, o, { align: 'right' }));
+    });
+    const ly = 142 + B.SCORE_ROWS.length * 30 + 4;
+    ctx.fillStyle = 'rgba(255,255,255,0.18)';
+    ctx.fillRect(px, ly, pw, 2);
+
+    // Final Score zaehlt hoch, solange die Tasten noch gesperrt sind
+    const total = game.scoreTotal() * clamp01((age - 0.3) / 0.5);
+    B.pixelText(ctx, 'FINAL SCORE', px, ly + 20, { scale: 3, color: '#fff6ee', shadow: '#000' });
+    B.pixelText(ctx, fmtScore(total), px + pw, ly + 14, { scale: 4, align: 'right', color: '#ffcf4d', shadow: '#000' });
+    B.text(ctx, 'Cycles completed: ' + game.cycles + '   ·   ' + fmtTime(game.runStats.time) + '   ·   seed ' + game.seed,
+      W / 2, ly + 66, { size: 14, align: 'center', color: B.COLORS.textDim, bold: false, shadow: false });
+
+    if (age > 0.8) {
+      const blink = 0.85 + 0.15 * Math.sin(age * 4);
+      const next = B.floorInfo(game.depth + 1).name.toUpperCase();
+      B.pixelText(ctx, 'ENTER: KEEP GOING TO ' + next, W / 2, ly + 104, { scale: 2, align: 'center', color: accent, shadow: '#000', alpha: blink });
+      B.pixelText(ctx, 'R: START OVER', W / 2, ly + 132, { scale: 2, align: 'center', color: B.COLORS.textDim, shadow: '#000' });
+    }
+  }
+
   B.Screens = {
+    scoreCard: drawScoreCard,
     title: drawTitle,
     floorCard: drawFloorCard,
     bossIntro: drawBossIntro,

@@ -23,7 +23,8 @@ Controls are basically ripped straight from Binding Of Isaac.
 
 Clear a room to open its doors. Find the treasure room (gold door), the shop (green), the boss (red, with teeth),
 and drop through the trapdoor. From floor 2 onwards, treasure and shop doors need an **Approval** (key).
-Secret rooms hide behind cracked walls: Force Push them. There is no ending. There is only the next floor.
+Secret rooms hide behind cracked walls: Force Push them. There is no ending. After the last floor you get your Final
+Score and a choice: start over, or keep going with everything you have. There is only the next floor.
 
 ### What's inside
 - **50 items** (45 passive, 5 active). Examples: Blockchain (*"Does absolutely nothing. Market cap: $4B."*),

@@ -445,6 +445,9 @@ All milestones done. What shipped, compared with this doc:
 - **The Context Limit in the rain (2026-11-03):** the last floor of the cycle got a mood of its own: a constant
   downpour with puddles, ripples and wet walls, rare distant lightning, a rain sound, and fragments of earlier
   context that flicker through the room as barely audible whispers. Purely cosmetic (no `game.rng` use).
+- **Final Score (2026-11-04):** points for coins, kills, rooms, Approvals used, items, floor bosses and side quests,
+  shown with the cycles completed on the post-mortem and on a score card after the last floor, where you keep going
+  (The Backlog II, score carries over) or start over. Details in AGENTS.md §4.
 - **More hearts (2026-11-03):** five items add heart containers (Long-Term Support, Swap File, Electron App, Reserved
   Instances, Graceful Degradation), because RLHF was the only one and runs are long. README.md (the map pickup) now
   lies on half of all floors instead of 30 %.

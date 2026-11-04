@@ -97,6 +97,10 @@
  *     Kontaktschaden, nie ein Schuss; am Rand fest, nimmt Schaden, Kontakt 1; jede Salve nach vollem Telegraph mit
  *     genau 3 korallenroten Schuessen (165–260 px/s), abgebrochen in der Mitte; Spieler 30 s in der Mitte -> er wird
  *     trotzdem regelmaessig fest (Anti-Stillstand); bleibt im Raum; Tod/killAll lassen weder Gegner noch Zonen-Marke
+ *   - Final Score: Werte wie in B.SCORE_VALUES; Coins nach Wert, Kills ohne Bosse, Koerperteile und Boss-Minions,
+ *     Approvals an Tuer und Truhe, Items nur einmal (kein Tausch-Farmen), Etagen-Boss und Zwischenboss genau einmal;
+ *     nach der letzten Etage die Score-Karte (nicht nach anderen Etagen), Tasten erst nach der Sperre, Enter fuehrt
+ *     zu The Backlog II mit Score und Zyklen, R startet bei null; Karte zieht nichts aus game.rng; Tod zeigt Score
  *   - Spezialraeume, Pause- und Todesbildschirm rendern
  * Screenshots landen in tools/out/ (nicht einchecken).
  *
@@ -3751,6 +3755,82 @@ const URL = 'file://' + path.join(ROOT, 'index.html').replace(/\\/g, '/') + '?se
   await shot('15-production');
   await page.evaluate(() => { for (let i = 0; i < 4; i++) BOTA.debug.killAll(); });
 
+  // --- Final Score: jedes Ereignis zaehlt genau wie vorgesehen, Farm-Wege zaehlen nicht ---
+  problems.push(...await page.evaluate(() => {
+    const out = [];
+    const g = BOTA.game, p = g.player, PT = BOTA.PICKUP_TYPES;
+    const V = BOTA.SCORE_VALUES;
+    if (JSON.stringify(V) !== JSON.stringify({ coins: 1, kills: 2, keys: 6, items: 25, bosses: 80, quests: 40, rooms: 4 })) out.push('Score-Werte: ' + JSON.stringify(V));
+    if (BOTA.SCORE_ROWS.some(([k]) => V[k] === undefined) || BOTA.SCORE_ROWS.length !== Object.keys(V).length) out.push('Score-Karte listet nicht jede Punkteart genau einmal');
+    const reset = () => { for (const k of Object.keys(g.score)) g.score[k] = 0; };
+    const expect = (label, want) => {
+      for (const k of Object.keys(g.score)) {
+        if (g.score[k] !== (want[k] || 0)) out.push('Score ' + label + ': ' + k + ' = ' + g.score[k] + ' statt ' + (want[k] || 0));
+      }
+      reset();
+    };
+    g.enterFloor(5); g.setState('play');
+    BOTA.debug.god(true);
+    for (let i = 0; i < 4; i++) BOTA.debug.killAll();
+    reset();
+    // Coins nach Wert; Herzen und Seed Funding zaehlen nicht
+    PT.credit.collect(p, g); PT.credit5.collect(p, g); PT.heart.collect(p, g);
+    BOTA.ITEMS.seed_funding.onPickup(p, g);
+    expect('Coins', { coins: 6 });
+    // Kills: normaler Gegner ja; Boss-Minion, Boss, Boss-Segmente nein
+    const bug = BOTA.debug.spawn('bug', 300, 300); bug.die(g);
+    expect('Gegner', { kills: 1 });
+    const mini = BOTA.debug.spawn('microservice', 300, 300); mini.state.owner = {}; mini.die(g);
+    expect('Boss-Minion', {});
+    for (const id of ['infinite_loop', 'octopus_merge', 'rogue_swarm', 'nested_loop']) {
+      BOTA.debug.spawnBoss(id);
+      for (let i = 0; i < 6; i++) BOTA.debug.killAll();
+      expect('Boss ' + id + ' als Kill', {});
+    }
+    // Approvals: verschlossene Truhe und Tuer
+    p.approvals = 2;
+    PT.chest_locked.collect(p, g, new BOTA.Pickup('chest_locked', 300, 300));
+    for (const c of g.floor.cells.values()) {
+      const dir = Object.keys(c.room.doors).find((k) => c.room.doors[k].edge.locked && !c.room.doors[k].edge.hidden);
+      if (!dir || c.type !== 'normal' && c.type !== 'start') continue;
+      g.teleport(c.room);
+      for (let i = 0; i < 4; i++) BOTA.debug.killAll();
+      c.room.openDoors();
+      const t = BOTA.C.DOOR_TILES[dir], tc = c.room.tileCenter(t.col, t.row);
+      p.x = tc.x; p.y = tc.y;
+      reset();
+      p.approvals = 1;
+      g.checkDoors();
+      break;
+    }
+    if (p.approvals !== 0) out.push('Score-Test: Tuer wurde nicht geoeffnet');
+    const keys = g.score.keys; reset();
+    if (keys !== 1) out.push('Score Tuer: ' + keys + ' statt 1');
+    // Items: Podest zaehlt einmal, ein getauschtes Aktiv-Item beim Zuruecknehmen nicht mehr
+    p.active = { id: 'compact', charge: 1 };
+    p.x = 300; p.y = 300;
+    const ped = g.spawnPedestal('ctrl_z', 300, 300);
+    ped.touchCooldown = 0; ped.update(1 / 60, g);
+    expect('Item vom Podest', { items: 1 });
+    for (let i = 0; i < 4; i++) { ped.touchCooldown = 0; ped.update(1 / 60, g); }
+    expect('Item-Tausch', {});
+    ped.dead = true;
+    // Raeume und Bosse ueber onRoomClear
+    const normal = [...g.floor.cells.values()].find((c) => c.type === 'normal').room;
+    g.onRoomClear(normal);
+    expect('Raum', { rooms: 1 });
+    normal.encounterBoss = 'monolith';
+    g.onRoomClear(normal);
+    delete normal.encounterBoss;
+    expect('Zwischenboss', { rooms: 1, quests: 1 });
+    g.onRoomClear(g.floor.findType('boss').room);
+    expect('Etagen-Boss', { rooms: 1, bosses: 1 });
+    // Summe
+    Object.assign(g.score, { coins: 3, kills: 2, keys: 1, items: 1, bosses: 1, quests: 1, rooms: 2 });
+    if (g.scoreTotal() !== 3 + 4 + 6 + 25 + 80 + 40 + 8) out.push('scoreTotal ' + g.scoreTotal());
+    return out;
+  }));
+
   // Mehrfach toedlicher Schaden, weil Items wie "Retry with Backoff" den ersten Tod abfangen
   await page.evaluate(() => {
     const g = BOTA.game; BOTA.debug.god(false);
@@ -3760,6 +3840,55 @@ const URL = 'file://' + path.join(ROOT, 'index.html').replace(/\\/g, '/') + '?se
   const dead = await page.evaluate(() => BOTA.game.state === 'dead');
   if (!dead) problems.push('Todesbildschirm nicht erreicht');
   await shot('07-dead');
+  problems.push(...await page.evaluate(() => {
+    const g = BOTA.game;
+    return g.death && g.death.score === g.scoreTotal() && g.death.score > 0 && g.death.cycles === 0 ? [] : ['Tod: Score ' + JSON.stringify(g.death)];
+  }));
+
+  // --- Score-Karte: nur nach der letzten Etage; Weitermachen behaelt alles, R faengt bei null an ---
+  const tap = async (key) => { await page.keyboard.down(key); await page.waitForTimeout(60); await page.keyboard.up(key); await page.waitForTimeout(60); };
+  const descendFrom = (depth) => page.evaluate((depth) => {
+    const g = BOTA.game;
+    g.enterFloor(depth); g.setState('play');
+    BOTA.debug.god(true);
+    g.nextFloor();
+  }, depth);
+  await tap('KeyR');
+  problems.push(...await page.evaluate(() => {
+    const g = BOTA.game;
+    return g.depth === 1 && g.scoreTotal() === 0 && g.cycles === 0 ? [] : ['Neuer Run nach dem Tod: Tiefe ' + g.depth + ', Score ' + g.scoreTotal() + ', Zyklen ' + g.cycles];
+  }));
+  await descendFrom(10);
+  await page.waitForTimeout(900);
+  problems.push(...await page.evaluate(() => {
+    const g = BOTA.game;
+    return g.depth === 11 && g.state !== 'scoreCard' && g.cycles === 0 ? [] : ['Etage 10 -> 11: Tiefe ' + g.depth + ', Zustand ' + g.state];
+  }));
+  await descendFrom(11);
+  await page.evaluate(() => { const g = BOTA.game; g.score.coins = 1234; g.score.kills = 300; g.score.rooms = 90; g.score.keys = 8; g.score.items = 11; g.score.bosses = 11; g.score.quests = 2; });
+  await page.waitForTimeout(720);
+  const card = await page.evaluate(() => { const g = BOTA.game; window.__rng = g.rng.state; window.__total = g.scoreTotal(); return { state: g.state, t: g.stateT, cycles: g.cycles, depth: g.depth }; });
+  if (card.state !== 'scoreCard' || card.cycles !== 1 || card.depth !== 11) problems.push('Score-Karte nach Etage 11: ' + JSON.stringify(card));
+  if (card.t < 0.5) await tap('Enter');   // noch gesperrt: darf nichts ausloesen
+  problems.push(...await page.evaluate(() => (BOTA.game.state === 'scoreCard' ? [] : ['Score-Karte reagiert waehrend der Sperre'])));
+  await page.waitForTimeout(1100);
+  await shot('16-score-card');
+  problems.push(...await page.evaluate(() => (BOTA.game.rng.state === window.__rng ? [] : ['Score-Karte zieht aus game.rng'])));
+  await tap('Enter');
+  problems.push(...await page.evaluate(() => {
+    const g = BOTA.game, out = [];
+    if (g.depth !== 12 || BOTA.floorInfo(12).name !== 'The Backlog II') out.push('Weitermachen: Tiefe ' + g.depth + ', ' + BOTA.floorInfo(12).name);
+    if (g.scoreTotal() !== window.__total || g.cycles !== 1) out.push('Weitermachen verliert Score oder Zyklen: ' + g.scoreTotal() + ' / ' + g.cycles);
+    return out;
+  }));
+  await descendFrom(22);
+  await page.waitForTimeout(1600);
+  problems.push(...await page.evaluate(() => { const g = BOTA.game; return g.state === 'scoreCard' && g.cycles === 2 ? [] : ['Zweite Score-Karte: ' + g.state + ', Zyklen ' + g.cycles]; }));
+  await tap('KeyR');
+  problems.push(...await page.evaluate(() => {
+    const g = BOTA.game;
+    return g.depth === 1 && g.scoreTotal() === 0 && g.cycles === 0 ? [] : ['Neustart von der Karte: Tiefe ' + g.depth + ', Score ' + g.scoreTotal() + ', Zyklen ' + g.cycles];
+  }));
 
   await browser.close();
 

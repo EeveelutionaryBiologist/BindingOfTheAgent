@@ -752,6 +752,7 @@
   on('explosion', () => p('explosion'));
   on('roomClear', () => p('roomClear'));
   on('purchase', () => p('purchase'));
+  on('cycleComplete', () => p('itemGet'));     // Score-Karte am Ende eines Durchgangs
   on('denied', () => p('denied'));
   on('unlock', () => p('unlock'));
   on('secretFound', () => p('secret'));

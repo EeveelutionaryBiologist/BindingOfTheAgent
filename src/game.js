@@ -20,6 +20,24 @@
   const { TILE, COLS, ROWS, ROOM_W, ROOM_H, DOOR_TILES } = B.C;
   const T = B.TILES;
 
+  /**
+   * Punkte je Ereignis fuer den Final Score (game.score zaehlt nur die Ereignisse, game.scoreTotal() rechnet).
+   * rows: Reihenfolge und Beschriftung auf der Score-Karte.
+   *  - coins: Credits aus Pickups, nach Wert (Credit 1, Stapel 5); gekaufte oder geschenkte Credits zaehlen nicht
+   *  - kills: echte Gegner. Bosse zaehlen ueber bosses/quests, Boss-Koerperteile (proxy, ignoreForClear) und
+   *    Minions, die Bosse nachliefern (state.owner), zaehlen gar nicht, sonst liesse sich der Score farmen
+   *  - keys: ausgegebene Approvals (Tuer oder verschlossene Truhe)
+   *  - items: vom Podest genommene Items; ein getauschtes Aktiv-Item zaehlt beim Zuruecknehmen nicht noch einmal
+   *  - bosses: besiegte Etagen-Bosse; quests: Zwischenboss-Begegnungen (halber Wert, halbe HP)
+   *  - rooms: geraeumte Kampfraeume (Raeume ohne Kampf gelten schon beim Betreten als geraeumt und zaehlen nicht)
+   */
+  B.SCORE_VALUES = { coins: 1, kills: 2, keys: 6, items: 25, bosses: 80, quests: 40, rooms: 4 };
+  B.SCORE_ROWS = [
+    ['coins', 'Coins'], ['kills', 'Enemies killed'], ['rooms', 'Rooms cleared'], ['keys', 'Approvals used'],
+    ['items', 'Items taken'], ['bosses', 'Floor bosses'], ['quests', 'Side quests'],
+  ];
+  const freshScore = () => ({ coins: 0, kills: 0, keys: 0, items: 0, bosses: 0, quests: 0, rooms: 0 });
+
   class Game {
     constructor() {
       this.state = 'title';
@@ -45,6 +63,8 @@
       this.bossSpawnOpts = null; // Spawn-Optionen waehrend eines Boss-Konstruktors (siehe spawnBoss)
       this.death = null;
       this.runStats = { kills: 0, rooms: 0, time: 0 };
+      this.score = freshScore(); // Ereignis-Zaehler fuer den Final Score (siehe B.SCORE_VALUES)
+      this.cycles = 0;           // abgeschlossene Durchgaenge durch alle Etagen (siehe showScoreCard)
       this.lockDeniedT = 0;
       this.fps = 60;
       this.titleTagline = B.TEXT.TAGLINES ? B.TEXT.TAGLINES[Math.floor(Math.random() * B.TEXT.TAGLINES.length)] : '';
@@ -61,6 +81,8 @@
       this.followers = [];
       this.seenItems = new Set();
       this.runStats = { kills: 0, rooms: 0, time: 0 };
+      this.score = freshScore();
+      this.cycles = 0;
       this.death = null;
       this.bannerState = null;
       this.hudGlitch = null;
@@ -100,6 +122,33 @@
       this.stateT = t || 0;
     }
 
+    /** Score-Ereignis zaehlen (kind: Schluessel aus B.SCORE_VALUES); unbekannte Arten werden ignoriert */
+    addScore(kind, n) {
+      if (B.SCORE_VALUES[kind] !== undefined) this.score[kind] += n === undefined ? 1 : n;
+    }
+
+    /** Aktueller Punktestand: Summe aus Ereignis-Zaehlern mal Punktwert */
+    scoreTotal() {
+      let sum = 0;
+      for (const k of Object.keys(B.SCORE_VALUES)) sum += (this.score[k] || 0) * B.SCORE_VALUES[k];
+      return sum;
+    }
+
+    /** Ist diese Etage die letzte eines Durchgangs (The Context Limit, dann wieder The Backlog)? */
+    isCycleEnd() {
+      return this.depth > 0 && this.depth % B.FLOOR_THEMES.length === 0;
+    }
+
+    /**
+     * Ende eines Durchgangs: Score-Karte statt direkt die naechste Etage. Von dort geht es weiter (Enter: Etage + 1,
+     * alles bleibt erhalten) oder von vorn (R). Zieht nichts aus game.rng, Seeds bleiben also unveraendert.
+     */
+    showScoreCard() {
+      this.cycles++;
+      this.setState('scoreCard', 0);
+      B.bus.emit('cycleComplete', { game: this, cycles: this.cycles, score: this.scoreTotal() });
+    }
+
     onPlayerDeath(killer) {
       this.death = {
         killer,
@@ -108,6 +157,8 @@
         kills: this.runStats.kills,
         items: this.player.items.length,
         time: this.runStats.time,
+        score: this.scoreTotal(),
+        cycles: this.cycles,
       };
       B.storage.data.deaths++;
       B.storage.save();
@@ -293,12 +344,18 @@
 
     onEnemyKilled(e) {
       this.runStats.kills++;
+      // Fuer den Score nur echte Gegner (siehe B.SCORE_VALUES); Bosse zaehlen in onRoomClear
+      if (!B.BOSSES[e.id] && !e.proxy && !e.ignoreForClear && !(e.state && e.state.owner)) this.addScore('kills');
     }
 
     /** Wird aufgerufen, sobald der letzte Gegner eines Kampfraums faellt */
     onRoomClear(room) {
       room.cleared = true;
       room.openDoors();
+      // Hier statt beim Boss-Tod: So zaehlt der Rogue Agent Swarm (vier Boss-Entities) genau einmal
+      this.addScore('rooms');
+      if (room.type === 'boss') this.addScore('bosses');
+      else if (room.encounterBoss) this.addScore('quests');
       this.player.chargeActive(1);
       this.player.fireHook('onRoomClear', room, this);
       B.bus.emit('roomClear', { game: this, room });
@@ -656,7 +713,19 @@
 
         case 'floorTransition':
           this.stateT -= dt;
-          if (this.stateT <= 0) this.enterFloor(this.depth + 1);
+          if (this.stateT <= 0) {
+            if (this.isCycleEnd()) this.showScoreCard();
+            else this.enterFloor(this.depth + 1);
+          }
+          break;
+
+        case 'scoreCard':
+          // Kurze Sperre wie auf dem Todesbildschirm, damit Tastendruecke aus dem Kampf nichts ausloesen
+          this.stateT += dt;
+          if (this.stateT > 0.8) {
+            if (inp.pressed('Enter') || inp.pressed('NumpadEnter')) this.enterFloor(this.depth + 1);
+            else if (inp.pressed('KeyR')) this.newRun(B.randomSeed());
+          }
           break;
 
         case 'pause':
@@ -766,6 +835,7 @@
           if (B.M.dist(p.x, p.y, tc.x, tc.y) < TILE / 2 + p.r + 6) {
             if (p.approvals > 0) {
               p.approvals--;
+              this.addScore('keys');
               door.edge.locked = false;
               room.bgDirty = true;
               door.target.room.bgDirty = true;
