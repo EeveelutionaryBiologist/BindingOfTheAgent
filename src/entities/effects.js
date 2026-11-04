@@ -731,6 +731,15 @@
     }
   });
 
+  // Memory Hog: Bombe gibt Speicher frei, Stop-the-World beginnt, Kacheln klappen um
+  on('bossFree', (e) => {
+    FX.text(e.game, e.x, e.y - 30, 'free()', '#d9ffc9');
+    FX.sparkles(e.game, e.x, e.y, 10, 60, e.color || '#7fe3ff');
+  });
+  on('bossGc', (e) => {
+    if (e.kind === 'start') FX.ring(e.game, e.x, e.y, 120, '#9be07a', 0.5, 6);
+  });
+
   // Spaete Bosse gehen ab: Megalith stuerzt ab ("Segmentation fault"), Shareholder schwebt am Goldschirm davon
   on('bossExit', (e) => {
     const g = e.game;
@@ -739,6 +748,13 @@
       FX.later(g, 0.9, (gg) => {
         FX.text(gg, e.x, e.y - 40, 'SEGMENTATION FAULT', '#ff7a6a', { life: 2.2, vy: -20 });
         FX.text(gg, e.x, e.y - 12, '(core dumped)', '#c8ccd2', { life: 2.2, vy: -20, scale: 1 });
+      });
+    } else if (e.kind === 'oom') {
+      FX.burst(g, e.x, e.y, e.color || '#7fe3ff', 26, 300, { vary: true, lifeMin: 0.3, lifeMax: 0.7 });
+      FX.debris(g, e.x, e.y, 12, ['#3f5f88', '#54779f', '#d6f6ff'], 8);
+      FX.later(g, 0.9, (gg) => {
+        FX.text(gg, e.x, e.y - 40, 'KILLED', '#ff7a6a', { life: 2.2, vy: -20 });
+        FX.text(gg, e.x, e.y - 12, '(out of memory)', '#c8ccd2', { life: 2.2, vy: -20, scale: 1 });
       });
     } else if (e.kind === 'parachute') {
       FX.later(g, 0.8, (gg) => add(gg, new Parachute(e.x, e.y + 20)));

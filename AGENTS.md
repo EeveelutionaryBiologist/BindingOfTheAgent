@@ -185,6 +185,15 @@ Live state is under `BOTA.game` (`.player`, `.room`, `.floor`, `.depth`, `.state
   only hurt on landing, real credits stay within `coinCap` and expire, "Hostile takeover" comes at 40 %, the
   buyback freezes all shots and sends them to him, a missed quarter stuns (and the damage factor goes away again),
   a beaten one rings only after its tell and speeds him up; all their shots stay at 165–260 px/s and each dies once;
+- **The Memory Hog** only rolls on floors 4–9, more often on Dependency Hell. In every boss layout and both phases each
+  reservation keeps the free floor connected (no more parts than the room has by itself), stays within `cap`, leaves
+  a free tile within `escape` steps of the player and only takes free floor. Zeros are harmless, ones cost half a
+  heart (flyers too, never beside the tile) and expire; the first block lands on the player and malloc gets greedier;
+  Page Fault's aim tracks, locks, and only then does he charge, and his trail never splits the room; the Quill Dump
+  ring has exactly two gaps and waits for its telegraph; GC comes at 40 % or on "Out of memory", sweeps everything,
+  opens the damage window and resets afterwards; a bomb frees whole blocks only; phase 2 comes once, its fragments
+  never touch edge to edge and Page Fault runs twice; he dies once, the overlay disappears, and shots stay at
+  165–260 px/s;
 - the **Octopus Merge** is only rolled on Forgotten Branches before floor 8 (at its weight share there, and anywhere from
   floor 8, on a first visit); it has 8 arms of
   5 segments that pass 60 % of their damage to the knot and stay inside the room; every sweep, slam, tip shot and
@@ -230,7 +239,7 @@ core/namespace → core/rng → core/math → core/input → core/sprites → co
 data/palette → data/text → data/sprites-core → data/sprites-enemies → data/sprites-items
 data/layouts → data/enemies → data/bosses → data/items
 world/room → world/dungeon
-entities/entity → projectile → player → enemy → boss → bosses-late → pickup → familiar → effects
+entities/entity → projectile → player → enemy → boss → bosses-late → boss-memory-hog → pickup → familiar → effects
 render/renderer → render/hud → render/screens
 game → main
 ```
@@ -498,6 +507,7 @@ The previous floor's boss is excluded, and bosses already met count `weight · t
   - `player_{down,up,left,right}` (4 walk frames), `player_hurt`, `player_itemget`, `player_dead`
   - `tile_{rock(3 frames),block,pit,spikes}`, `tile_cactus` and `tile_sandstone` (3 frames each), `tile_border`
     (3 frames: barrier, fence across, fence down), `hud_*`, `map_{boss,treasure,shop,secret}`, `pipe` (2 frames, generated),
+    `tile_mem_zero` and `tile_mem_one` (2 frames; the Memory Hog's reserved floor, a drawn overlay, not real tiles),
     `prop_{crate,bush,package,carton}` (frame 1 = damaged)
   - `item_<id>`, `pickup_<type>`, `pedestal`, `trapdoor`, `bomb`, `familiar_duck`, `orbital_test`
   - `enemy_<id>`, `boss_<id>`
@@ -523,7 +533,8 @@ Payloads usually include `game, x, y` and often `color`.
 | `bossSpawn`, `bossIntro`, `bossPhase`, `bossStomp`, `bossBounce`, `bossBeam`, `bossMerge` (`left`) | game, boss | audio (boss music, `merge`), effects ("Merged!" pop) |
 | `bossSearch`, `bossReplace`, `bossAbsorb` | Megalith (Ctrl+F starts, a match is replaced, a module merges back in) | audio (`search`, `replace`, `merge`), effects (yellow flash, "+1 import") |
 | `bossMoney` (`kind`: coin/expire/buyback/beat/missed) | Shareholder | audio (`coinDrop`, `cash`, `denied`), effects (gold sparkles, "vested elsewhere") |
-| `bossExit` (`kind`: segfault/parachute) | Megalith, Shareholder (`onDeath`) | effects ("SEGMENTATION FAULT", golden parachute) |
+| `bossAlloc`, `bossReserve`, `bossFree`, `bossGc` (`kind`: warn/start/end) | Memory Hog (malloc starts, tiles flip to ones, a bomb frees memory, Stop-the-World) | audio (`malloc`, `reserve`, `freeMem`, `denied`, `gcSweep`), effects ("free()", green ring) |
+| `bossExit` (`kind`: segfault/parachute/oom) | Megalith, Shareholder, Memory Hog (`onDeath`) | effects ("SEGMENTATION FAULT", golden parachute, "KILLED (out of memory)") |
 | `playerHurt`, `playerDeath` | player, game | audio, effects, HUD |
 | `pickup` (`type`), `itemGet` (`id, def`), `purchase`, `chestOpen` | pickup, player | audio, effects, HUD |
 | `denied` (`reason`: credits/locked/bomb/charge) | various | audio, effects |
@@ -540,7 +551,7 @@ Rule: audio and effects **only listen**. Game logic never calls them directly, e
 are game state.
 
 ### 3.12 Audio (`core/audio.js`) and effects (`entities/effects.js`)
-- **Audio:** 79 synthesized SFX in total, plus a looping rain bed (two filtered noise layers) that `music.start` switches
+- **Audio:** 82 synthesized SFX in total, plus a looping rain bed (two filtered noise layers) that `music.start` switches
   on for themes with `ambient: 'rain'` and `music.stop` switches off. Every sound has a name; `audio.names()` lists them.
   - Bus routing: voices → sfx/music bus → master → compressor.
   - Per-name rate limits (`RATE`) and a 40-voice cap keep it from getting noisy.
@@ -787,7 +798,7 @@ away from home weighs at most 3 (`BOSS_LEAK_WEIGHT` in `bosses.js`): the Octopus
 families (screenshots 2026-11-03); cacti stay a Sandbox Borders floor feature.
 
 **Bosses** (base HP): `monolith` 360 (floors 1–6), `stakeholder` 250 (floors 1–6), `friday_deploy` 240 (floor 4+),
-`infinite_loop` 300 (floors 2–7), `megalith` 460 (floor 7+, replaces the Monolith), `shareholder` 380 (floor 7+,
+`infinite_loop` 300 (floors 2–7), `memory_hog` 300 (floors 4–9, ×2 on Dependency Hell), `megalith` 460 (floor 7+, replaces the Monolith), `shareholder` 380 (floor 7+,
 replaces the Stakeholder), `nested_loop` 450 (floor 8+, replaces the Infinite Loop), `rogue_swarm` 4 × 80, `reviewer`
 340 (floor 4+), `octopus_merge` 300 (330 until 2026-11-03; Forgotten Branches only, weight 12: about 52 % on
 floor 3, about 41 % on floors 14, 25, …). Each replacement has its predecessor's weight and a `replaces` field, so
@@ -823,6 +834,21 @@ a floor never has the predecessor as a side quest (the side quests keep the reti
     vanishes on arrival via its `range`). **Quarterly earnings** run all fight: every 12 s, between attacks, he is
     stunned for 1.5 s with `damageTakenMult` 1.25 if the player took ≥ 8 % of his max HP that quarter, otherwise he
     fires a telegraphed 10-shot ring and gets 8 % faster (at most 3 times). The HUD line shows the quarter clock.
+- **The Memory Hog** (2026-11-04) lives in `entities/boss-memory-hog.js`; the header there lists every attack, all
+  numbers are in `HOG`. A squat, front-facing steel-blue hog whose quills are `1`-bits. **Keep him a hog:** no upright
+  stance, no rolling or spin attack; a blue hedgehog must not drift toward a famous mascot (§1). Floor 3 stays the
+  Octopus Merge's. *malloc* reserves 3×3 blocks (2, then 3 per cast since the last GC; the first on the player): 1 s of
+  faint zeros, then ones for 8 s, half a heart. *Page Fault* tracks, locks, charges at 340 px/s and leaves a trail of
+  reserved tiles. *Quill Dump* is a ring of 14 bits with two 3-slot gaps. malloc alternates with the other two, so the
+  floor reliably fills. **Stop-the-World** comes at 40 % of the floor, or when a malloc finds no room: 1.1 s warning,
+  a sweep frees everything in 0.7 s, and he stands still for 2.6 s with no contact damage and `damageTakenMult` 1.5.
+  At 50 % ("Heap fragmentation") the room is swept and malloc reserves 16–20 single tiles, never edge to edge. The HUD
+  line shows the heap share. Reserved memory is the class `ReservedMemory`, an overlay in `room.pickups` like
+  `LostZoneMark`: real tiles never change, and it keeps running while he is frozen. It hurts flyers on purpose, or a
+  flight item would switch off his main attack, and uses the same foot point as layout spikes. A bomb frees every group
+  it reaches, always the whole group. `canTake` guards every reservation, trail tiles included: **all new ways of
+  reserving must go through it**, or the room can split (random 3×3 blocks did in 113 of 400 tries). He isn't a side
+  quest.
 - **Nested Infinite Loop:** the boss entity is an invisible, intangible controller at the centre that only holds the
   shared HP pool (so the HUD shows one bar). The three rings are `nested_loop_part` enemies with `proxy` to it,
   placed every tick in `afterMove`. Only the outermost living ring is tangible, fires and hurts on contact; the

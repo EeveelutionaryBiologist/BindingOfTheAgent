@@ -139,6 +139,19 @@
     desc: 'Owns 0.4 % of you. Would like to discuss the quarter. Monocle included.',
   };
 
+  // The Memory Hog (Verhalten in entities/boss-memory-hog.js): mittlerer Boss, reserviert den Boden als 1-Stacheln.
+  // Ab Etage 4 statt 3, weil Etage 3 der Octopus Merge gehoert; Heimat Dependency Hell (dort lebt auch der Memory
+  // Leak, Faktor 2). Ab Etage 10 Ruhestand. HP 300: Flaechenverweigerung plus Kugeln wird schnell hart, dafuer
+  // ist er im GC-Fenster ein grosses, wehrloses Ziel.
+  B.BOSSES.memory_hog = {
+    name: 'The Memory Hog',
+    subtitle: "It's not a leak if I meant to keep it.",
+    hp: 300, r: 50, speed: 60, contactDamage: 2,
+    behavior: 'memory_hog', sprite: 'boss_memory_hog', color: '#5f83ad',
+    minFloor: 4, maxFloor: 9, weight: 3, themes: { dephell: 2 },
+    desc: 'A huge steel-blue hog bristling with 1-bits. Everything is reserved. Nothing is returned.',
+  };
+
   /**
    * Waehlt einen Boss fuer die Etage (deterministisch ueber den Etagen-RNG).
    * Auf Etage 1 nur die beiden "zugaenglicheren" Bosse (Monolith 60 %, Stakeholder 40 %);
@@ -146,7 +159,8 @@
    * (seit 2026-11-02; vorher ab 2 bzw. 3 — so hat die Octopus Merge auf Etage 3 mehr Platz)
    * (Gewichte 3, Stakeholder 2 — er ist etwas seltener, weil man ihn auf Etage 1 schon oft gesehen hat).
    * Etage 2: je 27 %, Stakeholder 18 %; Etage 3 (Forgotten Branches): Octopus Merge 52 %, sonst je 13 %, Stakeholder 9 %;
-   * ab Etage 4: je 18 %, Stakeholder 12 % (Etage 14, 25, ...: Octopus Merge 41 %, sonst je 10 %, Stakeholder 7 %).
+   * Etage 4 (Dependency Hell): Memory Hog 26 %, sonst je 13 %, Stakeholder 9 %; Etage 5–7: je 15 %, Stakeholder 10 %;
+   * ab Etage 10 ohne ihn je 18 %, Stakeholder 12 % (Etage 14, 25, ...: Octopus Merge 41 %, sonst je 10 %, Stakeholder 7 %).
    */
   /**
    * Boss-Abwechslung ueber einen Run (game.assignFloorBoss ruft das beim Betreten jeder Etage auf):

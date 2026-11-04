@@ -380,6 +380,25 @@
   Object.assign(RATE, { legacyHit: 0.04, legacyDeath: 0.03, dotMatrix: 0.3 });
   SPAMMY.legacyHit = true;
 
+  // The Memory Hog (entities/boss-memory-hog.js): Speicher belegen, Kacheln klappen um, Speicher freigeben
+  Object.assign(SOUNDS, {
+    // malloc(): schnelle aufsteigende Bit-Blips, wie ein Speichertest beim Booten
+    malloc() {
+      for (let i = 0; i < 4; i++) voice({ f: 520 * Math.pow(1.26, i), dur: 0.05, type: 'square', vol: 0.04, delay: i * 0.05 });
+    },
+    // Kacheln klappen zu 1-Stacheln um: trockenes Klacken mit hartem Blip
+    reserve() {
+      noise({ dur: 0.04, vol: 0.07, filter: 'bandpass', f: 1800, q: 2 });
+      voice({ f: 180, f2: 90, dur: 0.09, type: 'square', vol: 0.05 });
+    },
+    // free(): Blip nach unten, luftig
+    freeMem() {
+      voice({ f: 1400, f2: 500, dur: 0.14, type: 'triangle', vol: 0.06 });
+      noise({ dur: 0.1, vol: 0.04, filter: 'highpass', f: 3000 });
+    },
+  });
+  Object.assign(RATE, { malloc: 0.2, reserve: 0.12, freeMem: 0.1 });
+
   // Spaete Bosse (entities/bosses-late.js): Megalith (Suche/Ersetzen) und Shareholder (Geld)
   Object.assign(SOUNDS, {
     // Ctrl+F: zwei schnelle Tastenanschlaege, dann ein heller "Treffer gefunden"-Ton
@@ -777,6 +796,13 @@
   on('enemyOverflow', () => p('overflowBurst'));   // Overflow Buffer platzt
   on('ambientWhisper', () => p('whisper'));    // The Context Limit: Satzfetzen huscht vorbei
   on('ambientThunder', () => p('thunder'));    // ... und fernes Wetterleuchten
+  on('bossAlloc', () => p('malloc'));         // Memory Hog: malloc()
+  on('bossReserve', () => p('reserve'));      // Memory Hog: Kacheln klappen um
+  on('bossFree', () => p('freeMem'));         // Memory Hog: Bombe gibt Speicher frei
+  on('bossGc', (e) => {                       // Memory Hog: Warnung, Stop-the-World
+    if (e.kind === 'warn') p('denied');
+    else if (e.kind === 'start') p('gcSweep');
+  });
   on('bossSearch', () => p('search'));         // Megalith: Ctrl+F
   on('bossReplace', () => p('replace'));       // Megalith: Suchtreffer ersetzt
   on('bossAbsorb', () => p('merge'));          // Megalith: Modul wieder eingemergt

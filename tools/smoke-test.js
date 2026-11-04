@@ -78,6 +78,13 @@
  *     echte Credits hoechstens coinCap und sie verfallen; "Hostile takeover" bei 40 %; Rueckkauf friert ein und
  *     schickt alle Kugeln zu ihm; Quartal verfehlt -> betaeubt (Schadensfaktor, danach weg), geschlagen -> Ring erst
  *     nach Telegraph und schneller; alle Kugeln 165–260 px/s; je genau ein Boss-Tod
+ *   - The Memory Hog: nur auf Etage 4–9, auf Dependency Hell haeufiger; in jedem Boss-Layout und beiden Phasen bleibt
+ *     bei jeder Reservierung der freie Boden zusammenhaengend, die Obergrenze gewahrt, ein Fluchtweg frei, und es wird
+ *     nur freier Boden belegt; Nullen tun nichts, Einsen ein halbes Herz (auch Fliegern, nicht daneben), Ablauf;
+ *     erster Block auf dem Spieler, malloc wird gieriger; Page Fault zielt, friert ein, rennt erst dann, Spur zerteilt
+ *     den Raum nie; Ring mit zwei Luecken erst nach dem Telegraph; GC ab 40 % oder "Out of memory", fegt alles frei,
+ *     Schadensfenster, danach zurueckgestellt; Bombe gibt ganze Bloecke frei; Phase 2 einmal, Fragmente nie Kante an
+ *     Kante, zwei Sprints; ein Boss-Tod, Overlay verschwindet; alle Kugeln 165–260 px/s
  *   - Dust Daemon / Dry Run: in Tiefe 1–7 nur auf Sandbox Borders bzw. The Training Data; Dust Daemon lenkt
  *     Spielerschuesse im Drehsinn ab (nicht ausserhalb, nicht erschoepft/eingefroren, keine Gegnerschuesse), gezielte
  *     Schuesse treffen den Kern immer, Wurf nach Telegraph mit 4 Brocken (einer auf den Spieler), bleibt im Raum;
@@ -1899,6 +1906,280 @@ const URL = 'file://' + path.join(ROOT, 'index.html').replace(/\\/g, '/') + '?se
     return out;
   });
   problems.push(...lateProblems);
+
+  // --- The Memory Hog (Etage 4–9): reservierter Boden, Page Fault, Quill Dump, Stop-the-World ---
+  const hogProblems = await page.evaluate(() => {
+    const out = [];
+    const g = BOTA.game, AI = BOTA.AI, DT = 1 / 60, I = BOTA.C.INNER, BH = BOTA.BossHelpers, K = BH.hog, HOG = K.HOG, T = BOTA.TILES;
+    const { COLS, ROWS } = BOTA.C;
+    // 1) Nur auf Etage 4–9, auf Dependency Hell haeufiger
+    const hits = {};
+    for (let d = 1; d <= 22; d++) {
+      hits[d] = 0;
+      for (let i = 0; i < 300; i++) if (BOTA.rollBossVaried(new BOTA.RNG(BOTA.hashString('hog' + d + ':' + i)), d, []) === 'memory_hog') hits[d]++;
+      if ((d < 4 || d > 9) && hits[d]) out.push('Memory Hog auf Etage ' + d);
+      if (d >= 4 && d <= 9 && !hits[d]) out.push('Memory Hog fehlt auf Etage ' + d);
+    }
+    if (hits[4] <= hits[5]) out.push('Memory Hog auf Dependency Hell nicht haeufiger (' + hits[4] + ' / ' + hits[5] + ')');
+
+    const speeds = [];
+    let shots = [];
+    const origShoot = AI.shoot;
+    AI.shoot = function (game, e, angle, speed, o) {
+      if (e && e.id === 'memory_hog') { speeds.push(speed); shots.push({ angle, speed }); }
+      return origShoot.apply(this, arguments);
+    };
+    const ev = [];
+    const offs = ['bossPhase', 'enemyDeath', 'bossFree', 'bossGc'].map((n) => BOTA.bus.on(n, (x) => ev.push(n + (n === 'bossGc' ? ':' + x.kind : x.boss === true ? ':boss' : ''))));
+    const p = g.player;
+    const clear = () => { for (let i = 0; i < 4; i++) BOTA.debug.killAll(); g.room.projectiles.length = 0; g.room.pickups = g.room.pickups.filter((x) => !x.reservedMemory); };
+    const fresh = () => { p.invuln = 0; p.guardrails = 0; p.health = p.maxHealth; };
+    const d0 = g.depth;
+    const god0 = p.god, fly0 = p.flying;
+    const spawn = (x, y) => { const H = BOTA.debug.spawnBoss('memory_hog', x, y); H.spawnDelay = 0; return H; };
+    /** Hog und Overlay takten (Raum und Kugeln laufen dabei nicht) */
+    const step = (H, n) => { const m = K.memOf(H, g); for (let i = 0; i < n; i++) { if (!H.dead) H.update(DT, g); m.update(DT, g); } };
+    const tileXY = (c, r) => g.room.tileCenter(c, r);
+    const onFoot = (c, r) => { const q = tileXY(c, r); p.x = q.x; p.y = q.y - p.r * 0.5; };
+    try {
+      g.enterFloor(4); g.setState('play');
+      BOTA.debug.gotoRoom('boss'); clear();
+
+      // 2) Fairness in jedem Boss-Layout, beide Phasen: bei JEDER Reservierung nachgerechnet
+      let reservations = 0, gcs = 0;
+      p.god = true;
+      const special = BOTA.LAYOUTS.filter((l) => l.tags.includes('special'));
+      for (const layout of special) {
+        for (const phase of [1, 2]) {
+          for (let run = 0; run < 2 && !out.length; run++) {
+            clear();
+            g.room.stampLayout(layout);
+            g.rng = new BOTA.RNG(BOTA.hashString('hogfuzz:' + layout.id + phase + run));
+            const H = spawn(480, 250), m = K.memOf(H, g);
+            if (phase === 2) H.hp = H.maxHp * 0.49;
+            const floorTiles = [];
+            for (let r = 1; r < ROWS - 1; r++) for (let c = 1; c < COLS - 1; c++) if (g.room.tileAt(c, r) === T.FLOOR) floorTiles.push([c, r]);
+            const res0 = m.reserve;
+            m.reserve = function (tiles, tell, life) {
+              const grp = res0.call(this, tiles, tell, life);
+              reservations++;
+              const taken = m.taken(), f = K.footTile(g.room, p);
+              if (taken.size > m.floor * HOG.cap) out.push('Hog (' + layout.id + '): ' + taken.size + ' von ' + m.floor + ' Kacheln reserviert');
+              if (K.components(g.room, taken) > m.parts) out.push('Hog (' + layout.id + '): freier Boden zerfaellt');
+              if (K.stepsToFree(g.room, taken, f.c, f.r) > HOG.escape) out.push('Hog (' + layout.id + '): kein Fluchtweg');
+              if (tiles.some(([c, r]) => g.room.tileAt(c, r) !== T.FLOOR)) out.push('Hog (' + layout.id + '): reserviert Hindernis');
+              if (tell < 0.5 || !(life > 0)) out.push('Hog: Vorwarnung ' + tell + ', Dauer ' + life);
+              return grp;
+            };
+            ev.length = 0;
+            for (let t = 0; t < 45 * 60 && !out.length; t++) {
+              if (t % 40 === 0) { const q = g.rng.pick(floorTiles); onFoot(q[0], q[1]); }
+              step(H, 1);
+            }
+            gcs += ev.filter((x) => x === 'bossGc:start').length;
+            if (!ev.includes('bossGc:start')) out.push('Hog (' + layout.id + ', Phase ' + phase + '): 45 s ohne GC');
+            clear();
+          }
+        }
+      }
+      if (!reservations) out.push('Hog: nichts reserviert');
+      p.god = false;
+      g.enterFloor(4); g.setState('play');
+      BOTA.debug.gotoRoom('boss'); clear();
+      g.room.stampLayout(BOTA.LAYOUTS.find((l) => l.id === 'empty'));
+
+      // 3) Kachel-Zustaende: Nullen tun nichts, Einsen ein halbes Herz, auch im Flug; nur auf der Kachel; Ablauf
+      let H = spawn(760, 150), S = H.state, m = K.memOf(H, g);
+      S.mode = 'phase'; S.t = 1e9;   // Hog haelt still
+      onFoot(4, 4); fresh();
+      m.reserve([[4, 4]], 0.5, 1);
+      step(H, 28);
+      if (p.health !== p.maxHealth) out.push('Hog: Nullen verletzen');
+      step(H, 4);
+      if (p.health !== p.maxHealth - HOG.damage) out.push('Hog: Einser-Kachel trifft nicht (' + (p.maxHealth - p.health) + ')');
+      if (p.killedBy) out.push('Hog: Spieler tot im Test');
+      fresh(); p.flying = true; p.invuln = 0;
+      step(H, 1);
+      if (p.health !== p.maxHealth - HOG.damage) out.push('Hog: Einser-Kachel trifft Flieger nicht');
+      p.flying = fly0; fresh();
+      onFoot(5, 4); p.invuln = 0;
+      step(H, 1);
+      if (p.health !== p.maxHealth) out.push('Hog: trifft neben der Kachel');
+      step(H, 60);
+      if (m.taken().size) out.push('Hog: Kachel laeuft nicht ab');
+      step(H, Math.ceil(HOG.fade * 60) + 2);
+      if (m.cells.size) out.push('Hog: Kachel bleibt nach dem Ausblenden');
+      onFoot(4, 4); fresh();
+      m.reserve([[4, 4]], 0.01, 0.1); step(H, 2);
+      m.release(m.cells.get(K.keyOf(4, 4))); fresh();
+      step(H, 2);
+      if (p.health !== p.maxHealth) out.push('Hog: freigegebene Kachel trifft');
+      clear();
+
+      // 4) malloc: erster Block auf dem Spieler, Telegraph, wird gieriger (2, dann 3 Bloecke)
+      H = spawn(760, 150); S = H.state; m = K.memOf(H, g);
+      onFoot(4, 4); fresh();
+      S.last = null; S.mode = 'walk'; S.t = 0;
+      let n = 0;
+      while (!m.taken().size && n++ < 120) step(H, 1);
+      const f0 = K.footTile(g.room, p);
+      const c0 = m.cells.get(K.keyOf(f0.c, f0.r));
+      if (!c0) out.push('Hog: erster Block nicht auf dem Spieler');
+      else if (c0.dur < HOG.tell[0] - 0.01) out.push('Hog: malloc-Vorwarnung ' + c0.dur);
+      if (m.taken().size !== 9) out.push('Hog: erster Block mit ' + m.taken().size + ' Kacheln');
+      step(H, 30);
+      // Bloecke duerfen sich ueberlappen, muessen aber je minNew neue Kacheln bringen
+      const after1 = m.taken().size;
+      if (after1 < 9 + HOG.minNew || after1 > 18) out.push('Hog: malloc 1 reserviert ' + after1);
+      S.last = null; S.mode = 'walk'; S.t = 0;
+      step(H, 90);
+      const more = m.taken().size - after1;
+      if (more < 2 * HOG.minNew + 1 || more > 27) out.push('Hog: malloc 2 reserviert ' + more + ' dazu');
+      clear();
+
+      // 5) Page Fault: Ziellinie folgt, friert ein; rennt erst nach dem Telegraph; Spur zerteilt den Raum nicht
+      H = spawn(130, 288); S = H.state; m = K.memOf(H, g);
+      H.x = 130; H.y = 288;   // init rueckt ihn vom Spieler weg, der Test braucht genau diese Reihe
+      p.god = true;
+      p.x = 860; p.y = 150;
+      S.faults = 1; K.hogAim(H, g);
+      const aim0 = S.aim;
+      step(H, 10);
+      p.x = 860; p.y = 288;
+      step(H, 1);
+      if (S.aim === aim0) out.push('Hog: Ziellinie folgt nicht');
+      n = 0;
+      while (S.mode === 'aim' && n++ < 120) { if (S.t <= HOG.faultLock) { p.y = 500; } if (H.vx || H.vy) out.push('Hog: bewegt sich beim Zielen'); step(H, 1); }
+      if ((n + 11) / 60 < HOG.faultTell[0] - 0.03) out.push('Hog: Page Fault nach ' + ((n + 11) / 60).toFixed(2) + ' s');
+      if (Math.abs(S.aim) > 0.02) out.push('Hog: Ziel friert nicht ein (' + S.aim.toFixed(3) + ')');
+      p.x = 200; p.y = 500;
+      n = 0;
+      while (S.mode === 'fault' && n++ < 300) step(H, 1);
+      if (S.mode !== 'tired') out.push('Hog: Sprint endet nicht (' + S.mode + ')');
+      if (H.x < 780) out.push('Hog: Sprint endet bei x = ' + H.x.toFixed(0));
+      const trail = m.taken();
+      if (trail.size < 8) out.push('Hog: Spur nur ' + trail.size + ' Kacheln');
+      if (K.components(g.room, trail) > m.parts) out.push('Hog: Spur zerteilt den Raum');
+      if (trail.size >= COLS - 2) out.push('Hog: Spur ohne Luecke ueber die ganze Breite');
+      p.god = false;
+      clear();
+
+      // 6) Quill Dump: nach dem Telegraph ein Ring mit zwei Luecken
+      H = spawn(480, 288); S = H.state; m = K.memOf(H, g);
+      p.x = 150; p.y = 150; shots = [];
+      S.mode = 'dump'; S.dur = S.t = HOG.dumpTell[0]; S.rings = [K.ringAngles(g.rng)];
+      step(H, Math.floor(HOG.dumpTell[0] * 60) - 2);
+      if (shots.length) out.push('Hog: Ring vor dem Telegraph');
+      step(H, 4);
+      if (shots.length !== HOG.quills - 2 * HOG.gap) out.push('Hog: Ring mit ' + shots.length + ' Kugeln');
+      const as = shots.map((x) => ((x.angle % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2)).sort((a, b) => a - b);
+      const slot = (Math.PI * 2) / HOG.quills;
+      let holes = 0;
+      for (let i = 0; i < as.length; i++) {
+        const d = (i + 1 < as.length ? as[i + 1] : as[0] + Math.PI * 2) - as[i];
+        if (d > slot * 1.5) { holes++; if (Math.abs(d - slot * (HOG.gap + 1)) > 0.01) out.push('Hog: Luecke ' + (d / slot).toFixed(1) + ' Plaetze'); }
+      }
+      if (holes !== 2) out.push('Hog: ' + holes + ' Luecken im Ring');
+      clear();
+
+      // 7) GC: ab share warnen, dann fegen, wehrlos, danach alles zurueck
+      H = spawn(480, 288); S = H.state; m = K.memOf(H, g);
+      p.x = 120; p.y = 120; fresh(); ev.length = 0;
+      const fill = [];
+      for (let r = 1; r <= 7 && fill.length < 37; r++) for (let c = 7; c <= 13 && fill.length < 37; c++) fill.push([c, r]);
+      m.reserve(fill, 0.5, 30);
+      K.hogIdle(H, g);
+      if (S.mode !== 'gcWarn') out.push('Hog: kein GC bei ' + (m.share() * 100).toFixed(0) + ' %');
+      if (H.contactDamage !== 2 || H.damageTakenMult > 1) out.push('Hog: schon bei der Warnung wehrlos');
+      n = 0;
+      while (S.mode === 'gcWarn' && n++ < 200) step(H, 1);
+      if (n / 60 < 1) out.push('Hog: GC-Warnung nur ' + (n / 60).toFixed(2) + ' s');
+      if (S.mode !== 'gc' || H.contactDamage !== 0 || H.damageTakenMult !== HOG.gcMult) out.push('Hog: GC ohne Schadensfenster');
+      const bt = H.behavior.barText(H);
+      if (!bt || !/GARBAGE/.test(bt.text)) out.push('Hog: HUD-Zeile im GC ' + (bt && bt.text));
+      const hp0 = H.hp;
+      H.hurt(10, g, {});
+      if (Math.abs(hp0 - H.hp - 10 * HOG.gcMult) > 0.01) out.push('Hog: GC-Schaden ' + (hp0 - H.hp));
+      step(H, Math.ceil(HOG.gcSweep * 60) + 3);
+      if (m.taken().size) out.push('Hog: GC laesst ' + m.taken().size + ' Kacheln liegen');
+      n = 0;
+      while (S.mode === 'gc' && n++ < 300) step(H, 1);
+      if (H.contactDamage !== 2 || H.damageTakenMult !== 1 || S.mallocs !== 0) out.push('Hog: GC-Ende stellt nicht zurueck');
+      if (ev.filter((x) => x === 'bossGc:start').length !== 1 || !ev.includes('bossGc:end')) out.push('Hog: GC-Events ' + ev.join());
+      // Kein Platz mehr: "Out of memory" fuehrt ebenfalls in den GC
+      const can0 = m.canTake;
+      m.canTake = () => false;
+      S.last = null; S.mode = 'walk'; S.t = 0; S.mallocs = 0;
+      step(H, 30);
+      m.canTake = can0;
+      if (S.mode !== 'gcWarn') out.push('Hog: kein GC bei "Out of memory" (' + S.mode + ')');
+      clear();
+
+      // 8) Bombe: gibt den ganzen getroffenen Block frei, andere bleiben; Spielerschuesse tun das nicht
+      H = spawn(760, 450); S = H.state; m = K.memOf(H, g);
+      S.mode = 'phase'; S.t = 1e9;
+      p.x = 120; p.y = 500; p.god = true; ev.length = 0;
+      const blockA = [], blockB = [];
+      for (let r = 1; r <= 3; r++) for (let c = 2; c <= 4; c++) blockA.push([c, r]);
+      for (let r = 1; r <= 3; r++) for (let c = 10; c <= 12; c++) blockB.push([c, r]);
+      m.reserve(blockA, 0.01, 30); m.reserve(blockB, 0.01, 30); step(H, 2);
+      const edge = tileXY(2, 1);
+      g.explode(edge.x, edge.y, 30, 1, 'test');
+      if (m.taken().size !== 9) out.push('Hog: Bombe laesst ' + m.taken().size + ' statt 9 Kacheln');
+      if (blockA.some(([c, r]) => m.taken().has(K.keyOf(c, r)))) out.push('Hog: Bombe gibt den Block nur teilweise frei');
+      if (!ev.includes('bossFree')) out.push('Hog: kein bossFree');
+      p.god = false;
+      clear();
+
+      // 9) Phase 2 bei 50 %: einmal, fegt frei, einzelne Kacheln nie Kante an Kante
+      H = spawn(760, 150); S = H.state; m = K.memOf(H, g);
+      p.god = true; p.x = 300; p.y = 300; ev.length = 0;
+      m.reserve([[2, 2], [3, 2]], 0.01, 30);
+      H.hp = H.maxHp * 0.49;
+      step(H, 1);
+      if (S.phase !== 2 || ev.filter((x) => x === 'bossPhase').length !== 1) out.push('Hog: kein Phasenwechsel bei 50 %');
+      step(H, 60);
+      if (m.taken().size) out.push('Hog: Phasenwechsel fegt nicht frei');
+      step(H, 60);
+      if (ev.filter((x) => x === 'bossPhase').length !== 1) out.push('Hog: Phasenwechsel doppelt');
+      const made = K.reserveFragments(m, g, HOG.frags[0], HOG.tell[1], HOG.life[1]);
+      if (made < HOG.frags[0]) out.push('Hog: nur ' + made + ' Fragmente');
+      const tk = m.taken();
+      for (const key of tk) if (tk.has(key + 1) || tk.has(key + COLS)) { out.push('Hog: Fragmente Kante an Kante'); break; }
+      const f2 = K.footTile(g.room, p);
+      if (!tk.has(K.keyOf(f2.c, f2.r))) out.push('Hog: Fragmente sparen den Spieler aus');
+      S.faults = 2; K.hogAim(H, g);
+      n = 0;
+      let runs = 0, prev = 'aim';
+      while (n++ < 900 && (S.mode === 'aim' || S.mode === 'fault' || S.mode === 'tired')) { step(H, 1); if (S.mode === 'fault' && prev !== 'fault') runs++; prev = S.mode; }
+      if (runs !== 2) out.push('Hog: Phase 2 mit ' + runs + ' Sprints');
+      p.god = false;
+
+      // 10) Tod: genau ein Boss-Tod, der Boden wird frei, das Overlay verschwindet
+      m.reserve([[2, 6]], 0.01, 30);
+      ev.length = 0;
+      H.hurt(1e7, g, {});
+      if (!H.dead) H.die(g);
+      if (ev.filter((x) => x === 'enemyDeath:boss').length !== 1) out.push('Hog: ' + ev.filter((x) => x === 'enemyDeath:boss').length + ' Boss-Tode');
+      if (m.taken().size) out.push('Hog: Boden bleibt nach dem Tod reserviert');
+      for (let i = 0; i < 30; i++) m.update(DT, g);
+      if (!m.dead) out.push('Hog: Overlay bleibt nach dem Tod');
+
+      const badSp = speeds.filter((v) => v < 165 || v > 260);
+      if (!speeds.length) out.push('Hog: keine Kugeln gemessen');
+      if (badSp.length) out.push('Hog: ' + badSp.length + ' Kugeln ausserhalb 165–260 px/s (z. B. ' + badSp[0].toFixed(0) + ')');
+    } finally {
+      AI.shoot = origShoot;
+      for (const off of offs) off();
+      clear();
+      p.god = god0; p.flying = fly0;
+      BOTA.debug.god(true);
+      p.health = p.maxHealth;
+      g.enterFloor(d0); g.setState('play');
+    }
+    return out;
+  });
+  problems.push(...hogProblems);
 
   // --- The Context Limit: Regen-Stimmung (rein kosmetisch) ---
   const rainSetup = await page.evaluate(() => {

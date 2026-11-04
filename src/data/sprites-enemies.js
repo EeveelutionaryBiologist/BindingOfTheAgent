@@ -866,6 +866,106 @@
     scale: 4,
     frames: megaFrames(true),
   });
+  // The Memory Hog (Etage 4–9) — von vorn gesehen ein fettes, gedrungenes Wildschwein: runder Rumpf, Ruessel mit
+  // Hauern, winzige Augen, vier Stummelbeine. Die Stacheln sind 1-Bits, die oben ueber den Rand ragen.
+  // Generiert: Rumpf-Ellipse, dann Glyphen, Gesicht, Beine, zuletzt die Kontur um alles.
+  // Frames: 0/1 laufen, 2 Stacheln aufgerichtet (heller, Augen gluehen), 3 Augen zu (Garbage Collection).
+  const HOG_W = 40, HOG_H = 31;
+  const HOG_ONE = ['.#.', '##.', '.#.', '.#.', '###'];
+  function hogRows(step, up, asleep) {
+    const g = [];
+    for (let y = 0; y < HOG_H; y++) g.push('.'.repeat(HOG_W).split(''));
+    const put = (x, y, ch) => { if (x >= 0 && y >= 0 && x < HOG_W && y < HOG_H) g[y][x] = ch; };
+    const ell = (cx, cy, rx, ry, ch) => {
+      for (let y = 0; y < HOG_H; y++) {
+        for (let x = 0; x < HOG_W; x++) {
+          if (((x + 0.5 - cx) / rx) ** 2 + ((y + 0.5 - cy) / ry) ** 2 <= 1) put(x, y, ch);
+        }
+      }
+    };
+    // Beine zuerst (der Rumpf ueberdeckt ihren oberen Teil); beim Laufen wippt je ein Paar
+    [[6, 0], [14, 1], [22, 0], [30, 1]].forEach(([x0, pair]) => {
+      const bottom = HOG_H - 2 - (step === pair ? 1 : 0);
+      for (let y = 22; y <= bottom; y++) for (let x = x0; x < x0 + 5; x++) put(x, y, y === bottom ? 'D' : 'd');
+    });
+    ell(20, 16.5, 17.5, 12.5, 'b');
+    ell(21.5, 18.5, 15, 10, 'B');       // Licht von unten rechts weg: oben links bleibt dunkler
+    ell(20, 23, 11.5, 6.5, 'f');        // helle Gesichtspartie
+    // Stacheln: versetzte Reihen; die obersten ragen ueber den Rand hinaus
+    const lift = up ? 1 : 0;
+    [[1, [12, 18, 24]], [5, [6, 12, 18, 24, 30]], [10, [3, 9, 15, 21, 27, 33]]].forEach(([y0, xs], row) => {
+      xs.forEach((x0, i) => {
+        HOG_ONE.forEach((line, dy) => {
+          for (let dx = 0; dx < 3; dx++) {
+            if (line[dx] === '#') put(x0 + dx, y0 + dy - lift, up ? 'Q' : ((i + row) % 2 ? 'q' : 'Q'));
+          }
+        });
+      });
+    });
+    // Ruessel mit Nasenloechern, Hauer, Augen
+    ell(20, 25, 5.5, 3.5, 'n');
+    for (const x of [18, 21]) { put(x, 24, 'k'); put(x, 25, 'k'); }
+    for (const [x, y] of [[12, 25], [12, 26], [13, 27], [27, 25], [27, 26], [26, 27]]) put(x, y, 'w');
+    for (const x of [12, 26]) {
+      if (asleep) { put(x, 21, 'k'); put(x + 1, 21, 'k'); } else {
+        put(x, 20, 'k'); put(x + 1, 20, up ? 'e' : 'k'); put(x, 21, up ? 'e' : 'k'); put(x + 1, 21, 'k');
+      }
+    }
+    // Kontur um alles herum
+    const edge = [];
+    for (let y = 0; y < HOG_H; y++) {
+      for (let x = 0; x < HOG_W; x++) {
+        if (g[y][x] !== '.') continue;
+        const near = [[1, 0], [-1, 0], [0, 1], [0, -1]].some(([dx, dy]) => g[y + dy] && g[y + dy][x + dx] && g[y + dy][x + dx] !== '.');
+        if (near) edge.push([x, y]);
+      }
+    }
+    for (const [x, y] of edge) g[y][x] = 'k';
+    return g.map((r) => r.join(''));
+  }
+  const HOG_PAL = { k: K, b: '#3f5f88', B: '#54779f', f: '#8ea7c0', n: '#b98d97', w: '#efe7d2', d: '#2f4768', D: '#1f3048',
+    q: '#9fdcf5', Q: '#d6f6ff', e: '#ff5a46' };
+  const hogFrames = () => [hogRows(0, false, false), hogRows(1, false, false), hogRows(-1, true, false), hogRows(-1, false, true)];
+  B.defineSprite('boss_memory_hog', { palette: HOG_PAL, scale: 4, frames: hogFrames() });
+  // Phase 2 ("Heap fragmentation"): Stacheln kippen ins Warme, der Rumpf wird fleckig dunkler
+  B.defineSprite('boss_memory_hog_frag', {
+    palette: Object.assign({}, HOG_PAL, { b: '#3a4d72', B: '#4b6189', q: '#ffcf8a', Q: '#fff0c9' }),
+    scale: 4,
+    frames: hogFrames(),
+  });
+  // Reservierter Boden: eine ganze Kachel (16 x 16 bei Skalierung 4) mit Bits. Nullen = Vorwarnung, Einsen = Stacheln.
+  function memTile(glyph, border, fill, shift) {
+    const rows = [];
+    for (let y = 0; y < 16; y++) {
+      const r = [];
+      for (let x = 0; x < 16; x++) r.push(x === 0 || y === 0 || x === 15 || y === 15 ? border : fill);
+      rows.push(r);
+    }
+    [[2, 2], [7, 2], [12, 2], [2, 9], [7, 9], [12, 9]].forEach(([x0, y0], i) => {
+      glyph.forEach((line, dy) => {
+        for (let dx = 0; dx < 3 && x0 + dx < 15; dx++) if (line[dx] === '#') rows[y0 + dy][x0 + dx] = (i + shift) % 2 ? 'g' : 'G';
+      });
+    });
+    return rows.map((r) => r.join(''));
+  }
+  const HOG_ZERO = ['###', '#.#', '#.#', '#.#', '###'];
+  B.defineSprite('tile_mem_one', {
+    palette: { p: '#0b1a30', o: '#2fa8d8', g: '#58d2f5', G: '#c9f6ff' },
+    scale: 4,
+    frames: [memTile(HOG_ONE, 'o', 'p', 0), memTile(HOG_ONE, 'o', 'p', 1)],
+  });
+  B.defineSprite('tile_mem_zero', {
+    palette: { o: '#7fd0ee', g: '#7fd0ee', G: '#7fd0ee' },
+    scale: 4,
+    rows: memTile(HOG_ZERO, 'o', '.', 0),
+  });
+  // 1-Bit als Kugel (Quill Dump): helle Glyphe mit dunkler Kontur, wird in Flugrichtung gedreht
+  B.defineSprite('shot_bit', {
+    palette: { k: K, q: '#d6f6ff' },
+    scale: 3,
+    rows: ['.kkk.', 'kkqk.', 'kqqk.', 'kkqkk', '.kqk.', 'kqqqk', 'kkkkk'],
+  });
+
   // Modul des Megalith: kleiner Granitblock mit einer Codezeile, auf Beinchen (kriecht zurueck zum Boss)
   B.defineSprite('enemy_megalith_module', {
     palette: MEGA_PAL,

@@ -34,8 +34,8 @@ Score and a choice: start over, or keep going with everything you have. There is
   Borders (Spinlock, Rootkit, Dust Daemon), Legacy Codebase (Stack Trace), Dependency Hell (Honeypot, Rolling Release),
   Production (Rate Limiter, Port Scanner), The Training Data (Dry Run) and The Context Limit (Overflow Buffer,
   Summarizer, Lost in the Middle).
-- **10 bosses** with distinct phases: The Monolith, The Stakeholder, Friday Deploy, The Infinite Loop, the Rogue Agent
-  Swarm, The Antagonistic Reviewer and the Octopus Merge (only on Forgotten Branches). Deeper down, three of them are
+- **11 bosses** with distinct phases: The Monolith, The Stakeholder, Friday Deploy, The Infinite Loop, the Rogue Agent
+  Swarm, The Antagonistic Reviewer, The Memory Hog (floors 4–9) and the Octopus Merge (only on Forgotten Branches). Deeper down, three of them are
   replaced by bigger versions: The Megalith and The Shareholder from floor 7, the Nested Infinite Loop from floor 8.
 - **11 themed floors** that cycle forever, from *The Backlog* through *Forgotten Branches* and the cactus-lined *Sandbox Borders* down to *The Context Limit*. **30 room layouts.**
 - All art is ASCII pixel maps in code and all sound is synthesized with Web Audio. There are no asset files.
