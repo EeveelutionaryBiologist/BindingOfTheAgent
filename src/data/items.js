@@ -12,7 +12,7 @@
  *     add:   { speed: 0.25 },        // additive Stat-Deltas  (Stats: speed, damage, fireDelay,
  *     mult:  { fireDelay: 0.75 },    //   shotSpeed, range, shotSize, luck) — mult nach add
  *     flags: { piercing: true },     // Flags: piercing, homing, spectral, bounce, wobble, split,
- *                                    //   flying, parallel, showHp (bool, OR) | multishot (max)
+ *                                    //   flying, floating, parallel, showHp, scanMap (bool, OR) | multishot (max)
  *                                    //   | duck, unitTests (Summe; Begleiter, siehe familiar.js)
  *     dynamic(player) { return { add: {...}, mult: {...} }; }, // optional, zustandsabhaengige Stats
  *
@@ -34,7 +34,8 @@
  *
  * Inhalt: 32 passive + 4 aktive Items aus DESIGN.md §9, dazu 7 eigene Items im selben Geist
  * (6 passiv, 1 aktiv) und 5 Herz-Items (2026-11-03: Long-Term Support, Swap File, Electron App,
- * Reserved Instances, Graceful Degradation). Begleiter-Flags (duck, unitTests) wertet BOTA.syncFollowers in familiar.js aus.
+ * Reserved Instances, Graceful Degradation) und 5 Vorschlaege aus dem Team (2026-11-04: Calculator, Deep Packet
+ * Inspection, Von Neumann Architecture, Sharp Left Turn, To the Moon). Begleiter-Flags (duck, unitTests) wertet BOTA.syncFollowers in familiar.js aus.
  *
  * Konventionen:
  *  - Pro Run gewuerfelte / dauerhafte Werte (Off-by-One, YAML Config, Retry with Backoff) landen in
@@ -442,6 +443,87 @@
       const missing = Math.floor(Math.max(0, player.maxHealth - player.health) / 2);
       return missing ? { add: { damage: -0.2 * missing } } : null;
     },
+  };
+
+  // --- Vorschlaege aus dem Team (2026-11-04) -----------------------------------
+
+  // Calculator: Hoechstausschlag je Wert. fireDelay ist negativ, weil dort weniger besser ist.
+  const CALC_SWING = { damage: 0.6, shotSpeed: 0.15, speed: 0.12, fireDelay: -0.03 };
+  const CALC_TILT = 0.45;   // Mitte des Wertebereichs: alles darueber ist ein Plus (also 55 % Plus, 45 % Minus)
+
+  /**
+   * Stat-Aenderungen zum Ergebnis n. Reine Funktion von n, ohne game.rng: Der Seed bleibt unberuehrt, und
+   * dieselbe Rechnung gibt immer dasselbe Ergebnis (es ist schliesslich ein Taschenrechner).
+   */
+  function calcResult(n) {
+    const out = {};
+    for (const k of Object.keys(CALC_SWING)) {
+      const u = (B.hashString('calculator:' + n + ':' + k) >>> 0) / 4294967296;
+      out[k] = Math.round((u - CALC_TILT) * 2 * CALC_SWING[k] * 1000) / 1000;
+    }
+    return out;
+  }
+
+  I.calculator = {
+    name: 'Calculator', tagline: 'Stats change with every fight',
+    desc: "We'll call it a next-gen math backend in the release.",
+    pools: ['treasure', 'shop', 'boss'], sprite: 'item_calculator',
+    // Rechnet beim Betreten eines Raums mit Gegnern: Gegner x besuchte Raeume dieser Etage. In leeren Raeumen bleibt
+    // das letzte Ergebnis, sonst wuerden die Werte beim Zuruecklaufen flackern. ignoreForClear zaehlt nicht mit:
+    // Boss-Koerperteile sind keine Gegner, und eine getarnte Hallucination darf sich nicht durch die Zahl verraten.
+    onRoomEnter(player, room, game) {
+      const a = room.enemies.filter((e) => !e.dead && !e.ignoreForClear).length;
+      if (!a) return;
+      let b = 0;
+      for (const c of game.floor.cells.values()) if (c.room.visited) b++;
+      player.itemState.calculator.add = calcResult(a * b);
+      player.recalcStats();
+      fx.popText(game, player.x, player.y - 56, a + ' x ' + b + ' = ' + a * b, '#9be07a');
+    },
+    dynamic(player) {
+      const st = player.itemState.calculator;
+      return st && st.add ? { add: st.add } : null;
+    },
+  };
+  B.calcResult = calcResult;
+
+  // Rein informativ: hud.js zeigt Boss- und Geheimraum auf der Karte, solange sie unbesucht sind. Aendert keinen
+  // Raumzustand (room.seen bleibt), der Geheimraum muss also weiterhin aufgesprengt werden.
+  I.deep_packet_inspection = {
+    name: 'Deep Packet Inspection', tagline: 'Boss and secret rooms on the map',
+    desc: 'We read everything. For quality assurance.',
+    pools: ['treasure', 'shop', 'boss'], sprite: 'item_deep_packet_inspection',
+    flags: { scanMap: true },
+  };
+
+  I.von_neumann = {
+    name: 'Von Neumann Architecture', tagline: 'HP and guardrail up, everything slower',
+    desc: 'Obsolete...?',
+    pools: ['treasure', 'shop', 'boss'], sprite: 'item_von_neumann',
+    add: { speed: -0.1, shotSpeed: -0.1 },
+    onPickup(player) {
+      moreHearts(player, 1);
+      player.addGuardrails(2);   // halbe Herzen: ein blaues Herz
+    },
+  };
+
+  const TURN_MIN = 140, TURN_MAX = 200;   // Strecke bis zur Kurve (px); schmal, damit man sie einschaetzen lernt
+
+  I.sharp_left_turn = {
+    name: 'Sharp Left Turn', tagline: 'DMG and shot speed up, shots veer left',
+    desc: 'And there we go!',
+    pools: ['treasure', 'shop', 'boss'], sprite: 'item_sharp_left_turn',
+    add: { damage: 1, shotSpeed: 0.2 },
+    onShoot(player, proj, game) { proj.turnAt = game.rng.float(TURN_MIN, TURN_MAX); },
+  };
+
+  // Schweben ist weniger als Fliegen: keine Stacheln, Kakteen und Pfuetzen, aber Felsen und Gruben bleiben Hindernisse.
+  // Den reservierten Speicher des Memory Hog gibt es auch fuer Flieger, also auch hier.
+  I.to_the_moon = {
+    name: 'To the Moon', tagline: 'Hover over floor hazards',
+    desc: "Where your company's valuation will go. Eventually.",
+    pools: ['treasure', 'shop', 'boss'], sprite: 'item_to_the_moon',
+    flags: { floating: true },
   };
 
   I.constitutional_guardrails = {

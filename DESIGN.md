@@ -410,7 +410,7 @@ clearly marked hook additions.
 
 ### Implementation status (v1)
 All milestones done. What shipped, compared with this doc:
-- **Items:** 50 (45 passive, 5 active). There are 14 extras beyond §9, including five that add heart containers (2026-11-03), e.g. Ctrl+C Ctrl+V, On-Call Pager,
+- **Items:** 55 (50 passive, 5 active). There are 19 extras beyond §9, including five that add heart containers (2026-11-03) and five team suggestions (2026-11-04), e.g. Ctrl+C Ctrl+V, On-Call Pager,
   Garbage Collector, Feature Flag, Ctrl+Z (active), and the Extra GPU / Off-Brand GPU pair (added 2026-11-02). Locked chests cost an Approval.
 - **Enemies and bosses:** 30 spawnable enemies plus 10 minions. Floor families: Forgotten Branches (4, 2026-11-02), Sandbox Borders (Spinlock, Rootkit, Dust Daemon), Legacy Codebase (Stack Trace), Dependency Hell (Honeypot, Rolling Release), Production (Rate Limiter, Port Scanner) and The Training Data (Dry Run), the last five added 2026-11-03, plus The Context Limit (Overflow Buffer, Summarizer, Lost in the Middle; also 2026-11-03). The Dust Daemon bends your shots, the Dry Run rehearses every move as a ghost before doing it for real, and the Rate Limiter pauses with a "429" after every burst. Each of the 11 bosses has phases and telegraphed attacks; the Octopus Merge (2026-11-02) is the floor boss of Forgotten Branches (300 HP since 2026-11-03, was 330), the Nested Infinite Loop (2026-11-02) replaces the Infinite Loop from floor 8, and The Megalith and The Shareholder (2026-11-03) replace the Monolith and the Stakeholder from floor 7.
 - **Stack Trace (2026-11-03):** first Legacy Codebase enemy, a paper-tailed scorpion that stings along a telegraphed line (see AGENTS.md §4).

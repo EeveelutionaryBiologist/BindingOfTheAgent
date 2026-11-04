@@ -397,10 +397,30 @@
   }
 
   /** Minimap: Fenster von 7x5 Zellen um den aktuellen Raum, oben rechts ueber dem Raum */
+  const MAP_WIN_W = 7, MAP_WIN_H = 5;
+  const SCAN_COLORS = { boss: '#ff5a5a', secret: '#5fa8ff' };
+
+  /**
+   * Deep Packet Inspection: Boss- und Geheimraum, solange sie unbesucht sind, mit ihrer Lage im Kartenfenster.
+   * off = liegt ausserhalb des Fensters (dann zeigt ein Punkt am Rand die Richtung). Nur Anzeige, aendert nichts.
+   */
+  function scanMarks(game) {
+    const p = game.player, floor = game.floor;
+    const out = [];
+    if (!p || !p.flags || !p.flags.scanMap || !floor || !game.room) return out;
+    const cur = game.room.cell;
+    for (const cell of floor.cells.values()) {
+      if (!SCAN_COLORS[cell.type] || cell.room.visited) continue;
+      const gx = cell.x - cur.x + Math.floor(MAP_WIN_W / 2), gy = cell.y - cur.y + Math.floor(MAP_WIN_H / 2);
+      out.push({ cell, type: cell.type, color: SCAN_COLORS[cell.type], gx, gy, off: gx < 0 || gy < 0 || gx >= MAP_WIN_W || gy >= MAP_WIN_H });
+    }
+    return out;
+  }
+
   function drawMinimap(ctx, game, glitched) {
     const floor = game.floor;
     if (!floor || !game.room) return;
-    const cw = 22, ch = 15, gap = 5, winW = 7, winH = 5;
+    const cw = 22, ch = 15, gap = 5, winW = MAP_WIN_W, winH = MAP_WIN_H;
     const pw = winW * (cw + gap) + gap, ph = winH * (ch + gap) + gap;
     const bx = W - pw - 12, by = HUD_H + 12;
     const cur = game.room.cell;
@@ -441,9 +461,12 @@
     }
 
     const t = now();
+    const marks = scanMarks(game);
+    const markOf = (cell) => marks.find((m) => m.cell === cell);
     for (const cell of floor.cells.values()) {
       const room = cell.room;
-      if (!visible(room)) continue;
+      const mark = markOf(cell);
+      if (!visible(room) && !mark) continue;
       const q = pos(cell);
       if (q.gx < -1 || q.gy < -1 || q.gx > winW || q.gy > winH) continue;
       const isCur = cell === cur;
@@ -467,12 +490,30 @@
         ctx.lineWidth = 2;
         ctx.strokeRect(q.x + 1, q.y + 1, cw - 2, ch - 2);
       }
+      if (mark) {
+        ctx.strokeStyle = mark.color;
+        ctx.globalAlpha = (under ? 0.35 : 0.92) * (0.65 + 0.35 * Math.sin(t * 4));
+        ctx.lineWidth = 2;
+        ctx.strokeRect(q.x, q.y, cw, ch);
+        ctx.globalAlpha = under ? 0.35 : 0.92;
+      }
       const icon = { boss: 'map_boss', treasure: 'map_treasure', shop: 'map_shop', secret: 'map_secret' }[cell.type];
       if (icon) {
         if (B.hasSprite(icon)) B.drawSprite(ctx, icon, q.x + cw / 2, q.y + ch / 2 + 1, { alpha: isCur ? 0.85 : 1 });
         else { ctx.fillStyle = '#fff'; ctx.fillRect(q.x + cw / 2 - 3, q.y + ch / 2 - 3, 6, 6); }
       }
     }
+    // Gescannte Raeume ausserhalb des Fensters: ein Punkt am Rand in ihrer Richtung
+    for (const m of marks) {
+      if (!m.off) continue;
+      const px = bx + gap + B.M.clamp(m.gx, 0, winW - 1) * (cw + gap) + cw / 2;
+      const py = by + gap + B.M.clamp(m.gy, 0, winH - 1) * (ch + gap) + ch / 2;
+      const ex = m.gx < 0 ? bx + 6 : m.gx >= winW ? bx + pw - 6 : px;
+      const ey = m.gy < 0 ? by + 6 : m.gy >= winH ? by + ph - 6 : py;
+      ctx.fillStyle = m.color;
+      ctx.fillRect(ex - 3, ey - 3, 6, 6);
+    }
+
     if (glitched) drawStatic(ctx, bx, by, pw, ph, 3); // Stoerung: Karte unter Rauschen (Transparenz bleibt)
     ctx.restore();
   }
@@ -653,6 +694,7 @@
   }
 
   B.HUD = {
+    scanMarks,
     drawHeart,
     drawIcon,
     drawRestartRing,

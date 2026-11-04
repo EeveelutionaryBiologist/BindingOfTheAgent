@@ -784,7 +784,7 @@
       if (this.state !== 'play') return; // z. B. Tod waehrend des Updates
 
       // Stacheln
-      if (!p.flying) {
+      if (!p.flying && !p.floating) {
         const tile = this.room.worldToTile(p.x, p.y + p.r * 0.5);
         if (this.room.tileAt(tile.c, tile.r) === T.SPIKES) p.hurt(1, 'a spike (it was in the layout)', this);
         this.checkCactus(p);
@@ -802,7 +802,8 @@
      * Kakteen (Sandbox Borders): Sie sind solide, der Spieler wird also an ihrem Rand aufgehalten. Beruehrt sein
      * Kreis eine Kaktus-Kachel (Abstand Kreismitte -> Kachel-Rechteck < Radius + 3 px), gibt es ein halbes Herz
      * und einen Rueckstoss von der Kachel weg. Die Unverwundbarkeit nach dem Treffer verhindert Dauerschaden.
-     * Fliegende Spieler sind ueber den Kakteen (wie ueber Felsen) und werden nicht gestochen.
+     * Fliegende Spieler sind ueber den Kakteen (wie ueber Felsen) und werden nicht gestochen; schwebende auch nicht,
+     * aber fuer sie bleibt der Kaktus ein Hindernis (To the Moon).
      */
     checkCactus(p) {
       const room = this.room;

@@ -105,6 +105,7 @@
       this.stats = s;
       this.flags = flags;
       this.flying = !!flags.flying;
+      this.floating = !!flags.floating;   // To the Moon: ueber Bodengefahren, aber nicht ueber Felsen und Gruben
     }
 
     /**
@@ -246,11 +247,11 @@
     /**
      * Verlangsamt den Spieler fuer den naechsten Tick auf factor (0..1) seines Tempos. Mehrere Quellen im selben
      * Tick stapeln NICHT: es gilt der staerkste einzelne Faktor (Minimum), nie ein Produkt. Fliegende Spieler
-     * (flags.flying, z. B. The Cloud) schweben ueber Pfuetzen und werden nicht verlangsamt.
+     * (flags.flying, z. B. The Cloud) und schwebende (flags.floating, To the Moon) bleiben ueber Pfuetzen unberuehrt.
      * Wer bremsen will, ruft das jeden Tick auf (z. B. overflow_puddle in enemies-context.js).
      */
     slowBy(factor) {
-      if (this.flying || !(factor >= 0 && factor < 1)) return;
+      if (this.flying || this.floating || !(factor >= 0 && factor < 1)) return;
       if (factor < this.slowNext) this.slowNext = factor;
     }
 
@@ -353,7 +354,9 @@
       else if (this.invuln > 0.55 && B.hasSprite('player_hurt')) dirName = 'player_hurt';
       const name = B.hasSprite(dirName) ? dirName : 'player';
       const frame = Math.hypot(this.vx, this.vy) > 30 ? Math.floor(this.walkAnim * 8) : 0;
-      B.drawSprite(ctx, name, this.x, this.y - 8 + bob, {
+      // To the Moon: sichtbar ueber dem Schatten, damit man das Schweben erkennt (nur Optik, der Kollisionskreis bleibt)
+      const hover = this.floating ? -7 + Math.sin(this.t * 3) * 2 : 0;
+      B.drawSprite(ctx, name, this.x, this.y - 8 + bob + hover, {
         flash: this.flash > 0,
         flipX: name === 'player' && this.facing === 'left',
         scale: squash,

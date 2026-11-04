@@ -349,6 +349,91 @@
     '..kkkkkkkkkkkk..',
   ], { c: '#b6d3ee', w: '#f4f8fc' });
 
+  // Calculator — Taschenrechner mit gruenem Display und Tasten
+  spr('item_calculator', [
+    '.kkkkkkkkkkkk.',
+    'kGGGGGGGGGGGgk',
+    'kGkkkkkkkkkkgk',
+    'kGknnnnnnNnkgk',
+    'kGknnnnNnNnkgk',
+    'kGkkkkkkkkkkgk',
+    'kGGGGGGGGGGGgk',
+    'kGddGddGddGrgk',
+    'kGGGGGGGGGGGgk',
+    'kGddGddGddGrgk',
+    'kGGGGGGGGGGGgk',
+    'kGddGddGddGrgk',
+    'kGGGGGGGGGGGgk',
+    'kGddGddGddGogk',
+    'kggggggggggggk',
+    '.kkkkkkkkkkkk.',
+  ], { n: '#a9d98f', N: '#2c4a2a', G: '#9aa0a8', g: '#6f757d', d: '#3a3f46' });
+
+  // Deep Packet Inspection — ein rot gluehendes Auge
+  spr('item_deep_packet_inspection', [
+    '.....kkkkkk.....',
+    '...kkRRRRRRkk...',
+    '..kRRrrrrrrRRk..',
+    '.kRrrryyyyrrrRk.',
+    'kRrryyWWkkyyrrRk',
+    'kRrryWWkkkkyrrRk',
+    'kRrryykkkkyyrrRk',
+    '.kRrrryyyyrrrRk.',
+    '..kRRrrrrrrRRk..',
+    '...kkRRRRRRkk...',
+    '.....kkkkkk.....',
+  ], { R: '#7a1a1a', r: '#e03a3a', y: '#ffb04a' });
+
+  // Von Neumann Architecture — alte gruene Platine mit einem grossen DIP-Baustein, Leiterbahnen und Kontakten
+  spr('item_von_neumann', [
+    '.kkkkkkkkkkkkkk.',
+    'kNNNNNNNNNNNNNNk',
+    'kNYYYNNNNNNNYNNk',
+    'kNNNYNkYkYkYkNNk',
+    'kNNNYkDDDDDDDkNk',
+    'kNYYYkDDDDDDDkNk',
+    'kNNNNkDDwDDDDkNk',
+    'kNnNNkDDDDDDDkNk',
+    'kNNNNNkYkYkYkNNk',
+    'kNNYYYYNNNYYNNNk',
+    'kNNNNNNNNNNNNnNk',
+    '.kYkYkYkYkYkYkk.',
+    '..kkkkkkkkkkkk..',
+  ], { N: '#2f6b46', n: '#c8d27a' });
+
+  // Sharp Left Turn — Pfeil, der gruen nach oben laeuft und rot nach links abknickt
+  spr('item_sharp_left_turn', [
+    '.......kkk......',
+    '.....kkrrk......',
+    '...kkrrrrk......',
+    '.kkrrrrrrkkkkkk.',
+    'krrrrrrrrrrrnnnk',
+    '.kkrrrrrrrrnnnnk',
+    '...kkrrrrkknnnnk',
+    '.....kkrrk.knnnk',
+    '.......kkk.knnnk',
+    '...........knnnk',
+    '...........knnnk',
+    '...........knnnk',
+    '...........kkkkk',
+  ]);
+
+  // To the Moon — runder, grauer Mond mit Kratern (nicht die gelbe Sichel von Dark Mode) und gruenem Kurspfeil
+  spr('item_to_the_moon', [
+    '...kkkkkk....k..',
+    '..kwwwwwwk..knk.',
+    '.kwGGwwwwwkknnnk',
+    'kwwGgGwwwwwkknkk',
+    'kwwwGwwwwGwwknk.',
+    'kwwwwwwwGgGwkk..',
+    'kwwGwwwwwGwwwk..',
+    'kwGgGwwwwwwwGk..',
+    'kwwGwwwGwwwGGk..',
+    '.kwwwwGgGwGGk...',
+    '..kwwwwGGGGk....',
+    '...kkkkkkkk.....',
+  ], { w: '#e6e8ee', G: '#b4b9c6', g: '#8a90a0' });
+
   // RLHF — Herz mit "+1"
   spr('item_rlhf', [
     '..kkk...kkk..',

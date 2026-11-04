@@ -65,6 +65,15 @@
         }
       }
 
+      // Sharp Left Turn: nach turnAt px einmal 90 Grad nach links (links in Flugrichtung; y zeigt nach unten)
+      if (this.turnAt !== undefined && this.travel >= this.turnAt) {
+        this.turnAt = undefined;
+        const vx = this.vx;
+        this.vx = this.vy;
+        this.vy = -vx;
+        B.bus.emit('shotTurn', { game, x: this.x, y: this.y, color: this.color });
+      }
+
       // Schuss-Felder: Gegner, deren Verhalten den Hook bendShot(e, shot, dt, game) hat, duerfen die Richtung
       // (vx/vy) von Spielerschuessen aendern, bevor diese sich bewegen — z. B. der Wirbel des Dust Daemon.
       // Gegnerschuesse bleiben unberuehrt. Der Hook muss deterministisch sein (kein Zufall).

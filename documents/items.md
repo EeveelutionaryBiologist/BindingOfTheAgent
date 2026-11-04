@@ -44,6 +44,7 @@ All items and pickups in the game.
 | ![YAML Config](images/item_yaml_config.png) | **YAML Config** `yaml_config` | Every stat shifts randomly, slightly positive on average. The range per stat runs from −1 to +1.3 times its step: speed 0.15, damage 0.8, fire delay 0.05 s, shot speed 0.15, range 90, shot size 0.2, luck 2 | Treasure, Secret | — | Your stats are now whitespace-sensitive. |
 | ![Extra GPU](images/item_extra_gpu.png) | **Extra GPU** `extra_gpu` | Speed +0.1, shot speed +0.1. Outrageously expensive for what it does; that's the joke | Treasure, Shop, Boss | 30¢ | More FLOPS = More Good! |
 | ![Off-Brand GPU](images/item_offbrand_gpu.png) | **Off-Brand GPU** `offbrand_gpu` | Speed +0.1, shot speed +0.1, but 12 % of your shots are duds: grey, no damage, and they fizzle out after about a third of their range | Treasure, Shop, Boss | 20¢ | We need more compute, but is this worth it...? |
+| ![Calculator](images/item_calculator.png) | **Calculator** `calculator` | Entering a room with enemies, it multiplies the enemies by the rooms visited on this floor and shows the sum. The result slightly changes damage (up to about ±0.6), shot speed, speed and fire delay until the next fight; a little more often up than down. The same sum always gives the same result | Treasure, Shop, Boss | 15¢ | We'll call it a next-gen math backend in the release. |
 
 ### Shot modifiers
 
@@ -61,6 +62,7 @@ All items and pickups in the game.
 | ![Ctrl+C Ctrl+V](images/item_copy_paste.png) | **Ctrl+C Ctrl+V** `copy_paste` | Each shot has a 25 % chance to fire a copy at a slight angle | Treasure, Shop | 15¢ | Why write it twice when you can paste it four times? DRY is a suggestion. |
 | ![Feature Flag](images/item_feature_flag.png) | **Feature Flag** `feature_flag` | In each new room, 50 % chance to be ON: damage +1.5 and fire delay ×0.9 (shots turn green). Always ON right after pickup | Treasure, Shop | 15¢ | Wrapped in a flag nobody owns. It's on in this room. Probably. Check the shot colour. |
 | ![Benchmark Overfitting](images/item_benchmark_overfitting.png) | **Benchmark Overfitting** `benchmark_overfitting` | Damage ×0.9, but every hit on a boss deals +60 % bonus damage | Treasure, Boss | — | Scores 98 % on the boss benchmark. Struggles with literally everything else. |
+| ![Sharp Left Turn](images/item_sharp_left_turn.png) | **Sharp Left Turn** `sharp_left_turn` | Damage +1, shot speed +0.2; every shot turns 90° to the left once, 140–200 px after being fired | Treasure, Shop, Boss | 15¢ | And there we go! |
 
 ### Health and protection
 
@@ -78,6 +80,8 @@ All items and pickups in the game.
 | ![On-Call Pager](images/item_on_call_pager.png) | **On-Call Pager** `on_call_pager` | When you get hit, enemies within 200 px take 10 damage and are pushed away | Treasure, Secret | — | Woken up at 3 a.m.? Then so is everyone within a 200 px radius. |
 | ![Garbage Collector](images/item_garbage_collector.png) | **Garbage Collector** `garbage_collector` | Every 12 kills: heal half a heart (or +2¢ at full health) and freeze enemies for 0.6 s | Treasure, Boss | — | Every 12 kills it reclaims half a heart. Stop-the-world pauses included. |
 | ![The Cloud](images/item_the_cloud.png) | **The Cloud** `the_cloud` | Flight: fly over pits, rocks and spikes | Treasure, Secret | — | It's just someone else's computer. But it floats. |
+| ![Von Neumann Architecture](images/item_von_neumann.png) | **Von Neumann Architecture** `von_neumann` | +1 heart container, a full heal and +1 blue heart; speed −0.1, shot speed −0.1 | Treasure, Shop, Boss | 15¢ | Obsolete...? |
+| ![To the Moon](images/item_to_the_moon.png) | **To the Moon** `to_the_moon` | Hover: spikes, cacti and puddles can't touch you. Unlike flight, rocks, cacti and pits still block your way | Treasure, Shop, Boss | 15¢ | Where your company's valuation will go. Eventually. |
 
 ### Utility, resources and followers
 
@@ -89,6 +93,7 @@ All items and pickups in the game.
 | ![Seed Funding](images/item_seed_funding.png) | **Seed Funding** `seed_funding` | +15 credits | Treasure, Boss, Secret | — | Pre-revenue. Pre-product. Pre-everything. Here, have some money. |
 | ![Rubber Duck](images/item_rubber_duck.png) | **Rubber Duck** `rubber_duck` | A duck follows you and shoots along with you: ⅓ of your damage, about half your fire rate | Treasure, Shop | 15¢ | Never says anything. Still the best senior engineer on the team. |
 | ![Unit Tests](images/item_unit_tests.png) | **Unit Tests** `unit_tests` | 2 orbiting shields that block enemy shots and deal 2 damage to enemies they touch | Treasure, Shop | 15¢ | They test nothing, but they're always around you. Coverage: 100 %. |
+| ![Deep Packet Inspection](images/item_deep_packet_inspection.png) | **Deep Packet Inspection** `deep_packet_inspection` | The boss room (red) and the secret room (blue) show on the minimap from the start of every floor, even undiscovered; off the map window, a dot on the edge points toward them. The secret room still has to be blown open | Treasure, Shop, Boss | 15¢ | We read everything. For quality assurance. |
 
 ### Active items
 

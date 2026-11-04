@@ -112,6 +112,12 @@ Live state is under `BOTA.game` (`.player`, `.room`, `.floor`, `.depth`, `.state
   more), Swap File takes hearts at full health and turns every 2 banked hearts (overflow included) into a container,
   up to 3, then stops taking them; Electron App +2 and speed −0.15, Reserved Instances is shop-only at 30, Graceful
   Degradation +2 with −0.2 damage per missing full heart; without Swap File hearts at full health stay on the floor;
+- the team items: all five are in the treasure, shop and boss pools; Von Neumann Architecture has its exact stats;
+  Sharp Left Turn shots turn exactly once, 90° left in every firing direction, after 140–200 px, at unchanged speed;
+  the Calculator's result only depends on enemies × rooms, stays in its bounds with a small lean to the positive, never
+  draws from `game.rng`, ignores disguised Hallucinations and doesn't change in empty rooms; Deep Packet Inspection
+  marks the boss and secret room without changing `room.seen` and drops a mark once visited; To the Moon ignores
+  spikes, cacti and puddles (checked against a player without it) while cacti, pits and rocks stay solid;
 - the Off-Brand GPU turns about 12 % of shots into duds that deal no damage, and the GPU prices are 30¢ / 20¢;
 - the Forgotten Branches family (see §4):
   - **Stale Branch** appears only on its floor (before floor 8), ages through its leaf stages, speeds up, counts up its counter,
@@ -415,14 +421,15 @@ The previous floor's boss is excluded, and bosses already met count `weight · t
     2. Add `player.bonus`, then every item's `add` and `dynamic().add`.
     3. Multiply by the product of the items' `mult`.
     4. Clamp to `LIMITS`.
-  - **Flags:** booleans are OR'ed (`piercing, homing, spectral, bounce, wobble, split, flying, parallel, showHp`),
+  - **Flags:** booleans are OR'ed (`piercing, homing, spectral, bounce, wobble, split, flying, floating, parallel, showHp,
+    scanMap`),
     `multishot` takes the max, and other numbers are summed (`duck, unitTests`).
   - **Hooks:** `fireHook(name, …)` calls `onPickup, onShoot, onHitEnemy, onRoomEnter, onRoomClear, onHurt, onLethal,
     onOverheal, update` on all passive items and the active item, and catches errors per item.
   - **Shooting:** 4-directional (the last arrow key pressed wins); shots inherit 30 % of the player's velocity.
     `multishot` fires a fan (`spread`, default 12°), or a parallel pair when `parallel` is set and the count is 2.
   - **Slowdowns:** `slowBy(f)` (0 ≤ f < 1) slows the player for exactly one tick, keeping the strongest factor
-    instead of multiplying (no stacking) and ignoring flying players; a source calls it every tick (Overflow Buffer
+    instead of multiplying (no stacking) and ignoring flying and floating players; a source calls it every tick (Overflow Buffer
     puddle). It is applied in `update()` via `slowNext` and is not a stat.
   - **Getting hurt:** `hurt()` sets 1 s of invulnerability (i-frames) and emits `playerHurt`. On lethal damage the
     `onLethal` hooks run, and returning `true` survives. Otherwise `game.onPlayerDeath(killer)` is called.
@@ -434,6 +441,8 @@ The previous floor's boss is excluded, and bosses already met count `weight · t
   - `split` produces 4 children at half damage. Player shots test `room.enemies`; enemy shots test followers with
     `blocksShots` first, then the player (hitbox 0.7 × r).
   - An enemy marked `intangible` lets shots pass through; one marked `invulnerable` absorbs them.
+  - **Sharp turn:** a shot with `turnAt` (px, set by Sharp Left Turn) turns 90° left once at that distance and emits
+    `shotTurn`.
   - **Shot fields:** every tick, before moving, a player shot calls the behaviour hook `bendShot(e, shot, dt, game)`
     of every living enemy in the room that has one (the Dust Daemon's swirl). It may change `vx/vy` and must be
     deterministic. Enemy shots are never bent.
@@ -491,7 +500,8 @@ The previous floor's boss is excluded, and bosses already met count `weight · t
   monospace font, and `B.pixelText(ctx, str, x, y, {scale, color, align, baseline, shadow, outline, alpha})` for the
   5×7 pixel font. The pixel font is uppercase only; unknown characters render as `?`.
 - **HUD (`hud.js`):** hearts, resource counters, the active item with a segmented charge bar, stat readout with ▲/▼
-  after changes, floor name and timer, a minimap (7 × 5 window around the current room), the item banner, the boss
+  after changes, floor name and timer, a minimap (7 × 5 window around the current room; with `flags.scanMap`, unvisited
+  boss and secret rooms are outlined red and blue, or shown as a dot on the window edge, see `HUD.scanMarks`), the item banner, the boss
   bar, and the hold-R ring. While `game.hudGlitch` is set, one area (hearts, active item, stats or minimap) is drawn
   as static or scrambled text; the noise is purely visual.
 - **Screens (`screens.js`):** title, floor card, boss intro VS card, pause (item grid browsed with the arrow keys),
@@ -543,6 +553,7 @@ Payloads usually include `game, x, y` and often `color`.
 | `enemyOverflow` (`r`) | Overflow Buffer (bursts) | audio (`overflowBurst`), effects (splash, glass shards) |
 | `enemyChomp` (`r, ate`), `enemyBounce`, `enemyUnpack` | Honeypot, Rolling Release | audio (`chomp`, `bump`, `unbox`), effects (cyan ring, dust, packing peanuts) |
 | `explosion` (`radius`), `bombPlaced`, `projectileEnd` (`team, impact`) | game, projectile, player | audio, effects |
+| `shotTurn` | projectile (Sharp Left Turn) | effects (small spark) |
 | `activeUsed`, `activeCharged` | player | audio, HUD |
 | `runStart`, `floorEnter` (`depth`), `descend` | game | audio (music), screens |
 | `cycleComplete` (`cycles, score`) | game (`showScoreCard`) | audio (`itemGet`) |
@@ -574,14 +585,15 @@ are game state.
 
 ## 4. Content registries (current state)
 
-**Items:** 50 in total, 45 passive and 5 active (marked `*`). Pools: t = treasure, s = shop, b = boss, s/s = shop+secret.
+**Items:** 55 in total, 50 passive and 5 active (marked `*`). Pools: t = treasure, s = shop, b = boss, s/s = shop+secret.
 ```
 cold_brew mech_keyboard stack_overflow context_window prompt_caching tab_completion max_effort monorepo
 kubernetes blockchain technical_debt temperature few_shot regex chain_of_thought confident_hallucination
 linter dark_mode microservices vibe_coding the_cloud rlhf constitutional_guardrails retry_backoff code_review
 daily_standup lgtm off_by_one yaml_config git_blame rubber_duck unit_tests copy_paste on_call_pager
 garbage_collector seed_funding benchmark_overfitting feature_flag extra_gpu offbrand_gpu long_term_support
-swap_file electron_app reserved_instances graceful_degradation
+swap_file electron_app reserved_instances graceful_degradation calculator deep_packet_inspection von_neumann
+sharp_left_turn to_the_moon
 regenerate_response* stop_generating* rm_rf* compact* ctrl_z*
 ```
 Item conventions:
@@ -590,6 +602,16 @@ Item conventions:
 - A player shot with `damage <= 0` is a dud (Off-Brand GPU): it fizzles on enemies and breakable objects without
   damage, knockback or `onHitEnemy` hooks (`projectile.js`).
 - The default price is 15 (`B.itemPrice(id)`).
+- **Team suggestions** (2026-11-04):
+  - **Calculator** computes enemies × visited rooms of the floor when entering a room with enemies and shows the sum
+    (`4 x 7 = 28`). `B.calcResult(n)` hashes n into small changes to damage, shot speed, speed and fire delay (55 % plus,
+    45 % minus). It's a pure function: no `game.rng`, so seeds are untouched. `ignoreForClear` enemies don't count, or a
+    disguised Hallucination would give itself away.
+  - **Deep Packet Inspection** is display only: it never changes `room.seen`, so a secret room still has to be blown
+    open.
+  - **To the Moon** sets `flags.floating`, which is less than `flying`: no spikes, cacti or puddles, but cacti, rocks and
+    pits stay solid, and the Honeypot and the Memory Hog's reserved memory still work on you. The player is drawn
+    slightly above the shadow.
 - **Heart containers** (2026-11-03): besides RLHF, five items add max health (Long-Term Support, Swap File, Electron
   App, Reserved Instances, Graceful Degradation; see `documents/items.md`). Heart pickups go through `healPickup` in
   `pickup.js`: healing beyond full health is offered to the item hook `onOverheal(player, halves, game)`, and the

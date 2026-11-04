@@ -27,7 +27,7 @@ Secret rooms hide behind cracked walls: Force Push them. There is no ending. Aft
 Score and a choice: start over, or keep going with everything you have. There is only the next floor.
 
 ### What's inside
-- **50 items** (45 passive, 5 active). Examples: Blockchain (*"Does absolutely nothing. Market cap: $4B."*),
+- **55 items** (50 passive, 5 active). Examples: Blockchain (*"Does absolutely nothing. Market cap: $4B."*),
   Few-Shot Examples, Chain of Thought, Rubber Duck, Technical Debt, Regenerate Response, `rm -rf node_modules`.
 - **30 enemies** plus minions: Flaky Test, Merge Conflict, Graphics Glitch, Hallucination (it looks like loot), Zombie Process, Rogue Agent…
   Forgotten Branches has its own family (Stale Branch, Detached HEAD, Cherry-Pick, Orphan Commit), and so do Sandbox

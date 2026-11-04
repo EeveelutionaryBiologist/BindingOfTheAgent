@@ -731,6 +731,9 @@
     }
   });
 
+  // Sharp Left Turn: kleiner Funke am Knick
+  on('shotTurn', (e) => FX.burst(e.game, e.x, e.y, e.color || '#ffffff', 3, 90, { lifeMin: 0.08, lifeMax: 0.16 }));
+
   // Memory Hog: Bombe gibt Speicher frei, Stop-the-World beginnt, Kacheln klappen um
   on('bossFree', (e) => {
     FX.text(e.game, e.x, e.y - 30, 'free()', '#d9ffc9');

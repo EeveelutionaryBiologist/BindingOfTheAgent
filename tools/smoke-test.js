@@ -78,6 +78,10 @@
  *     echte Credits hoechstens coinCap und sie verfallen; "Hostile takeover" bei 40 %; Rueckkauf friert ein und
  *     schickt alle Kugeln zu ihm; Quartal verfehlt -> betaeubt (Schadensfaktor, danach weg), geschlagen -> Ring erst
  *     nach Telegraph und schneller; alle Kugeln 165–260 px/s; je genau ein Boss-Tod
+ *   - Team-Items: Pools; Von Neumann: Werte; Sharp Left Turn: Kurve einmal, 90 Grad links in jeder Richtung, Strecke
+ *     140–200 px; Calculator: reine Funktion, Grenzen, leichtes Plus, Rechnung ohne game.rng, zaehlt keine getarnte
+ *     Hallucination, leere Raeume aendern nichts; Deep Packet Inspection: Boss und Geheimraum markiert, room.seen
+ *     bleibt, besucht = weg; To the Moon: keine Stacheln, Kakteen, Pfuetzen (mit Gegenprobe), Felsen und Gruben solide
  *   - The Memory Hog: nur auf Etage 4–9, auf Dependency Hell haeufiger; in jedem Boss-Layout und beiden Phasen bleibt
  *     bei jeder Reservierung der freie Boden zusammenhaengend, die Obergrenze gewahrt, ein Fluchtweg frei, und es wird
  *     nur freier Boden belegt; Nullen tun nichts, Einsen ein halbes Herz (auch Fliegern, nicht daneben), Ablauf;
@@ -1907,6 +1911,170 @@ const URL = 'file://' + path.join(ROOT, 'index.html').replace(/\\/g, '/') + '?se
   });
   problems.push(...lateProblems);
 
+  // --- Vorschlaege aus dem Team: Calculator, Deep Packet Inspection, Von Neumann, Sharp Left Turn, To the Moon ---
+  const teamItemProblems = await page.evaluate(() => {
+    const out = [];
+    const g = BOTA.game, DT = 1 / 60, T = BOTA.TILES, I = BOTA.ITEMS;
+    const ids = ['calculator', 'deep_packet_inspection', 'von_neumann', 'sharp_left_turn', 'to_the_moon'];
+    for (const id of ids) {
+      const pools = I[id] && I[id].pools;
+      if (!pools || !['treasure', 'shop', 'boss'].every((x) => pools.includes(x))) out.push(id + ': Pools ' + pools);
+    }
+    const d0 = g.depth, p0 = g.player, rng0 = g.rng;
+    const fresh = () => { const pl = new BOTA.Player(p0.x, p0.y); pl.recalcStats(); g.player = pl; return pl; };
+    const ev = [];
+    const off = BOTA.bus.on('shotTurn', () => ev.push('turn'));
+    try {
+      g.enterFloor(4); g.setState('play');
+      BOTA.debug.gotoRoom('boss');
+      for (let i = 0; i < 4; i++) BOTA.debug.killAll();
+      g.room.projectiles.length = 0;
+      g.room.stampLayout(BOTA.LAYOUTS.find((l) => l.id === 'empty'));
+      const clearRoom = () => { g.room.enemies.length = 0; g.room.projectiles.length = 0; };
+
+      // Von Neumann Architecture
+      let pl = fresh();
+      const base = { max: pl.maxHealth, sp: pl.stats.speed, ss: pl.stats.shotSpeed };
+      pl.giveItem('von_neumann', g);
+      if (pl.maxHealth !== base.max + 2 || pl.guardrails !== 2) out.push('Von Neumann: ' + pl.maxHealth + ' HP, ' + pl.guardrails + ' Guardrails');
+      if (Math.abs(pl.stats.speed - base.sp + 0.1) > 1e-6 || Math.abs(pl.stats.shotSpeed - base.ss + 0.1) > 1e-6) out.push('Von Neumann: Tempo ' + pl.stats.speed + ' / ' + pl.stats.shotSpeed);
+
+      // Sharp Left Turn: einmal 90 Grad links, in jede Schussrichtung, erst nach der Strecke; Schaden und Tempo
+      pl = fresh();
+      const dmg0 = pl.stats.damage, shot0 = pl.stats.shotSpeed;
+      pl.giveItem('sharp_left_turn', g);
+      if (Math.abs(pl.stats.damage - dmg0 - 1) > 1e-6 || Math.abs(pl.stats.shotSpeed - shot0 - 0.2) > 1e-6) out.push('Sharp Left Turn: Werte');
+      const dirs = { right: [0, -1], up: [-1, 0], left: [0, 1], down: [1, 0] };
+      const dists = [];
+      for (let n = 0; n < 40; n++) {
+        for (const dir of Object.keys(dirs)) {
+          g.room.projectiles.length = 0;
+          pl.x = 480; pl.y = 288; pl.vx = pl.vy = 0;
+          ev.length = 0;
+          pl.shoot(dir, g);
+          const s = g.room.projectiles[0];
+          const want = s.turnAt;
+          if (!(want >= 140 && want <= 200)) out.push('Sharp Left Turn: Kurve bei ' + want);
+          const sp = s.speed;
+          const v0 = [s.vx / sp, s.vy / sp];
+          let turned = -1, k = 0;
+          while (!s.dead && k++ < 200 && turned < 0) { s.update(DT, g); if (ev.length) turned = s.travel; }
+          if (turned < want || turned > want + sp * DT * 2) out.push('Sharp Left Turn: Kurve nach ' + turned + ' statt ' + want);
+          dists.push(turned);
+          const v1 = [s.vx / s.speed, s.vy / s.speed];
+          if (Math.abs(v1[0] - dirs[dir][0]) > 1e-6 || Math.abs(v1[1] - dirs[dir][1]) > 1e-6) out.push('Sharp Left Turn: ' + dir + ' wird zu ' + v1);
+          if (Math.abs(s.speed - sp) > 1e-6) out.push('Sharp Left Turn: Tempo aendert sich');
+          if (Math.abs(v0[0] * v1[0] + v0[1] * v1[1]) > 1e-6) out.push('Sharp Left Turn: kein rechter Winkel');
+          k = 0;
+          while (!s.dead && k++ < 200) s.update(DT, g);
+          if (ev.length !== 1) out.push('Sharp Left Turn: ' + ev.length + ' Kurven');
+          if (out.length) break;
+        }
+        if (out.length) break;
+      }
+      g.room.projectiles.length = 0;
+
+      // Calculator: Hash-Funktion, Grenzen, leichtes Plus; Rechnung, leere Raeume, Hallucination zaehlt nicht
+      const swing = { damage: 0.66, shotSpeed: 0.165, speed: 0.132, fireDelay: 0.033 };
+      let plus = 0, all = 0, sum = 0;
+      for (let n = 1; n <= 400; n++) {
+        const r = BOTA.calcResult(n);
+        const again = BOTA.calcResult(n);
+        for (const k of Object.keys(swing)) {
+          if (Math.abs(r[k]) > swing[k] + 1e-9) out.push('Calculator: ' + k + ' ' + r[k]);
+          if (r[k] !== again[k]) out.push('Calculator: nicht reproduzierbar');
+          const good = k === 'fireDelay' ? -r[k] : r[k];
+          all++; if (good > 0) plus++;
+          sum += good / swing[k];
+        }
+      }
+      if (plus / all < 0.5 || plus / all > 0.62) out.push('Calculator: Plus-Anteil ' + (plus / all).toFixed(3));
+      if (sum <= 0) out.push('Calculator: kein leichtes Plus');
+      pl = fresh();
+      const st0 = Object.assign({}, pl.stats);
+      pl.giveItem('calculator', g);
+      if (pl.stats.damage !== st0.damage) out.push('Calculator: wirkt schon vor dem ersten Kampf');
+      const rngBefore = g.rng.state !== undefined ? g.rng.state : null;
+      clearRoom();
+      let visited = 0;
+      for (const c of g.floor.cells.values()) if (c.room.visited) visited++;
+      const e1 = BOTA.debug.spawn('bug', 300, 300), e2 = BOTA.debug.spawn('bug', 400, 300);
+      const ghost = BOTA.debug.spawn('bug', 500, 300);
+      ghost.ignoreForClear = true;   // wie eine getarnte Hallucination
+      pl.fireHook('onRoomEnter', g.room, g);
+      const want = BOTA.calcResult(2 * visited);
+      if (Math.abs(pl.stats.damage - (st0.damage + want.damage)) > 1e-6 || Math.abs(pl.stats.speed - (st0.speed + want.speed)) > 1e-6) out.push('Calculator: Werte passen nicht zu 2 x ' + visited);
+      if (rngBefore !== null && g.rng.state !== rngBefore) out.push('Calculator: zieht aus game.rng');
+      const kept = pl.stats.damage;
+      clearRoom();
+      pl.fireHook('onRoomEnter', g.room, g);
+      if (pl.stats.damage !== kept) out.push('Calculator: leerer Raum aendert die Werte');
+
+      // Deep Packet Inspection: beide Raeume markiert, ohne room.seen zu aendern; besucht = weg; Rand-Marke
+      g.enterFloor(6); g.setState('play');
+      pl = fresh();
+      if (BOTA.HUD.scanMarks(g).length) out.push('Deep Packet Inspection: Marken ohne Item');
+      pl.giveItem('deep_packet_inspection', g);
+      const cells = [...g.floor.cells.values()];
+      const bossCell = cells.find((c) => c.type === 'boss'), secretCell = cells.find((c) => c.type === 'secret');
+      const seen0 = cells.map((c) => c.room.seen).join();
+      let marks = BOTA.HUD.scanMarks(g);
+      if (!marks.some((m) => m.type === 'boss' && m.color === '#ff5a5a')) out.push('Deep Packet Inspection: Boss fehlt');
+      if (secretCell && !marks.some((m) => m.type === 'secret' && m.color === '#5fa8ff')) out.push('Deep Packet Inspection: Geheimraum fehlt');
+      if (marks.length !== (secretCell ? 2 : 1)) out.push('Deep Packet Inspection: ' + marks.length + ' Marken');
+      if (cells.map((c) => c.room.seen).join() !== seen0) out.push('Deep Packet Inspection: aendert room.seen');
+      if (marks.some((m) => m.off !== (m.gx < 0 || m.gy < 0 || m.gx >= 7 || m.gy >= 5))) out.push('Deep Packet Inspection: Fensterlage falsch');
+      const cvs = document.createElement('canvas').getContext('2d');
+      BOTA.HUD.draw(cvs, g);   // darf mit Marken nicht werfen
+      bossCell.room.visited = true;
+      marks = BOTA.HUD.scanMarks(g);
+      if (marks.some((m) => m.type === 'boss')) out.push('Deep Packet Inspection: Marke bleibt nach dem Besuch');
+      bossCell.room.visited = false;
+
+      // To the Moon: Stacheln, Kakteen, Pfuetzen nichts; Felsen und Gruben bleiben solide; kein Flug
+      g.enterFloor(4); g.setState('play');
+      BOTA.debug.gotoRoom('boss');
+      for (let i = 0; i < 4; i++) BOTA.debug.killAll();
+      const room = g.room;
+      room.stampLayout(BOTA.LAYOUTS.find((l) => l.id === 'empty'));
+      room.setTile(5, 3, T.SPIKES); room.setTile(7, 3, T.CACTUS); room.setTile(9, 3, T.PIT); room.setTile(11, 3, T.ROCK);
+      const onTile = (pl2, c, r) => { const q = room.tileCenter(c, r); pl2.x = q.x; pl2.y = q.y - pl2.r * 0.5; pl2.invuln = 0; };
+      const cactusSide = (pl2) => { const q = room.tileCenter(7, 3); pl2.x = q.x - 32 - pl2.r; pl2.y = q.y; pl2.invuln = 0; };
+      const tickPlay = (n) => { for (let i = 0; i < n; i++) g.update(DT); };
+      // Gegenprobe ohne Item
+      pl = fresh(); g.followers.length = 0;
+      const h0 = pl.health;
+      onTile(pl, 5, 3); tickPlay(1);
+      if (pl.health !== h0 - 1) out.push('To the Moon: Stacheln treffen ohne Item nicht (Test ungueltig)');
+      pl.health = h0; cactusSide(pl); tickPlay(1);
+      if (pl.health !== h0 - 1) out.push('To the Moon: Kaktus trifft ohne Item nicht (Test ungueltig)');
+      pl = fresh();
+      pl.giveItem('to_the_moon', g);
+      if (!pl.floating || pl.flying) out.push('To the Moon: floating ' + pl.floating + ', flying ' + pl.flying);
+      const h1 = pl.health;
+      onTile(pl, 5, 3); tickPlay(1);
+      cactusSide(pl); tickPlay(1);
+      if (pl.health !== h1) out.push('To the Moon: Stacheln oder Kaktus treffen');
+      pl.slowNext = 1; pl.slowBy(0.6);
+      if (pl.slowNext !== 1) out.push('To the Moon: Pfuetze bremst');
+      for (const [c, name] of [[7, 'Kaktus'], [9, 'Grube'], [11, 'Fels']]) {
+        const q = room.tileCenter(c, 3);
+        pl.x = q.x - 60; pl.y = q.y; pl.vx = 240; pl.vy = 0;
+        for (let i = 0; i < 40; i++) pl.moveAndCollide(DT, room);
+        if (pl.x > q.x - 32) out.push('To the Moon: faehrt durch ' + name);
+      }
+    } finally {
+      off();
+      g.player = p0;
+      g.rng = rng0;
+      for (let i = 0; i < 4; i++) BOTA.debug.killAll();
+      g.room.projectiles.length = 0;
+      g.enterFloor(d0); g.setState('play');
+    }
+    return out;
+  });
+  problems.push(...teamItemProblems);
+
   // --- The Memory Hog (Etage 4–9): reservierter Boden, Page Fault, Quill Dump, Stop-the-World ---
   const hogProblems = await page.evaluate(() => {
     const out = [];
@@ -2346,6 +2514,7 @@ const URL = 'file://' + path.join(ROOT, 'index.html').replace(/\\/g, '/') + '?se
         BOTA.input.moveVector = () => ({ x: 1, y: 0 });
         BOTA.input.shootDir = () => null;
         p.flying = false;                    // frueher verteilte Items (The Cloud) lassen ihn sonst schweben
+        p.floating = false;                  // dito To the Moon (kommt beim naechsten recalcStats zurueck)
         // Endgeschwindigkeit nach 40 Ticks Laufen an Position (x, y), Pfuetze(n) laufen mit
         const speedAt = (x, y, extra) => {
           p.vx = 0; p.vy = 0;
