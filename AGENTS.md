@@ -265,6 +265,8 @@ Live state is under `BOTA.game` (`.player`, `.room`, `.floor`, `.depth`, `.state
   best; only today's daily seed counts, at death and on the score card, and `game.rng` stays untouched;
 - same seed: `T` only after the lockout, on the post-mortem and the score card, with the same floor and a fresh score; `S`
   does nothing there and `R` changes the seed;
+- `game.runLog` records floors, items, secret rooms, bosses, side quests and the death line, holds at most 40 entries,
+  empties on a new run, survives "keep going" and never draws from `game.rng`;
 - the door transition, special rooms, pause screen and death screen work.
 
 Screenshots go to `tools/out/` (scratch; don't commit or ship). One-time setup without admin rights:
@@ -374,7 +376,7 @@ game.score · game.cycles`
 - `spawnPickup(type, x, y, opts?, room?)`, `spawnPedestal(itemId, x, y, {price}?, room?)`
 - `explode(x, y, radius, damage, source)`: damages enemies and the player (2 halves), breaks rocks and cacti (8 % loot), reveals
   hidden doors, flings pickups, shakes the screen, emits `explosion`
-- `addScore(kind, n?)` · `scoreTotal()` (Final Score, §4)
+- `addScore(kind, n?)` · `scoreTotal()` (Final Score, §4) · `recordDaily()` · `logRun(text)` (`game.runLog`, §4)
 - `shake(intensity, seconds)` · `banner(title, subtitle)` · `freezeEnemies(seconds)` · `rollItem(pool)` ·
   `nearestFreePos(x, y, room?)` · `nextFloor()` · `teleport(room)` · `pipeWarp(pipe)` · `glitchHud(seconds)` (scrambles one HUD area,
   stored in `game.hudGlitch`; a new call restarts the timer instead of stacking)
@@ -580,8 +582,9 @@ The previous floor's boss is excluded, and bosses already met count `weight · t
   boss and secret rooms are outlined red and blue, or shown as a dot on the window edge, see `HUD.scanMarks`), the item banner, the boss
   bar, and the hold-R ring. While `game.hudGlitch` is set, one area (hearts, active item, stats or minimap) is drawn
   as static or scrambled text; the noise is purely visual.
-- **Screens (`screens.js`):** title, floor card, boss intro VS card, pause (item grid browsed with the arrow keys),
-  the death "POST-MORTEM" (with final score and cycles), and the end-of-cycle score card.
+- **Screens (`screens.js`):** title (with the seed dialog), floor card, boss intro VS card, pause (item grid browsed
+  with the arrow keys), the death "POST-MORTEM" (final score, cycles, and the last 6 `runLog` entries as an incident
+  timeline; long text truncates via `clipText`), and the end-of-cycle score card.
   - Note: the pause screen registers its **own `window` keydown listener** for arrow-key browsing. It's display only,
     and it's the one keyboard listener outside `input.js`. `input.js` also has a `paste` listener on window that
     ignores everything outside `textMode`.
@@ -639,7 +642,8 @@ Payloads usually include `game, x, y` and often `color`.
 | `cycleComplete` (`cycles, score`) | game (`showScoreCard`) | audio (`itemGet`) |
 
 Rule: audio and effects **only listen**. Game logic never calls them directly, except `game.shake`/`banner`, which
-are game state.
+are game state. `game.js` listens too, for `game.runLog` only (block at the end of the file). `enemyWindup` also carries
+`sound` for the floor 8–10 enemies: `mirrorPing` (Cosine Similarity), `glitch` (Heisenbug), `gurgle` (Bit Bucket).
 
 ### 3.12 Audio (`core/audio.js`) and effects (`entities/effects.js`)
 - **Audio:** 89 synthesized SFX in total, plus a looping rain bed (two filtered noise layers) that `music.start` switches
@@ -1035,6 +1039,10 @@ checked when the run ends, so a run crossing midnight doesn't. Only credits from
 `B.BOSSES`, `proxy` or `ignoreForClear` parts and minions with `state.owner` (boss-refilled, so they can't be farmed);
 keep that in mind when a new enemy respawns things. Bosses and rooms count in `onRoomClear`, so the Swarm's four
 entities score once. `game.cycles` counts finished cycles and resets with the run.
+
+**Incident timeline:** `game.runLog` holds `{t, text}` entries (at most 40, reset by `newRun`, kept through "keep going"),
+filled by bus listeners at the end of `game.js`: `Shift started:`, `Paged: entered`, `Deployed:`, `Found an undocumented
+endpoint`, `Accepted the Terms of Service, unread`, `Resolved:`, `Side quest closed:`, `Outage: lost to`.
 
 **Pickups:** `heart_half heart guardrail credit credit5 push push2 approval chest chest_locked readme` (`readme` is never
 a random drop; see §3.6 step 8).

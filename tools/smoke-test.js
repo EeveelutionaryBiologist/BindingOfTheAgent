@@ -134,6 +134,8 @@
  *   - Daily Run: D startet DAILY-YYYYMMDD; Storage verwirft manipulierte Werte; neuer Tag setzt den Bestwert zurueck;
  *     nur der heutige Daily-Seed zaehlt (Tod und Score-Karte); game.rng bleibt unberuehrt
  *   - Derselbe Seed: T nach der Sperre im Post-Mortem und auf der Score-Karte, S und zu fruehes T wirken nicht
+ *   - Zeitleiste (game.runLog): Etagen, Items, Geheimraeume, Bosse, Zwischenbosse, Tod; hoechstens 40 Eintraege, neuer
+ *     Run leert sie, Weitermachen behaelt sie, kein game.rng
  *   - Spezialraeume, Pause- und Todesbildschirm rendern
  * Screenshots landen in tools/out/ (nicht einchecken).
  *
@@ -5633,6 +5635,7 @@ const URL = 'file://' + path.join(ROOT, 'index.html').replace(/\\/g, '/') + '?se
   problems.push(...await page.evaluate(() => {
     const g = BOTA.game, p = g.player, out = [];
     if (p.health !== 4) out.push('Terms: Mit der Tastatur nicht unterschrieben, health ' + p.health);
+    if (!g.runLog.some((l) => l.text.startsWith('Accepted the Terms'))) out.push('Terms: Unterschrift fehlt in der Zeitleiste');
     if (g.room.pickups.some((x) => x instanceof BOTA.TermsNotice)) out.push('Terms: Vertrag bleibt im Raum');
     BOTA.debug.god(false);
     return out;
@@ -5818,8 +5821,8 @@ const URL = 'file://' + path.join(ROOT, 'index.html').replace(/\\/g, '/') + '?se
     await rtap('KeyS');
     if (await stateOf() !== 'dead') problems.push('S beendet das Post-Mortem');
     await rtap('KeyT');
-    const retry = await rp.evaluate(() => { const g = BOTA.game; return { seed: g.seed, s: g.state, score: g.scoreTotal(), depth: g.depth }; });
-    if (retry.seed !== 'RETRY-1' || retry.s !== 'floorCard' || retry.score !== 0 || retry.depth !== 1) problems.push('Derselbe Seed: ' + JSON.stringify(retry));
+    const retry = await rp.evaluate(() => { const g = BOTA.game; return { seed: g.seed, s: g.state, score: g.scoreTotal(), depth: g.depth, log: g.runLog.length }; });
+    if (retry.seed !== 'RETRY-1' || retry.s !== 'floorCard' || retry.score !== 0 || retry.depth !== 1 || retry.log !== 1) problems.push('Derselbe Seed: ' + JSON.stringify(retry));
     if (await fingerprint() !== retryFloor) problems.push('Derselbe Seed ergibt eine andere Etage');
     await dieNow();
     await rp.waitForTimeout(900);
@@ -5831,6 +5834,76 @@ const URL = 'file://' + path.join(ROOT, 'index.html').replace(/\\/g, '/') + '?se
     await rp.waitForTimeout(900);
     await rtap('KeyT');
     problems.push(...await rp.evaluate(() => { const g = BOTA.game; return g.seed === 'RETRY-2' && g.state === 'floorCard' && g.cycles === 0 ? [] : ['T auf der Score-Karte: ' + g.seed + ', ' + g.state]; }));
+
+    // Zeitleiste: echte Ereignisse aus dem Spiel
+    await rp.evaluate(() => {
+      const g = BOTA.game;
+      g.newRun('LOG-1'); g.setState('play'); BOTA.debug.god(true);
+      g.runStats.time = 65;
+      g.player.giveItem('cold_brew', g);
+      BOTA.bus.emit('secretFound', { game: g });
+      BOTA.bus.emit('itemGet', { id: 'cold_brew', def: BOTA.ITEMS.cold_brew });   // ohne Spiel: kein Eintrag, kein Fehler
+      g.enterFloor(2); g.setState('play');
+      BOTA.debug.gotoRoom('boss'); BOTA.debug.killAll();
+    });
+    await rp.waitForTimeout(400);
+    await rp.evaluate(() => {
+      const g = BOTA.game;
+      g.enterFloor(8); g.setState('play');
+      BOTA.debug.gotoRoom('encounter'); BOTA.debug.killAll();
+    });
+    await rp.waitForTimeout(400);
+    await rp.evaluate(() => BOTA.debug.killAll());
+    await rp.waitForTimeout(300);
+    problems.push(...await rp.evaluate(() => {
+      const g = BOTA.game, B = BOTA, log = g.runLog, out = [];
+      const has = (re) => log.some((e) => re.test(e.text));
+      if (log[0].text !== 'Shift started: The Backlog' || log[0].t !== 0) out.push('Zeitleiste, erster Eintrag: ' + JSON.stringify(log[0]));
+      if (!log.some((e) => e.text === 'Deployed: ' + B.ITEMS.cold_brew.name && e.t === 65)) out.push('Zeitleiste ohne Item oder Zeit');
+      if (log.filter((e) => e.text.startsWith('Deployed')).length !== 1) out.push('Item ohne Spiel landet in der Zeitleiste');
+      if (!has(/undocumented endpoint/)) out.push('Zeitleiste ohne Geheimraum');
+      if (!has(/^Paged: entered Legacy Codebase$/)) out.push('Zeitleiste ohne Etage');
+      if (!has(/^Resolved: /)) out.push('Zeitleiste ohne Boss');
+      if (!has(/^Side quest closed: /)) out.push('Zeitleiste ohne Zwischenboss');
+      const rng = g.rng.state, n = log.length;
+      g.logRun('noise');
+      B.bus.emit('secretFound', { game: g });
+      if (g.rng.state !== rng || log.length !== n + 2) out.push('Zeitleiste zieht aus game.rng oder zaehlt falsch');
+      for (let i = 0; i < 100; i++) g.logRun('noise ' + i);
+      if (log.length !== 40 || log[39].text !== 'noise 99') out.push('Zeitleiste, Deckel: ' + log.length);
+      g.setState('play');
+      g.showScoreCard();
+      return out;
+    }));
+    await rp.waitForTimeout(900);
+    await rtap('Enter');
+    problems.push(...await rp.evaluate(() => {
+      const g = BOTA.game, log = g.runLog;
+      return g.depth === 9 && log.length === 40 && log[38].text === 'noise 99' && /^Paged: entered Undefined Behavior$/.test(log[39].text)
+        ? [] : ['Weitermachen behaelt die Zeitleiste nicht: Tiefe ' + g.depth + ', ' + JSON.stringify(log.slice(-2))];
+    }));
+    await rp.evaluate(() => {
+      const g = BOTA.game;
+      g.player.god = false;
+      for (const id of Object.keys(BOTA.ITEMS).filter((k) => !BOTA.ITEMS[k].active && !BOTA.ITEMS[k].onLethal).slice(0, 30)) g.player.giveItem(id, g);
+      g.runStats.time = 3725;
+      g.logRun('Side quest closed: a name long enough that it has to be cut off before it reaches the edge of the paper');
+    });
+    await rp.evaluate(() => {
+      const g = BOTA.game, p = g.player;
+      g.setState('play');
+      p.god = false; p.invuln = 0; p.guardrails = 0; p.health = 1;
+      p.fireHook = () => [];   // keine Rettung durch Items, damit der Tod sicher eintritt
+      p.hurt(2, 'an extremely long-winded enemy whose name is mostly a stack trace from a forgotten logging module', g);
+    });
+    await rp.waitForTimeout(1200);
+    await rshot('20-post-mortem-long');
+    problems.push(...await rp.evaluate(() => {
+      const g = BOTA.game, last = g.runLog[g.runLog.length - 1];
+      return g.state === 'dead' && /^Outage: lost to an extremely/.test(last.text) && last.t === g.runStats.time ? [] : ['Zeitleiste ohne Todeszeile: ' + JSON.stringify(last) + ', ' + g.state];
+    }));
+    await rtap('KeyR');
+    if (await rp.evaluate(() => BOTA.game.runLog.length) !== 1) problems.push('Neuer Run leert die Zeitleiste nicht');
 
     await rp.close();
   }

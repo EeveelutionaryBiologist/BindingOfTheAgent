@@ -53,6 +53,26 @@
     return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0');
   }
 
+  /** Spielzeit wie in einem Vorfallsbericht: 00:03:12 */
+  function fmtClock(sec) {
+    const s = Math.floor(sec || 0);
+    const two = (n) => String(n).padStart(2, '0');
+    return two(Math.floor(s / 3600)) + ':' + two(Math.floor(s / 60) % 60) + ':' + two(s % 60);
+  }
+
+  /** Kuerzt Text mit "…" auf maxWidth; anders als maxWidth von fillText staucht das die Schrift nicht zusammen */
+  function clipText(ctx, text, maxWidth, size, bold) {
+    ctx.save();
+    ctx.font = (bold ? 'bold ' : '') + size + 'px ' + B.FONT;
+    let s = String(text || '');
+    if (ctx.measureText(s).width > maxWidth) {
+      while (s && ctx.measureText(s + '…').width > maxWidth) s = s.slice(0, -1);
+      s = s.trimEnd() + '…';
+    }
+    ctx.restore();
+    return s;
+  }
+
   // ===========================================================================
   // Titel
   // ===========================================================================
@@ -479,9 +499,9 @@
     const p = game.player;
 
     // Papier gleitet von unten herein
-    const pw = 660, ph = 488;
+    const pw = 660, ph = 604;   // so hoch, dass die Zeitleiste unter die Items passt und die Seite noch ganz sichtbar ist
     const px = W / 2 - pw / 2;
-    const py = H / 2 - ph / 2 + 6 + (1 - easeOut((age - 0.15) / 0.5)) * (H * 0.8);
+    const py = H / 2 - ph / 2 + (1 - easeOut((age - 0.15) / 0.5)) * (H * 0.8);
     if (age < 0.15) return;
     ctx.save();
     ctx.translate(W / 2, py + ph / 2);
@@ -525,7 +545,7 @@
     fields.forEach(([k, v, col], i) => {
       const y = py + 164 + i * 21;
       B.text(ctx, k + ':', px + 86, y, { size: 15, color: '#7a6a5c', shadow: false, bold: false });
-      B.text(ctx, v, px + 236, y, { size: 15, color: col, shadow: false, maxWidth: pw - 260 });
+      B.text(ctx, clipText(ctx, v, pw - 260, 15, true), px + 236, y, { size: 15, color: col, shadow: false });
     });
 
     // Items
@@ -541,8 +561,20 @@
       itemIcon(ctx, id, x, y, 30);
     });
 
+    // Zeitleiste wie in einem echten Vorfallsbericht: die letzten Eintraege aus game.runLog, der Tod steht unten
+    const log = game.runLog || [];
+    const shown = log.slice(-6);
+    const ty = py + 426;
+    B.text(ctx, 'Timeline' + (log.length > shown.length ? ' (last ' + shown.length + ' events):' : ':'), px + 86, ty, { size: 15, color: '#7a6a5c', shadow: false, bold: false });
+    shown.forEach((ev, i) => {
+      const y = ty + 21 + i * 19;
+      const last = i === shown.length - 1;
+      B.text(ctx, fmtClock(ev.t), px + 86, y, { size: 13, color: '#7a6a5c', shadow: false, bold: false });
+      B.text(ctx, clipText(ctx, ev.text, pw - 190, 14, last), px + 166, y, { size: 14, color: last ? '#a8261a' : ink, shadow: false, bold: last });
+    });
+
     // Fusszeile
-    B.text(ctx, 'seed ' + game.seed, px + 86, py + ph - 34, { size: 13, color: '#7a6a5c', shadow: false, bold: false });
+    B.text(ctx, clipText(ctx, 'seed ' + game.seed, 230, 13, false), px + 86, py + ph - 30, { size: 13, color: '#7a6a5c', shadow: false, bold: false });
     if (age > 0.8) {
       const blink = 0.6 + 0.4 * Math.sin(age * 5);
       B.pixelText(ctx, 'R: NEW RUN  T: SAME SEED', px + pw - 24, py + ph - 34, { scale: 2, align: 'right', color: '#8a2a1e', shadow: false, alpha: blink });
