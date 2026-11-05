@@ -109,13 +109,13 @@
  *   - Stack Trace: auf Tiefe 1–7 nur auf Legacy Codebase; Telegraph vor jedem Stich; Stachel 2, Papier 1, Einfalten
  *     harmlos; Exception nur jenseits der Reichweite (165–260 px/s), verpufft mit ihm; Waende kuerzen den Schwanz;
  *     Stack-Abbau 5 -> 4 -> 3; killAll laesst nichts zurueck
- *   - Overflow Buffer: nie vor Etage 8, auf The Context Limit haeufiger; Pegel steigt (mit Treffern schneller), Platzen
+ *   - Overflow Buffer: nie vor Etage 11, auf The Context Limit haeufiger; Pegel steigt (mit Treffern schneller), Platzen
  *     nach vollem Telegraph in 8 Koralle-Tropfen (165–260 px/s), Pfuetze bremst x0.6 (nur innen, nicht gestapelt/fliegend)
- *   - Summarizer (The Context Limit): nie vor Etage 8, auf Etage 11 staerker gewichtet, max. 1 pro Raum; haelt
+ *   - Summarizer (The Context Limit): nie vor Etage 11, dort staerker gewichtet als danach, max. 1 pro Raum; haelt
  *     Abstand; volle Telegraph-Dauer vor jedem Verschmelzen; Treffer bzw. totes Ziel bricht ab; HP = Summe, Max-HP
  *     und Radius wachsen (gedeckelt), der Geschluckte verschwindet ohne enemyDeath/Kill, Raum wird danach clear;
  *     ungeeignete Gegner nie gewaehlt; hoechstens 2x zusammengefasst; killAll laesst nichts zurueck
- *   - Lost in the Middle (Context-Familie): nie vor Etage 8, auf Etage 11 haeufiger als auf anderen Etagen ab 8;
+ *   - Lost in the Middle (Context-Familie): nie vor Etage 11, dort haeufiger als auf den Etagen danach;
  *     Zone = mittleres Drittel der Innenbreite; dort intangible (Schuss fliegt durch, hurt wirkungslos), kein
  *     Kontaktschaden, nie ein Schuss; am Rand fest, nimmt Schaden, Kontakt 1; jede Salve nach vollem Telegraph mit
  *     genau 3 korallenroten Schuessen (165–260 px/s), abgebrochen in der Mitte; Spieler 30 s in der Mitte -> er wird
@@ -2912,7 +2912,7 @@ const URL = 'file://' + path.join(ROOT, 'index.html').replace(/\\/g, '/') + '?se
   }));
 
   // ---- Context-Familie: Slot 1 (Overflow Buffer) ----
-  // --- Overflow Buffer (Context-Familie, ab Etage 8): nie vor Etage 8, auf The Context Limit haeufiger als auf
+  // --- Overflow Buffer (Context-Familie, ab Etage 11): nie vor Etage 11, auf The Context Limit haeufiger als auf
   //     anderen spaeten Etagen; Pegel steigt von selbst und schneller mit Treffern; Platzen erst nach vollem
   //     Telegraph (Strahlen = Schussrichtungen); 8 Koralle-Tropfen mit 165–260 px/s; Pfuetze bremst laufende Spieler
   //     (Faktor, nicht gestapelt, nicht ausserhalb, nicht fliegend, nicht nach dem Versickern); danach leer von vorn;
@@ -2922,9 +2922,9 @@ const URL = 'file://' + path.join(ROOT, 'index.html').replace(/\\/g, '/') + '?se
     const g = BOTA.game, AI = BOTA.AI, DT = 1 / 60, def = BOTA.ENEMIES.overflow_buffer;
     const CX = BOTA.FLOOR_THEMES.findIndex((t) => t.key === 'context') + 1;
     if (!def || !BOTA.ENEMIES.overflow_puddle) { out.push('Overflow Buffer: Definition fehlt'); return out; }
-    if (def.family !== 'context' || (def.themeOnly || []).join() !== 'context' || def.minFloor !== 8) out.push('Overflow Buffer: Familie/Thema/minFloor falsch');
+    if (def.family !== 'context' || (def.themeOnly || []).join() !== 'context' || def.minFloor !== 11) out.push('Overflow Buffer: Familie/Thema/minFloor falsch');
     if (BOTA.spriteFrameCount('enemy_overflow_buffer') !== 2) out.push('Overflow Buffer: Sprite ohne 2 Frames');
-    // 1) Wuerfeln: nie vor Etage 8; auf The Context Limit haeufiger als auf einer anderen Etage >= 8
+    // 1) Wuerfeln: nie vor Etage 11; auf The Context Limit haeufiger als auf einer Etage danach
     const count = (d, n) => {
       let c = 0;
       for (let i = 0; i < n; i++) {
@@ -2935,8 +2935,8 @@ const URL = 'file://' + path.join(ROOT, 'index.html').replace(/\\/g, '/') + '?se
       }
       return c;
     };
-    for (let d = 1; d <= 7; d++) if (count(d, 150)) out.push('Overflow Buffer: taucht auf Etage ' + d + ' auf');
-    const other = CX === 10 ? 9 : 10;
+    for (let d = 1; d < CX; d++) if (count(d, 150)) out.push('Overflow Buffer: taucht auf Etage ' + d + ' auf');
+    const other = CX + 1;
     const nCx = count(CX, 400), nOther = count(other, 400);
     if (!nCx) out.push('Overflow Buffer: taucht auf The Context Limit (Etage ' + CX + ') nie auf');
     if (!(nCx > nOther)) out.push('Overflow Buffer: auf Etage ' + CX + ' nicht haeufiger als auf Etage ' + other + ' (' + nCx + ' / ' + nOther + ')');
@@ -3123,7 +3123,7 @@ const URL = 'file://' + path.join(ROOT, 'index.html').replace(/\\/g, '/') + '?se
   // ---- Ende Slot 1 ----
 
   // ---- Context-Familie: Slot 2 (Summarizer) ----
-  // --- Summarizer (The Context Limit): nie vor Etage 8, auf Etage 11 haeufiger als auf anderen Etagen >= 8,
+  // --- Summarizer (The Context Limit): nie vor Etage 11, dort haeufiger als auf den Etagen danach,
   //     hoechstens 1 pro Raum; haelt Abstand; Telegraph (Linie, enemyWindup) volle Dauer vor jedem Verschmelzen;
   //     Treffer im Telegraph bricht ab (verwirrt), totes Ziel bricht ab; Verschmelzen: HP = Summe, Max-HP waechst,
   //     Radius waechst gedeckelt, der andere verschwindet ohne enemyDeath/Kill; Raum clear danach; ungeeignete
@@ -3133,12 +3133,11 @@ const URL = 'file://' + path.join(ROOT, 'index.html').replace(/\\/g, '/') + '?se
     const g = BOTA.game, E = BOTA.ENEMIES, DT = 1 / 60, BH = BOTA.BEHAVIORS.summarizer;
     const d0 = g.depth;
     const CL = BOTA.FLOOR_THEMES.findIndex((t) => t.key === 'context') + 1;
-    // 1) Spawn-Regeln: nie vor Etage 8; auf The Context Limit staerker gewichtet; hoechstens 1 pro Raum
-    for (let d = 1; d <= 7; d++) {
-      if (BOTA.enemyWeightAt(E.summarizer, d) > 0) out.push('Summarizer: Gewicht > 0 auf Etage ' + d);
+    // 1) Spawn-Regeln: nie vor Etage 11; auf The Context Limit staerker gewichtet; hoechstens 1 pro Raum
+    for (let d = 1; d < CL; d++) {
       for (let i = 0; i < 150; i++) if (BOTA.rollRoomEnemies(new BOTA.RNG(BOTA.hashString('summ' + d + ':' + i)), d).includes('summarizer')) { out.push('Summarizer auf Etage ' + d); break; }
     }
-    const other = CL === 10 ? 9 : 10;
+    const other = CL + 1;
     const wCL = BOTA.enemyWeightAt(E.summarizer, CL), wOther = BOTA.enemyWeightAt(E.summarizer, other);
     if (!(wCL > wOther && wOther > 0)) out.push('Summarizer: Gewicht ' + wCL + ' (Etage ' + CL + ') vs. ' + wOther + ' (Etage ' + other + ')');
     let nCL = 0, nOther = 0;
@@ -3318,7 +3317,7 @@ const URL = 'file://' + path.join(ROOT, 'index.html').replace(/\\/g, '/') + '?se
   // ---- Ende Slot 2 ----
 
   // ---- Context-Familie: Slot 3 (Lost in the Middle) ----
-  // --- Lost in the Middle (Context-Familie, ab Etage 8): fest am Rand, Geist in der Mitte, Anti-Stillstand ---
+  // --- Lost in the Middle (Context-Familie, ab Etage 11): fest am Rand, Geist in der Mitte, Anti-Stillstand ---
   const lostProblems = await page.evaluate(() => {
     const out = [];
     const g = BOTA.game, AI = BOTA.AI, E = BOTA.ENEMIES, DT = 1 / 60, I = BOTA.C.INNER;
@@ -3329,8 +3328,8 @@ const URL = 'file://' + path.join(ROOT, 'index.html').replace(/\\/g, '/') + '?se
     // 0) Zone = mittleres Drittel der Innenraum-Breite
     const W = I.x1 - I.x0;
     if (Math.abs(Z.x0 - (I.x0 + W / 3)) > 1e-6 || Math.abs(Z.x1 - (I.x0 + 2 * W / 3)) > 1e-6) out.push('Lost in the Middle: Zone ' + Z.x0 + '–' + Z.x1);
-    // 1) Spawn: nie vor Etage 8; auf The Context Limit (11) dabei und schwerer gewichtet als auf anderen Etagen ab 8
-    for (let d = 1; d <= 7; d++) {
+    // 1) Spawn: nie vor Etage 11; auf The Context Limit dabei und schwerer gewichtet als auf den Etagen danach
+    for (let d = 1; d < CX; d++) {
       for (let i = 0; i < 300; i++) {
         if (BOTA.rollRoomEnemies(new BOTA.RNG(BOTA.hashString('lost' + d + ':' + i)), d).includes('lost_in_the_middle')) { out.push('Lost in the Middle auf Etage ' + d); break; }
       }
@@ -3343,7 +3342,7 @@ const URL = 'file://' + path.join(ROOT, 'index.html').replace(/\\/g, '/') + '?se
       if (n > def.maxPerRoom) out.push('Lost in the Middle: ' + n + ' in einem Raum');
     }
     if (!seen) out.push('Lost in the Middle: taucht auf Etage ' + CX + ' nie auf');
-    for (const d of [8, 10, 12, 15]) {
+    for (const d of [12, 15]) {
       if (!(BOTA.enemyWeightAt(def, CX) > BOTA.enemyWeightAt(def, d))) out.push('Lost in the Middle: Etage ' + CX + ' nicht schwerer als Etage ' + d);
     }
     if (AI.shotSpeed({ depth: 99 }, P.shotSpeed) > 260 || AI.shotSpeed({ depth: 1 }, P.shotSpeed) < 165) out.push('Lost in the Middle: Schusstempo ausserhalb 165–260');
@@ -3622,17 +3621,22 @@ const URL = 'file://' + path.join(ROOT, 'index.html').replace(/\\/g, '/') + '?se
     if (BOTA.themeWeight(E.bug, 'latent', 16) !== 1) out.push('Kakophonie: Etage 16 nicht voll gemischt');
     // Familien tauchen ab Etage 8 auf fremden Etagen auf, immer haeufiger
     const fam = ['stale_branch', 'detached_head', 'cherry_pick', 'spinlock', 'rootkit'];
+    // Alle Familien zusammen, jeweils fern ihrer Heimat: eine feste Auswahl sagt nichts, weil spaetere Familien
+    // (The Context Limit ab Etage 11) den Pool vergroessern
+    const themed = Object.keys(E).filter((id) => E[id].spawn !== false && E[id].themeOnly);
     const famShare = (d) => {
       let n = 0, all = 0;
+      const th = BOTA.themeKeyAt(d);
       for (let i = 0; i < 600; i++) {
         const l = BOTA.rollRoomEnemies(new BOTA.RNG(BOTA.hashString('mix' + d + ':' + i)), d);
-        all += l.length; n += l.filter((id) => fam.includes(id)).length;
+        all += l.length; n += l.filter((id) => themed.includes(id) && BOTA.themeFactor(E[id], th) < 1).length;
       }
       return n / Math.max(1, all);
     };
     const seen = new Set();
     for (const d of [8, 9, 10]) for (let i = 0; i < 600; i++) for (const id of BOTA.rollRoomEnemies(new BOTA.RNG(BOTA.hashString('fam' + d + ':' + i)), d)) seen.add(id);
     for (const id of fam.concat(['orphan_commit'])) if (!seen.has(id)) out.push('Kakophonie: ' + id + ' fehlt auf Etage 8–10');
+    for (const id of ['overflow_buffer', 'summarizer', 'lost_in_the_middle']) if (seen.has(id)) out.push('Kakophonie: ' + id + ' schon auf Etage 8–10');
     const s8 = famShare(8), s12 = famShare(12);
     if (!(s8 > 0.05 && s12 > s8)) out.push('Kakophonie: Familien-Anteil ' + s8.toFixed(3) + ' (8) / ' + s12.toFixed(3) + ' (12)');
     // Octopus Merge sickert ab 8 mit gedeckeltem Gewicht (3 x mix) in fremde Etagen

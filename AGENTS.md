@@ -110,7 +110,7 @@ Live state is under `BOTA.game` (`.player`, `.room`, `.floor`, `.depth`, `.state
 - floor rosters (§4): on floors 1–7 the generic enemies at home match the roster table in the test, enemies away from
   home count exactly `AWAY`, rooms still hold ≥ 3 enemies on average, and the away share stays at 5–45 %;
 - the cacophony: `mixAt` is 0 before floor 8, 0.25 on 8, +0.1 per floor, 1 from 16; `themeWeight` without a depth
-  is unchanged; every family member (incl. the Orphan Commit) appears on floors 8–10 and gets more common by floor 12;
+  is unchanged; every family member (incl. the Orphan Commit, but not the Context Limit family) appears on floors 8–10, and families away from home get more common by floor 12;
   the Octopus Merge leaks at weight 3 × mix; floors stay deterministic and encounters don't touch the floor RNG;
 - side quests: none before floor 8, exactly 1 on floors 8–9, 1–2 (about half 2) from 10; only combat rooms, almost
   never next to the start, an open `special` arena with a free centre, no props, no normal enemies, never the floor
@@ -153,8 +153,8 @@ Live state is under `BOTA.game` (`.player`, `.room`, `.floor`, `.depth`, `.state
   after its telegraph with a ring of 8 shots, and a bomb flushes it out without the ring;
 - the **Rogue Agent** never rolls before floor 7, keeps its distance, and every volley (two 3-shot fans or three
   single shots) comes after its green glow at 165–260 px/s;
-- the Context Limit family never rolls before floor 8 and weighs more on The Context Limit than on any other floor
-  from 8. **Overflow Buffer:** fill rises on its own (full after 6–8 s) and by exactly `hitFill` per hit (none during
+- the Context Limit family never rolls before floor 11 and weighs more on The Context Limit than on the floors after
+  it. **Overflow Buffer:** fill rises on its own (full after 6–8 s) and by exactly `hitFill` per hit (none during
   the telegraph); it bursts only after the full ≥ 0.6 s telegraph into exactly 8 coral droplets at 165–260 px/s along
   the telegraphed rays, then starts empty; its puddle slows a walking player to ×0.6 inside its radius only (never
   stacked, never flying, never after it faded at 4 s). **Summarizer:** at most 1 per room, keeps its distance, merges
@@ -670,9 +670,9 @@ Item conventions:
 | rolling_release | rolling_release | 4, Dependency Hell + Sandbox Borders (×0.6) | 18 |
 | rate_limiter | rate_limiter | 5, Production and The Context Limit only | 16 |
 | port_scanner | port_scanner (+ 4 `port_scanner_port`) | 5, Production only | 12 (max 1 per room) |
-| overflow_buffer | overflow_buffer (+ `overflow_puddle`) | 8, The Context Limit only | 18 (max 2 per room) |
-| summarizer | summarizer | 8, The Context Limit only | 16 (max 1 per room) |
-| lost_in_the_middle | lost_in_the_middle | 8, The Context Limit only | 14 (max 2 per room) |
+| overflow_buffer | overflow_buffer (+ `overflow_puddle`) | 11, The Context Limit only | 18 (max 2 per room) |
+| summarizer | summarizer | 11, The Context Limit only | 16 (max 1 per room) |
+| lost_in_the_middle | lost_in_the_middle | 11, The Context Limit only | 14 (max 2 per room) |
 
 The **Trojan** (2026-11-05, `entities/enemy-trojan.js`) is a bonus spawn like the Hallucination (`bonusChance` 0.09, no `home`),
 and follows the same rule: **it must stay indistinguishable from what it imitates**. It draws the floor's `prop_<kind>`
@@ -757,9 +757,9 @@ is light steel with a dark outline, and its shots and telegraph lines are **cyan
   it never comes to you: the ports are fixed and you can pre-aim at the next one. Its ports close when it dies;
   without ports it stays up as a turret.
 
-The **Context Limit family** (`family: 'context'`, `themeOnly: ['context']`, minFloor 8, all 2026-11-03) lives in
-`entities/enemies-context.js` (one section per member). Floor 11 is past `MIX_FROM`, so the family is at home on The
-Context Limit and leaks, weaker, onto every other floor from 8. Look: pale and waterlogged (glass, ink, soggy paper,
+The **Context Limit family** (`family: 'context'`, `themeOnly: ['context']`, minFloor 11, all 2026-11-03) lives in
+`entities/enemies-context.js` (one section per member). `minFloor` 11 keeps it off floors 8–10 (it leaked there until
+2026-11-05; those floors should get their own enemies instead). From floor 12 it leaks, weaker, onto every floor. Look: pale and waterlogged (glass, ink, soggy paper,
 shared palette `B.CONTEXT_COLORS`); because the rain is light blue, **danger is never blue**: telegraphs are amber
 `#ffb347`, shots coral `#ff8a5c` (`B.CONTEXT_DANGER`). Family effects are splashes and paper scraps, family sounds
 `dripHit`, `soggyDeath` and `gurgle` (windup).
@@ -846,7 +846,8 @@ enemy that can appear before floor 8 needs a `home` and an entry in the smoke te
 `B.themeWeight(def, theme, depth)` lifts any factor below 1 (AWAY, `themeOnly` exclusion, explicit 0) to
 `f + (1 − f) · mix`; factors ≥ 1 stay. Without `depth` it returns the raw factor (old behaviour, used by tests).
 `enemyWeightAt`, `rollRoomEnemies` (pool, exclusion and bonus chance) and the boss functions pass the depth, so the
-families show up on every floor from 8 (about 21 % of enemies on floor 8, 27 % on 12; the Orphan Commit too) and
+families show up on every floor from 8 (away from home about 31 % of enemies on floor 8, 40 % on 12; the Orphan Commit too; the
+Context Limit family only from 11) and
 generic enemies return to equal odds. Floors 8–11 have no home crowd at all. Bosses use the same lift, but a boss
 away from home weighs at most 3 (`BOSS_LEAK_WEIGHT` in `bosses.js`): the Octopus Merge is about 5 % on floor 8 and
 16 % on floor 16 instead of dominating. Check that themed content reads on any floor: dark floors are fine for both

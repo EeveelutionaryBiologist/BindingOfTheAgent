@@ -12,7 +12,9 @@
  *    gurgle als Warnton) kommen automatisch ueber family: 'context' (effects.js / audio.js).
  *  - Fairness wie ueberall: jeder Angriff mit Telegraph, Gegnerschuesse 165–260 px/s, Kontaktschaden 1 (2 fuer Ansturm).
  *
- * Ab Etage 8 gilt die Kakophonie (enemies.js): die Familie taucht dann abgeschwaecht auch auf anderen Etagen auf.
+ * Die Familie gehoert der Etage 11: minFloor 11 haelt sie von den Etagen 8–10 fern, die spaeter eigene Gegner
+ * bekommen sollen (bis 2026-11-05 sickerte sie dort ueber die Kakophonie ein). Ab Etage 12 taucht sie abgeschwaecht
+ * auch auf anderen Etagen auf (Kakophonie, enemies.js).
  *
  * SICHERHEIT: reine Spiellogik/Canvas-Zeichnen, kein DOM, kein eval, keine Netzwerkzugriffe.
  */

@@ -638,7 +638,7 @@
       near: 130,            // naeher als das: auf der Stelle schlurfen, weiter weg: auf den Spieler zu (px)
     },
     sprite: 'enemy_overflow_buffer', color: '#b9cde6', noFlip: true,
-    minFloor: 8, weight: 5, cost: 1.8, maxPerRoom: 2, tags: ['ranged'],
+    minFloor: 11, weight: 5, cost: 1.8, maxPerRoom: 2, tags: ['ranged'],
     themeOnly: ['context'], family: 'context',
     desc: 'Nobody checked the bounds. Hit it and it fills up faster.',
   };
@@ -679,7 +679,7 @@
       maxSummaries: 2,          // ein Gegner wird hoechstens so oft zusammengefasst
     },
     sprite: 'enemy_summarizer', color: '#d8d2c2',
-    minFloor: 8, weight: 4, cost: 2, maxPerRoom: 1, tags: [],
+    minFloor: 11, weight: 4, cost: 2, maxPerRoom: 1, tags: [],
     themeOnly: ['context'], family: 'context',
     desc: 'TL;DR: two of your problems are now one bigger problem.',
   };
@@ -707,7 +707,7 @@
       keepOut: 40,          // ... mit mindestens diesem Abstand zur Zonengrenze (px)
     },
     sprite: 'enemy_lost_in_the_middle', color: '#b9cde6', noFlip: true,
-    minFloor: 8, weight: 5, cost: 1.6, maxPerRoom: 2, tags: ['fly', 'ranged'],
+    minFloor: 11, weight: 5, cost: 1.6, maxPerRoom: 2, tags: ['fly', 'ranged'],
     themeOnly: ['context'], family: 'context',
     desc: 'Remembers the beginning. Remembers the end. Everything in between: gone.',
   };
