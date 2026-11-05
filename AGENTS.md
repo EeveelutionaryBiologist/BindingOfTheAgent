@@ -18,7 +18,7 @@ ideas live in `ENEMY_IDEAS.md`; remove an entry there once it's built.
   forever. It's an internal team distraction with no meta-progression. There's no real ending: after the 11th floor a
   score card offers to keep going (The Backlog II) or start over.
 - **Stack:** vanilla JavaScript (ES2020), Canvas 2D and Web Audio, with **zero dependencies and no build step**.
-  `index.html` loads about 30 classic `<script>` files in a fixed order, and everything hangs off `window.BOTA`.
+  `index.html` loads 37 classic `<script>` files in a fixed order, and everything hangs off `window.BOTA`.
 - **Run:** open `index.html` directly from disk (`file://`). Use `?seed=ABCD-1234` for a fixed run and `?debug` for cheats.
 - **Verify:** `node tools/smoke-test.js` (needs Playwright with Chromium; see §2). Exit code 0 means no console errors and
   all content checks pass.
@@ -231,6 +231,19 @@ Live state is under `BOTA.game` (`.player`, `.room`, `.floor`, `.depth`, `.state
   swapped active item back doesn't), floor bosses and side quests count once via `onRoomClear`; the score card comes
   after floor 11 and 22 but not floor 10, ignores keys for 0.8 s, doesn't touch `game.rng`, Enter leads to The Backlog II
   keeping score and cycles, R starts at zero; the post-mortem shows the same score;
+- the floor 8–10 enemies never roll before their `minFloor`, have full weight on their home floor and on the next cycle, and
+  only `weight × mix` elsewhere. **Cosine Similarity** reaches its mirror point, keeps ≥ 85 px when the player is near the
+  centre, goes around a player in the way, never shoots unless the player does, returns exactly the opposite direction
+  after the full windup in all four directions, hits on the axis and misses off it, stays ≥ 0.59 s apart under sustained
+  fire, and never replays frozen or earlier shots. **Heisenbug**'s cone is exact (30° seen, 40° not); observed it doesn't
+  move, shoot, hurt or take shots; shots in flight hit after release or turning away; its ring of 6 comes after the full
+  telegraph along its rays, and looking cancels it; observation holds while frozen, with the clock stopped; explosions
+  hit it observed, homing shots ignore it, and tap fire clears the room exactly once. **Bit Bucket** swallows normal,
+  spectral and piercing shots at the rim, spares shots fired inside, swallows a returning shot, leaves enemy shots alone,
+  shields enemies inside the disc, lets nothing hit in the swallowing tick, stops swallowing while frozen, takes
+  explosions, and flushes 5 shots in the locked direction after the full telegraph, then empties. All shots stay at
+  165–260 px/s, Cosine Similarity and Bit Bucket draw nothing from `game.rng`, `killAll` leaves nothing, and bus listener
+  counts don't change;
 - the door transition, special rooms, pause screen and death screen work.
 
 Screenshots go to `tools/out/` (scratch; don't commit or ship). One-time setup without admin rights:
@@ -265,7 +278,7 @@ core/namespace → core/rng → core/math → core/input → core/sprites → co
 data/palette → data/text → data/sprites-core → data/sprites-enemies → data/sprites-items
 data/layouts → data/enemies → data/bosses → data/items
 world/room → world/dungeon
-entities/entity → projectile → player → enemy → boss → bosses-late → boss-memory-hog → boss-agent-swarm → boss-ransomware → enemy-trojan → pickup → familiar → effects
+entities/entity → projectile → player → enemy → enemies-context → enemies-deep → boss → bosses-late → boss-memory-hog → boss-agent-swarm → boss-ransomware → enemy-trojan → pickup → familiar → effects
 render/renderer → render/hud → render/screens
 game → main
 ```
@@ -464,8 +477,9 @@ The previous floor's boss is excluded, and bosses already met count `weight · t
   - **Sharp turn:** a shot with `turnAt` (px, set by Sharp Left Turn) turns 90° left once at that distance and emits
     `shotTurn`.
   - **Shot fields:** every tick, before moving, a player shot calls the behaviour hook `bendShot(e, shot, dt, game)`
-    of every living enemy in the room that has one (the Dust Daemon's swirl). It may change `vx/vy` and must be
-    deterministic. Enemy shots are never bent.
+    of every living enemy in the room that has one (the Dust Daemon's swirl, the Bit Bucket's disc). It may change
+    `vx/vy` or end the shot (it then doesn't move or hit anything that tick) and must be deterministic. Enemy shots
+    are never bent.
 - **`Bomb`:** sits in `room.projectiles` with a 1.5 s fuse, then calls `game.explode(…, 110, 30)`. It hurts the player too.
 - **`Enemy`** (`entities/enemy.js`):
   - **Behaviour contract:** `init`, `update`, `afterMove`, `onDeath`, `onLethal`, `onExplosion`, `onHitPlayer`,
@@ -573,6 +587,7 @@ Payloads usually include `game, x, y` and often `color`.
 | `cactusPrick` | game (`checkCactus`) | audio (`prick`), effects (spines) |
 | `enemyOverflow` (`r`) | Overflow Buffer (bursts) | audio (`overflowBurst`), effects (splash, glass shards) |
 | `enemyChomp` (`r, ate`), `enemyBounce`, `enemyUnpack` | Honeypot, Rolling Release | audio (`chomp`, `bump`, `unbox`), effects (cyan ring, dust, packing peanuts) |
+| `enemySwallow` (`fill, color`), `enemyFlush` (`r, color`) | Bit Bucket | audio (`swallow`, `flush`), effects (small burst and ring; ring and burst) |
 | `explosion` (`radius`), `bombPlaced`, `projectileEnd` (`team, impact`) | game, projectile, player | audio, effects |
 | `shotTurn` | projectile (Sharp Left Turn) | effects (small spark) |
 | `activeUsed`, `activeCharged` | player | audio, HUD |
@@ -675,6 +690,9 @@ Item conventions:
 | overflow_buffer | overflow_buffer (+ `overflow_puddle`) | 11, The Context Limit only | 18 (max 2 per room) |
 | summarizer | summarizer | 11, The Context Limit only | 16 (max 1 per room) |
 | lost_in_the_middle | lost_in_the_middle | 11, The Context Limit only | 14 (max 2 per room) |
+| cosine_similarity | cosine_similarity | 8, The Latent Space only | 14 (max 2 per room) |
+| heisenbug | heisenbug | 9, Undefined Behavior only | 12 (max 2 per room) |
+| bit_bucket | bit_bucket | 10, /dev/null only | 20 (max 2 per room) |
 
 The **Trojan** (2026-11-05, `entities/enemy-trojan.js`) is a bonus spawn like the Hallucination (`bonusChance` 0.09, no `home`),
 and follows the same rule: **it must stay indistinguishable from what it imitates**. It draws the floor's `prop_<kind>`
@@ -801,6 +819,31 @@ shared palette `B.CONTEXT_COLORS`); because the rain is light blue, **danger is 
   (`LostZoneMark`, an update/draw object in `room.pickups`, `drawLayer` −2, `noShadow`) draws the two boundaries as
   dotted lines with a faint haze; it is not an enemy, so killAll and room clearing ignore it, and it removes itself
   when none are left.
+
+The **floor 8–10 enemies** (2026-11-05, `entities/enemies-deep.js`, weight 6, cost 1.8, `themeOnly` + `minFloor`) are one per
+floor and deliberately not a family: no `family` field and no shared look. At home each is 6–9 % of enemies, about 2.5 % on
+any other floor from then on (the cacophony). They stay off the Summarizer's whitelist. `enemyWeightAt` ignores `minFloor`
+(only `rollRoomEnemies` enforces it), so anything reading weights directly shows them on earlier cacophony floors.
+- **Cosine Similarity** (gold `#ffd166`, flying) wants to stand at the player's position point-reflected through the room
+  centre. The target is pushed out to `keep` + 20 px, it goes around the player instead of through, and it flees below
+  `keep` (90 px). Its only attack mirrors the player: a player shot starts a 0.6 s windup (glow, dashed ray, "!",
+  `mirrorPing`), then it fires one shot in the exact opposite direction. Further shots during the windup don't count, so
+  that is at most one per 0.6 s. Because it stands mirrored, this only hits when you fire straight at it. Player shots are
+  detected by one file-level `shoot` listener compared with `runStats.time` (same tick only), so there are no per-enemy
+  listeners and frozen or earlier shots are never replayed.
+- **Heisenbug** (teal body, yellow `#f5ff4a` danger) is observed when the player holds a fire direction and it lies within
+  `cone` (0.61 rad, about 35°). While observed it stands still and is `intangible`: shots pass through, there's no contact
+  damage, it draws as a flickering outline, and it says a line at most every 5 s. A running telegraph cancels and the clock
+  resets. Unobserved it is solid and stalks the player; after 2.5 s in a row it telegraphs for 0.7 s, then fires a ring of
+  6. So tapping beats holding: a shot in flight hits once you release or turn away. Observation runs in `afterMove`, so it
+  also applies while frozen. `init` wraps `hurt` on that instance, so sourceless damage (explosions, `rm_rf`, On-Call Pager)
+  always counts. Homing shots and orbitals skip it while observed.
+- **Bit Bucket** (pale steel with a grey outline, red `#ff4d3d` danger, flying) drifts toward the player at 32 px/s over a
+  dark disc of radius 110, on `drawLayer` −1. Through `bendShot`, any player shot entering the disc is swallowed, spectral
+  and piercing included. `state.seen` (a WeakMap) tracks each shot, and only an outside-to-inside change swallows, so shots
+  fired inside are exempt until they leave and come back. It doesn't swallow while frozen or spawning. At 4 swallowed shots
+  it stops, locks its aim, telegraphs for 0.8 s and flushes a 5-shot fan (`enemyFlush`), then rests 0.6 s empty. It keeps
+  swallowing during the telegraph without filling. The disc is part of the enemy, so nothing is left behind.
 
 Minions (`spawn: false`): `leaklet`, `microservice`, `megalith_module` (Megalith phase 2; crawls back and heals it), `loop_segment`, `nested_loop_part`, `detached_head_tag` (Detached HEAD's head),
 `subagent` (Agent Swarm's small agents), `ransom_key` and `popup_close` (Ransomware's key fragments and window buttons), `octo_arm` (Octopus Merge arm segment), `spinlock_segment` (Spinlock body; invulnerable, shields the head),

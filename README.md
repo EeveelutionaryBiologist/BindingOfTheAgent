@@ -29,11 +29,12 @@ Score and a choice: start over, or keep going with everything you have. There is
 ### What's inside
 - **55 items** (50 passive, 5 active). Examples: Blockchain (*"Does absolutely nothing. Market cap: $4B."*),
   Few-Shot Examples, Chain of Thought, Rubber Duck, Technical Debt, Regenerate Response, `rm -rf node_modules`.
-- **33 enemies** plus minions: Flaky Test, Merge Conflict, Graphics Glitch, Hallucination (it looks like loot), Zombie Process, Rogue Agent…
+- **36 enemies** plus minions: Flaky Test, Merge Conflict, Graphics Glitch, Hallucination (it looks like loot), Zombie Process, Rogue Agent…
   Forgotten Branches has its own family (Stale Branch, Detached HEAD, Cherry-Pick, Orphan Commit), and so do Sandbox
   Borders (Spinlock, Rootkit, Dust Daemon), Legacy Codebase (Stack Trace), Dependency Hell (Honeypot, Rolling Release),
   Production (Rate Limiter, Port Scanner), The Training Data (Dry Run) and The Context Limit (Overflow Buffer,
-  Summarizer, Lost in the Middle).
+  Summarizer, Lost in the Middle). The Latent Space, Undefined Behavior and /dev/null each have one of their own
+  (Cosine Similarity, Heisenbug, Bit Bucket).
 - **13 bosses** with distinct phases: The Monolith, The Stakeholder, Friday Deploy (floors 4–7), The Infinite Loop, the Rogue Agent
   Swarm, The Antagonistic Reviewer and The Memory Hog (both floors 4–9) and the Octopus Merge (only on Forgotten Branches). Deeper down, four of them are
   replaced by bigger versions: The Megalith, The Shareholder and the Agent Swarm (/xhigh) from floor 7, the Nested Infinite Loop from floor 8. Ransomware joins from floor 8 and is most at home on /dev/null.

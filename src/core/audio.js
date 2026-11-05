@@ -497,6 +497,23 @@
     },
   });
   Object.assign(RATE, { dripHit: 0.04, soggyDeath: 0.03, gurgle: 0.3 });
+
+  // Etagen 8–10 (entities/enemies-deep.js): gespiegeltes Pingen (Cosine Similarity), Schlucken und Spuelen (Bit Bucket)
+  Object.assign(SOUNDS, {
+    mirrorPing() {
+      voice({ f: 880, f2: 880, dur: 0.09, type: 'sine', vol: 0.05 });
+      voice({ f: 660, f2: 660, dur: 0.14, type: 'sine', vol: 0.05, delay: 0.09 });
+    },
+    swallow() {
+      voice({ f: 320, f2: 90, dur: 0.11, type: 'triangle', vol: 0.07 });
+      noise({ dur: 0.05, vol: 0.03, filter: 'lowpass', f: 700 });
+    },
+    flush() {
+      noise({ dur: 0.5, vol: 0.09, filter: 'bandpass', f: 500, f2: 2200, q: 1 });
+      voice({ f: 240, f2: 70, dur: 0.4, type: 'sawtooth', vol: 0.04 });
+    },
+  });
+  Object.assign(RATE, { mirrorPing: 0.15, swallow: 0.06, flush: 0.2 });
   SPAMMY.dripHit = true;
   SPAMMY.coinDrop = true;
 
@@ -815,6 +832,8 @@
   on('hudGlitch', () => p('glitch'));
   on('bossBeam', () => p('beam'));            // Reviewer-Laser, Shareholder-Monokel
   on('enemyOverflow', () => p('overflowBurst'));   // Overflow Buffer platzt
+  on('enemySwallow', () => p('swallow'));     // Bit Bucket schluckt einen Schuss
+  on('enemyFlush', () => p('flush'));         // ... und leert sich
   on('ambientWhisper', () => p('whisper'));    // The Context Limit: Satzfetzen huscht vorbei
   on('ambientThunder', () => p('thunder'));    // ... und fernes Wetterleuchten
   on('bossAlloc', () => p('malloc'));         // Memory Hog: malloc()

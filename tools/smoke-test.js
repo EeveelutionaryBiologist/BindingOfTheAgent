@@ -8,6 +8,8 @@
  *   - 300 generierte Etagen enthalten Start/Boss/Schatz/Shop; alle Layouts bestehen validateLayout (strict)
  *   - lose Pickups nur in Kampfraeumen (~18 %) und beim Betreten gelegt; Hallucination nutzt jede Tarnung,
  *     eine nahe Explosion enttarnt sie
+ *   - Etagen 8–10 (enemies-deep.js): Cosine Similarity, Heisenbug und Bit Bucket rollen erst ab ihrer Etage; Spiegelung,
+ *     Beobachtung und Schlucken samt Telegraphen, Schusstempo, sauberem Tod und ohne liegengebliebene Listener
  *   - Graphics Glitch: Kontakt verfremdet das HUD (Neustart statt Stapeln), jeder Bereich rendert, Spruenge
  *     landen nie in Hindernissen
  *   - Antagonistic Reviewer: Laser und Stempel treffen genau dort, wo sie sollen; jede Nitpick-Reihe hat eine Luecke
@@ -4890,6 +4892,464 @@ const URL = 'file://' + path.join(ROOT, 'index.html').replace(/\\/g, '/') + '?se
     return g.depth === 1 && g.scoreTotal() === 0 && g.cycles === 0 ? [] : ['Neustart von der Karte: Tiefe ' + g.depth + ', Score ' + g.scoreTotal() + ', Zyklen ' + g.cycles];
   }));
 
+  // --- Eigene Gegner der Etagen 8–10 (enemies-deep.js): Cosine Similarity, Heisenbug, Bit Bucket ---
+  //     Etagen: nie vor minFloor, volles Gewicht auf der Heimat-Etage, danach nur abgeschwaecht ueber die Kakophonie.
+  //     Cosine Similarity: steht punktgespiegelt, haelt Abstand, schiesst nur nach einem Spielerschuss, nach vollem
+  //     Telegraph und genau entgegengesetzt, hoechstens einmal je windup; schraeg zu ihm feuern ist sicher.
+  //     Heisenbug: im Blickkegel steht er, ist unberuehrbar und harmlos; Schuesse in der Luft treffen, sobald man
+  //     loslaesst oder wegdreht; Ring nur nach calm + tell, Hinsehen bricht ihn ab; Explosionen treffen immer.
+  //     Bit Bucket: schluckt eintretende Schuesse (auch spektrale und durchschlagende), drinnen abgefeuerte nicht,
+  //     eingefroren gar keine; nach 4 Schuessen Telegraph, 5er-Faecher in die festgelegte Richtung, dann leer.
+  //     Alle: Schuesse 165–260 px/s, sauberer Tod, killAll laesst nichts zurueck, keine liegengebliebenen Listener.
+  const deepProblems = await page.evaluate(() => {
+    const out = [];
+    const g = BOTA.game, DT = 1 / 60, E = BOTA.ENEMIES, inp = BOTA.input, bus = BOTA.bus;
+    const DEEP = [['cosine_similarity', 'latent', 8], ['heisenbug', 'undefined', 9], ['bit_bucket', 'devnull', 10]];
+    const keys = BOTA.FLOOR_THEMES.map((t) => t.key);
+
+    // 1) Daten und Wuerfeln
+    for (const [id, theme, floor] of DEEP) {
+      const def = E[id];
+      if (!def || !BOTA.BEHAVIORS[def.behavior]) { out.push(id + ': Definition oder Verhalten fehlt'); return out; }
+      if (keys.indexOf(theme) + 1 !== floor || def.minFloor !== floor || (def.themeOnly || []).join() !== theme) out.push(id + ': Etage oder Thema falsch');
+      if (BOTA.spriteFrameCount('enemy_' + id) !== 2) out.push(id + ': Sprite ohne 2 Frames');
+      if (def.contactDamage !== 1) out.push(id + ': Kontaktschaden ' + def.contactDamage);
+      for (let d = 1; d < floor; d++) {
+        for (let i = 0; i < 150; i++) if (BOTA.rollRoomEnemies(new BOTA.RNG(BOTA.hashString('deep' + d + ':' + i)), d).includes(id)) { out.push(id + ' auf Etage ' + d); break; }
+      }
+      if (BOTA.enemyWeightAt(def, floor) !== def.weight) out.push(id + ': Gewicht auf der Heimat-Etage ' + BOTA.enemyWeightAt(def, floor));
+      let home = 0;
+      for (let i = 0; i < 400; i++) {
+        const l = BOTA.rollRoomEnemies(new BOTA.RNG(BOTA.hashString('deeph' + floor + ':' + i)), floor);
+        const k = l.filter((x) => x === id).length;
+        if (k > def.maxPerRoom) out.push(id + ': ' + k + ' in einem Raum');
+        home += k;
+      }
+      if (!(home > 40)) out.push(id + ': auf Etage ' + floor + ' nur ' + home + ' in 400 Raeumen');
+      // Spaeter: sickert ein, immer schwaecher als daheim; auf der naechsten Runde wieder volles Gewicht
+      const later = 12;
+      const w = BOTA.enemyWeightAt(def, later);
+      if (Math.abs(w - def.weight * BOTA.mixAt(later)) > 1e-9) out.push(id + ': Gewicht auf Etage ' + later + ': ' + w);
+      if (BOTA.enemyWeightAt(def, floor + keys.length) !== def.weight) out.push(id + ': zweite Runde nicht auf vollem Gewicht');
+    }
+
+    const d0 = g.depth, p = g.player;
+    const realMove = inp.moveVector, realDir = inp.shootDir, realHurt = p.hurt, realShoot = BOTA.AI.shoot;
+    let dir = null;
+    const hurts = [], ev = [];
+    const offs = ['enemyWindup', 'enemyFlush', 'enemySwallow', 'enemyDeath'].map((n) => bus.on(n, (e) => ev.push({ n, enemy: e.enemy, sound: e.sound, tick: ticks })));
+    let ticks = 0;
+    const shots = [];
+    const shotsOf = () => g.room.projectiles.filter((pr) => pr.team === 'enemy');
+    const step = (n, each) => {
+      for (let i = 0; i < n; i++) {
+        g.update(DT); inp.endStep(); ticks++;
+        if (each && each(i) === false) break;
+      }
+    };
+    const clearRoom = () => {
+      for (let i = 0; i < 4; i++) BOTA.debug.killAll();
+      g.room.enemies = g.room.enemies.filter((en) => !en.dead);
+      g.room.projectiles.length = 0;
+      p.vx = p.vy = p.kbx = p.kby = 0;
+      dir = null; ev.length = 0; hurts.length = 0; shots.length = 0;
+    };
+    const enter = (depth) => {
+      g.enterFloor(depth); g.setState('play');
+      BOTA.debug.gotoRoom('start');
+      clearRoom();
+      p.fireCooldown = 0;
+    };
+    const spawn = (id, x, y) => { const e = BOTA.debug.spawn(id, x, y); e.spawnDelay = 0; return e; };
+    const place = (x, y) => { p.x = x; p.y = y; p.vx = p.vy = p.kbx = p.kby = 0; };
+    const fairSpeed = (pr, label) => { const v = Math.hypot(pr.vx, pr.vy); if (!(v >= 165 && v <= 260)) out.push(label + ': Schuss mit ' + v.toFixed(0) + ' px/s'); };
+    const handlers = () => JSON.stringify(Object.keys(bus.handlers).sort().map((k) => k + ':' + bus.handlers[k].length));
+
+    try {
+      inp.moveVector = () => ({ x: 0, y: 0 });
+      inp.shootDir = () => dir;
+      p.hurt = function (n, src) { hurts.push(src); return false; };
+      BOTA.AI.shoot = function (game, e, a, sp, o) { const pr = realShoot.call(this, game, e, a, sp, o); if (pr) shots.push({ pr, tick: ticks, a }); return pr; };
+      const listeners0 = handlers();
+
+      // 2) Cosine Similarity
+      enter(8);
+      {
+        const CX = 480, CY = 288;
+        place(260, 200);
+        const c = spawn('cosine_similarity', 500, 150), P = c.params, S = c.state;
+        if (!(P.windup >= 0.5)) out.push('Cosine Similarity: Telegraph kuerzer als 0.5 s');
+        const rng0 = g.rng.state;
+        step(60 * 6);
+        const off = Math.hypot(c.x - (960 - p.x), c.y - (576 - p.y));
+        if (off > 12) out.push('Cosine Similarity: steht ' + off.toFixed(0) + ' px neben dem Spiegelpunkt');
+        if (shots.length || shotsOf().length || S.shots) out.push('Cosine Similarity: schiesst, obwohl der Spieler nicht schiesst');
+        if (g.rng.state !== rng0) out.push('Cosine Similarity: zieht aus game.rng');
+
+        // Spieler nahe der Mitte: kein Gratis-Kontakt, er haelt Abstand, auch wenn er auf dem Spieler entsteht
+        for (const [px, py, sx, sy] of [[CX, CY, CX + 200, CY], [CX + 24, CY + 12, CX - 180, CY + 60], [CX, CY, CX + 30, CY], [CX - 10, CY, CX, CY]]) {
+          clearRoom();
+          place(px, py);
+          const e2 = spawn('cosine_similarity', sx, sy);
+          step(70);
+          hurts.length = 0;   // Wer auf dem Spieler entsteht, beruehrt ihn beim Weglaufen; danach darf das nicht mehr sein
+          let minD = 1e9;
+          step(60 * 3, () => { minD = Math.min(minD, Math.hypot(e2.x - p.x, e2.y - p.y)); });
+          if (minD < 85) out.push('Cosine Similarity: nur ' + minD.toFixed(0) + ' px Abstand bei Spieler (' + px + ',' + py + ')');
+          if (hurts.length) out.push('Cosine Similarity: ' + hurts.length + ' Kontakte, Spieler (' + px + ',' + py + ')');
+        }
+
+        // Steht der Spieler zwischen ihm und dem Spiegelpunkt, geht er aussen herum
+        clearRoom();
+        place(400, 288);
+        const e3 = spawn('cosine_similarity', 240, 288);
+        let minD = 1e9;
+        step(60 * 6, () => { minD = Math.min(minD, Math.hypot(e3.x - p.x, e3.y - p.y)); });
+        if (minD < 85) out.push('Cosine Similarity: laeuft durch den Spieler (' + minD.toFixed(0) + ' px)');
+        if (Math.hypot(e3.x - 560, e3.y - 288) > 30) out.push('Cosine Similarity: kommt nicht um den Spieler herum');
+
+        // Gegenschuss: alle vier Richtungen, nach vollem Telegraph, genau entgegengesetzt
+        for (const d of ['right', 'left', 'up', 'down']) {
+          clearRoom();
+          place(260, 200);
+          p.fireCooldown = 0;
+          const e4 = spawn('cosine_similarity', 700, 376);
+          dir = d; step(1); dir = null;
+          const t0 = ticks;
+          if (!ev.some((x) => x.n === 'enemyWindup' && x.enemy === e4 && x.sound === 'mirrorPing')) out.push('Cosine Similarity: Telegraph ohne Ton (' + d + ')');
+          step(60);
+          if (shots.length !== 1) { out.push('Cosine Similarity: ' + shots.length + ' Gegenschuesse auf einen Schuss (' + d + ')'); continue; }
+          const v = BOTA.DIRS[d];
+          const a = shots[0].a, want = Math.atan2(-v.dy, -v.dx);
+          if (Math.abs(BOTA.M.angleDiff(a, want)) > 1e-6) out.push('Cosine Similarity: Gegenrichtung falsch (' + d + ')');
+          if ((shots[0].tick - t0 + 1) * DT < 0.5) out.push('Cosine Similarity: Telegraph nur ' + ((shots[0].tick - t0 + 1) * DT).toFixed(2) + ' s');
+          fairSpeed(shots[0].pr, 'Cosine Similarity');
+        }
+
+        // Genau auf ihn geschossen: Der Schuss kommt zurueck. Schraeg zu ihm: sicher.
+        clearRoom();
+        place(120, 288);
+        const e5 = spawn('cosine_similarity', 840, 288);
+        step(30);
+        p.fireCooldown = 0;
+        dir = 'right'; step(1); dir = null;
+        step(60 * 5, () => { place(120, 288); });
+        if (!hurts.includes('Cosine Similarity')) out.push('Cosine Similarity: Schuss auf der Achse trifft nicht zurueck');
+        clearRoom();
+        place(260, 200);
+        const e6 = spawn('cosine_similarity', 700, 376);
+        step(30);
+        p.fireCooldown = 0;
+        dir = 'right'; step(1); dir = null;
+        step(60 * 5, () => { place(260, 200); });
+        if (hurts.length) out.push('Cosine Similarity: Schuss neben der Achse trifft trotzdem: ' + hurts.join());
+        void e5; void e6;
+
+        // Dauerfeuer: hoechstens ein Gegenschuss je windup
+        clearRoom();
+        place(260, 200);
+        const e7 = spawn('cosine_similarity', 700, 376);
+        p.stats.fireDelay = 0.1;
+        dir = 'right';
+        step(60 * 5, () => { place(260, 200); });
+        dir = null;
+        p.recalcStats();
+        if (shots.length < 5) out.push('Cosine Similarity: nur ' + shots.length + ' Gegenschuesse bei Dauerfeuer');
+        for (let i = 1; i < shots.length; i++) if ((shots[i].tick - shots[i - 1].tick) * DT < 0.59) out.push('Cosine Similarity: Gegenschuesse zu dicht');
+        void e7;
+
+        // Eingefroren oder spaeter erschienen: Alte Schuesse werden nie nachgeholt
+        clearRoom();
+        place(260, 200);
+        const e8 = spawn('cosine_similarity', 700, 376);
+        e8.frozen = 0.5;
+        p.fireCooldown = 0;
+        dir = 'right'; step(1); dir = null;
+        step(60 * 2);
+        if (shots.length || e8.state.aim !== null) out.push('Cosine Similarity: holt einen Schuss aus der Eiszeit nach');
+        p.fireCooldown = 0;
+        dir = 'right'; step(1); dir = null;
+        const e9 = spawn('cosine_similarity', 760, 300);
+        step(60 * 2);
+        if (e9.state.shots) out.push('Cosine Similarity: reagiert auf einen Schuss von vor seinem Erscheinen');
+      }
+
+      // 3) Heisenbug
+      enter(9);
+      {
+        place(160, 288);
+        const h = spawn('heisenbug', 500, 288), P = h.params, S = h.state;
+        if (!(P.tell >= 0.6)) out.push('Heisenbug: Telegraph kuerzer als 0.6 s');
+        // Blickkegel: 30 Grad gesehen, 40 Grad nicht; keine Feuerrichtung = nie gesehen
+        for (const [deg, want] of [[0, true], [30, true], [-30, true], [40, false], [-40, false], [180, false]]) {
+          const r = deg * Math.PI / 180;
+          h.x = p.x + Math.cos(r) * 200; h.y = p.y + Math.sin(r) * 200;
+          dir = 'right'; step(1);
+          if (S.observed !== want || h.intangible !== want) out.push('Heisenbug: Blickkegel bei ' + deg + ' Grad: ' + S.observed);
+          dir = null; step(1);
+          if (S.observed || h.intangible) out.push('Heisenbug: gesehen ohne Feuerrichtung');
+        }
+
+        // Beobachtet: steht still, Schuesse fliegen durch, kein Kontakt, auch wenn er am Spieler klebt
+        clearRoom();
+        place(160, 288);
+        const h2 = spawn('heisenbug', 500, 288);
+        const hp2 = h2.hp, x2 = h2.x;
+        dir = 'right';
+        step(60 * 4);
+        if (h2.hp !== hp2) out.push('Heisenbug: Dauerfeuer trifft ihn');
+        if (Math.abs(h2.x - x2) > 1) out.push('Heisenbug: bewegt sich unter Beobachtung');
+        if (shots.length) out.push('Heisenbug: schiesst unter Beobachtung');
+        h2.x = p.x + 24; h2.y = p.y;
+        step(30);
+        if (hurts.length) out.push('Heisenbug: Kontaktschaden unter Beobachtung');
+        dir = null; step(1);
+        if (!hurts.includes('Heisenbug')) out.push('Heisenbug: kein Kontaktschaden, wenn er fest ist');
+
+        // Tippen: Der Schuss in der Luft trifft, sobald man loslaesst. Wegdrehen wirkt genauso.
+        for (const after of [null, 'left']) {
+          clearRoom();
+          place(160, 288);
+          const h3 = spawn('heisenbug', 520, 288);
+          const hp3 = h3.hp;
+          p.fireCooldown = 0;
+          dir = 'right';
+          step(2);
+          dir = after;
+          p.fireCooldown = 5;
+          step(60);
+          if (!(h3.hp < hp3)) out.push('Heisenbug: Schuss in der Luft trifft nicht nach ' + (after || 'Loslassen'));
+          p.fireCooldown = 0;
+        }
+
+        // Unbeobachtet: schleicht heran; nach calm Telegraph, dann Ring aus 6 Schuessen entlang der Strahlen
+        clearRoom();
+        place(120, 288);
+        const h4 = spawn('heisenbug', 840, 288);
+        const d0h = Math.hypot(h4.x - p.x, h4.y - p.y);
+        let tellAt = -1;
+        step(60 * 5, () => { if (tellAt < 0 && h4.state.tell > 0) tellAt = ticks; if (shots.length) return false; });
+        if (!(Math.hypot(h4.x - p.x, h4.y - p.y) < d0h - 100)) out.push('Heisenbug: schleicht nicht heran');
+        if (shots.length !== h4.params.shots) out.push('Heisenbug: Ring aus ' + shots.length + ' Schuessen');
+        else {
+          if ((shots[0].tick - tellAt + 1) * DT < 0.6) out.push('Heisenbug: Telegraph nur ' + ((shots[0].tick - tellAt + 1) * DT).toFixed(2) + ' s');
+          const want = shots.map((s, i) => h4.state.off + (i * Math.PI * 2) / 6);
+          shots.forEach((s, i) => { fairSpeed(s.pr, 'Heisenbug'); if (Math.abs(BOTA.M.angleDiff(s.a, want[i])) > 1e-6) out.push('Heisenbug: Ring weicht von den Strahlen ab'); });
+        }
+        if (!ev.some((x) => x.n === 'enemyWindup' && x.enemy === h4)) out.push('Heisenbug: Telegraph ohne enemyWindup');
+
+        // Hinsehen bricht den Telegraph ab; danach laeuft die Uhr von vorn
+        clearRoom();
+        place(120, 288);
+        const h5 = spawn('heisenbug', 840, 288);
+        step(60 * 3, () => { if (h5.state.tell > 0) return false; });
+        if (!(h5.state.tell > 0)) out.push('Heisenbug: kein Telegraph nach calm');
+        dir = 'right'; step(1);
+        if (h5.state.tell !== 0 || h5.state.calm !== 0) out.push('Heisenbug: Hinsehen bricht den Telegraph nicht ab');
+        step(60);
+        dir = null;
+        step(60 * 2);
+        if (shots.length) out.push('Heisenbug: Ring trotz Abbruch oder vor Ablauf der Uhr');
+
+        // Eingefroren: Die Beobachtung gilt weiter, die Uhr steht
+        clearRoom();
+        place(120, 288);
+        const h6 = spawn('heisenbug', 600, 288);
+        h6.frozen = 2;
+        dir = 'right'; step(2);
+        if (!h6.intangible) out.push('Heisenbug: eingefroren nicht beobachtbar');
+        dir = null; step(2);
+        if (h6.intangible) out.push('Heisenbug: bleibt eingefroren unberuehrbar');
+        step(30);
+        if (h6.state.calm !== 0) out.push('Heisenbug: Uhr laeuft eingefroren');
+
+        // Explosionen treffen auch beobachtet; zielsuchende Schuesse lassen ihn dann in Ruhe
+        clearRoom();
+        place(120, 288);
+        const h7 = spawn('heisenbug', 600, 288);
+        h7.hp = h7.maxHp = 500;
+        dir = 'right'; step(2);
+        const hp7 = h7.hp;
+        g.explode(h7.x, h7.y, 60, 30, 'test');
+        if (h7.hp !== hp7 - 30) out.push('Heisenbug: Explosion trifft ihn beobachtet nicht (' + (hp7 - h7.hp) + ')');
+        if (!h7.intangible) out.push('Heisenbug: nach der Explosion nicht mehr beobachtet');
+        const homer = g.spawnProjectile({ x: 300, y: 240, vx: 480, vy: 0, team: 'player', damage: 1, flags: { homing: true }, range: 900 });
+        step(10);
+        if (Math.abs(homer.vy) > 1e-6) out.push('Heisenbug: zielsuchender Schuss steuert ihn beobachtet an');
+        dir = null;
+
+        // Raum bleibt raeumbar: mit getipptem Feuer bis zum Clearing, ein Tod, leere Liste
+        clearRoom();
+        place(120, 288);
+        g.room.cleared = false;
+        const h8 = spawn('heisenbug', 700, 288);
+        let cleared = 0;
+        const offClear = bus.on('roomClear', () => cleared++);
+        for (let i = 0; i < 400 && !h8.dead; i++) {
+          p.fireCooldown = 0;
+          dir = 'right'; step(1); dir = null;
+          step(24, () => { place(120, 288); });
+        }
+        step(2);
+        offClear();
+        if (!h8.dead) out.push('Heisenbug: mit Tippen nicht totzukriegen');
+        if (cleared !== 1) out.push('Heisenbug: Raum nicht genau einmal geraeumt (' + cleared + ')');
+        if (ev.filter((x) => x.n === 'enemyDeath' && x.enemy === h8).length !== 1) out.push('Heisenbug: kein sauberer Tod');
+        g.room.pickups = g.room.pickups.filter((pk) => !(pk instanceof BOTA.Pickup));
+      }
+
+      // 4) Bit Bucket
+      enter(10);
+      {
+        place(120, 288);
+        const b = spawn('bit_bucket', 640, 288), P = b.params, S = b.state;
+        b.hp = b.maxHp = 9000;
+        if (!(P.tell >= 0.6)) out.push('Bit Bucket: Telegraph kuerzer als 0.6 s');
+        if (P.fan !== 5 || P.fillMax !== 4 || P.discR !== 110) out.push('Bit Bucket: Parameter geaendert');
+        const R = P.discR;
+        const send = (flags, x0) => g.spawnProjectile({ x: x0 === undefined ? 400 : x0, y: b.y, vx: 480, vy: 0, team: 'player', damage: 5, flags: flags || {}, range: 900 });
+        // Von aussen: weg, am Rand; spektral und durchschlagend genauso
+        for (const flags of [{}, { spectral: true }, { piercing: true }]) {
+          const hp0 = b.hp, sw0 = S.swallowed;
+          const s1 = send(flags);
+          let at = -1;
+          step(50, () => { if (s1.dead) { at = Math.hypot(s1.x - b.x, s1.y - b.y); return false; } });
+          if (!s1.dead || S.swallowed !== sw0 + 1) out.push('Bit Bucket: Schuss nicht geschluckt ' + JSON.stringify(flags));
+          if (!(at > R - 14 && at <= R + 1)) out.push('Bit Bucket: Schuss endet ' + at.toFixed(0) + ' px vor dem Eimer');
+          if (b.hp !== hp0) out.push('Bit Bucket: geschluckter Schuss macht Schaden');
+        }
+        if (S.fill !== 3) out.push('Bit Bucket: Pegel ' + S.fill + ' nach drei Schuessen');
+        if (S.mode !== 'drift') out.push('Bit Bucket: zu frueh im Telegraph');
+        if (ev.filter((x) => x.n === 'enemySwallow').length !== 3) out.push('Bit Bucket: enemySwallow fehlt');
+        // Drinnen abgefeuert: trifft den Eimer und schluckt nichts
+        S.fill = 0;
+        const hp1 = b.hp, sw1 = S.swallowed;
+        send({}, b.x - 90);
+        step(20);
+        if (!(b.hp < hp1)) out.push('Bit Bucket: Schuss von drinnen trifft nicht');
+        if (S.swallowed !== sw1) out.push('Bit Bucket: schluckt Schuesse von drinnen');
+        // Hinaus und wieder hinein: dann schluckt er auch diesen
+        const s2 = send({}, b.x - 90);
+        step(1);
+        s2.x = b.x - R - 40; step(1);
+        s2.vx = 480; s2.y = b.y;
+        step(20, () => { if (s2.dead) return false; });
+        if (S.swallowed !== sw1 + 1) out.push('Bit Bucket: wiederkehrender Schuss nicht geschluckt');
+        // Gegnerschuesse bleiben unberuehrt
+        const es = g.spawnProjectile({ x: b.x - R - 60, y: b.y - 40, vx: 200, vy: 0, team: 'enemy', damage: 1, range: 900 });
+        step(45);
+        if (es.dead) out.push('Bit Bucket: schluckt Gegnerschuesse');
+        // Gegner in der Scheibe sind gegen Schuesse von aussen geschuetzt
+        S.fill = 0;
+        const guard = spawn('bug', b.x - 60, b.y + 2);
+        guard.static = true;
+        const hpG = guard.hp;
+        send();
+        step(45);
+        if (guard.hp !== hpG) out.push('Bit Bucket: Schuss kommt durch die Scheibe');
+        guard.die(g);
+        // Ein geschluckter Schuss trifft auch im selben Tick nichts mehr: Der Gegner steht so, dass der Schuss ihn erst
+        // mit der Bewegung NACH dem Schlucken beruehren wuerde (Reichweite 18 + 9 px, seitlich 24 px versetzt)
+        g.room.enemies = g.room.enemies.filter((en) => !en.dead);
+        S.fill = 0;
+        b.static = true;
+        const edge = spawn('bug', b.x - R + 23.4, b.y + 24);
+        edge.static = true;
+        const hpEdge = edge.hp, swEdge = S.swallowed;
+        g.spawnProjectile({ x: b.x - R - 1, y: b.y, vx: 480, vy: 0, team: 'player', damage: 5, r: 9, range: 900 });
+        step(4);
+        if (S.swallowed !== swEdge + 1) out.push('Bit Bucket: Randschuss nicht geschluckt');
+        if (edge.hp !== hpEdge) out.push('Bit Bucket: geschluckter Schuss trifft noch im selben Tick');
+        edge.die(g);
+        b.static = false;
+        // Eingefroren: schluckt nicht, der Schuss trifft
+        clearRoom();
+        place(120, 288);
+        const b2 = spawn('bit_bucket', 640, 288);
+        b2.hp = b2.maxHp = 9000;
+        b2.frozen = 3;
+        const hpF = b2.hp;
+        g.spawnProjectile({ x: 400, y: b2.y, vx: 480, vy: 0, team: 'player', damage: 5, range: 900 });
+        step(50);
+        if (b2.state.swallowed) out.push('Bit Bucket: schluckt eingefroren');
+        if (!(b2.hp < hpF)) out.push('Bit Bucket: eingefroren nicht verwundbar');
+        // Explosion von aussen wirkt
+        const hpE = b2.hp;
+        g.explode(b2.x - 30, b2.y, 60, 30, 'test');
+        if (!(b2.hp < hpE)) out.push('Bit Bucket: Explosion wirkt nicht');
+        // Voll: bleibt stehen, Telegraph, 5er-Faecher in die festgelegte Richtung, leer
+        clearRoom();
+        place(120, 288);
+        const b3 = spawn('bit_bucket', 640, 288), S3 = b3.state;
+        b3.hp = b3.maxHp = 9000;
+        const rng0 = g.rng.state;
+        for (let i = 0; i < 4; i++) {
+          g.spawnProjectile({ x: 400, y: b3.y, vx: 480, vy: 0, team: 'player', damage: 5, range: 900 });
+          step(40);
+        }
+        const x3 = b3.x;
+        step(2);
+        if (S3.mode !== 'tell') out.push('Bit Bucket: kein Telegraph nach 4 Schuessen (' + S3.mode + ')');
+        const w3 = ev.find((x) => x.n === 'enemyWindup' && x.enemy === b3);
+        const t3 = w3 ? w3.tick : ticks;
+        const aim = S3.aim;
+        place(300, 120);   // Richtung ist festgelegt: Wer wegrennt, bekommt die alte Bahn
+        step(60, () => { if (shots.length) return false; });
+        if (shots.length !== P.fan) out.push('Bit Bucket: Faecher aus ' + shots.length + ' Schuessen');
+        else {
+          if ((shots[0].tick - t3) * DT < 0.6) out.push('Bit Bucket: Telegraph nur ' + ((shots[0].tick - t3) * DT).toFixed(2) + ' s');
+          shots.forEach((s, i) => { fairSpeed(s.pr, 'Bit Bucket'); if (Math.abs(BOTA.M.angleDiff(s.a, aim + (i - 2) * P.spread)) > 1e-6) out.push('Bit Bucket: Faecher weicht vom Telegraph ab'); });
+        }
+        if (Math.abs(b3.x - x3) > 2) out.push('Bit Bucket: bewegt sich im Telegraph');
+        if (S3.fill !== 0 || ev.filter((x) => x.n === 'enemyFlush').length !== 1) out.push('Bit Bucket: nach dem Faecher nicht leer');
+        if (g.rng.state !== rng0) out.push('Bit Bucket: zieht aus game.rng');
+        // Treibt langsam auf den Spieler zu, bleibt im Raum und bei near stehen
+        clearRoom();
+        place(300, 288);
+        const b4 = spawn('bit_bucket', 800, 288);
+        const dA = Math.hypot(b4.x - p.x, b4.y - p.y);
+        step(60 * 4);
+        const dB = Math.hypot(b4.x - p.x, b4.y - p.y);
+        if (!(dB < dA - 80 && dB > dA - 170)) out.push('Bit Bucket: Treiben ' + (dA - dB).toFixed(0) + ' px in 4 s');
+        step(60 * 16);
+        const dC = Math.hypot(b4.x - p.x, b4.y - p.y);
+        if (dC < b4.params.near - 6) out.push('Bit Bucket: treibt bis auf ' + dC.toFixed(0) + ' px heran');
+      }
+
+      // 5) Alle: Tod, killAll, Listener
+      enter(10);
+      const pick0 = g.room.pickups.length;
+      for (const [id] of DEEP) { spawn(id, 300, 200); spawn(id, 660, 380); }
+      place(480, 440);
+      step(90);
+      BOTA.debug.killAll();
+      step(2);
+      if (g.room.enemies.length) out.push('Etagen 8–10: killAll laesst Gegner zurueck: ' + g.room.enemies.map((e) => e.id).join());
+      if (g.room.pickups.length !== pick0) out.push('Etagen 8–10: Reste in room.pickups');
+      if (handlers() !== listeners0) out.push('Etagen 8–10: Listener bleiben liegen');
+    } finally {
+      for (const off of offs) off();
+      inp.moveVector = realMove;
+      inp.shootDir = realDir;
+      delete p.hurt;
+      if (p.hurt !== realHurt) p.hurt = realHurt;
+      BOTA.AI.shoot = realShoot;
+      clearRoom();
+      p.recalcStats();
+      g.enterFloor(Math.max(1, d0)); g.setState('play');
+    }
+    return out;
+  });
+  problems.push(...deepProblems);
+  // Screenshot auf der Heimat-Etage des Bit Bucket, alle drei zusammen
+  await page.evaluate(() => {
+    const g = BOTA.game;
+    g.enterFloor(10); g.setState('play'); BOTA.debug.gotoRoom('start'); BOTA.debug.god(true);
+    for (const [id, x, y] of [['bit_bucket', 640, 200], ['heisenbug', 300, 180], ['cosine_similarity', 760, 430]]) BOTA.debug.spawn(id, x, y);
+  });
+  await page.waitForTimeout(700);
+  await shot('17-deep-enemies');
+  for (let i = 0; i < 3; i++) await page.evaluate(() => BOTA.debug.killAll());
   await browser.close();
 
   // --- Ergebnis ---------------------------------------------------------------

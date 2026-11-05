@@ -702,6 +702,16 @@
     FX.burst(g, e.x, e.y, '#ffffff', 4, 300, { streak: true, lifeMin: 0.08, lifeMax: 0.16, sizeMin: 3, sizeMax: 4 });
     FX.debris(g, e.x, e.y, 7, ['#b9cde6', '#eef4ff', '#6f86a6'], 4);
   });
+  // Bit Bucket: Der Schuss zerfaellt am Rand der Scheibe; beim Leeren schlaegt ein Ring aus dem Eimer
+  on('enemySwallow', (e) => {
+    FX.burst(e.game, e.x, e.y, e.color || '#ffffff', 4, 70, { vary: true, lifeMin: 0.1, lifeMax: 0.25, sizeMin: 2, sizeMax: 4 });
+    FX.ring(e.game, e.x, e.y, 14, '#d0d0d8', 0.16, 2);
+  });
+  on('enemyFlush', (e) => {
+    const col = e.color || '#ff4d3d';
+    FX.ring(e.game, e.x, e.y, (e.r || 110) * 0.7, col, 0.3, 4);
+    FX.burst(e.game, e.x, e.y, col, 10, 220, { vary: true, lifeMin: 0.15, lifeMax: 0.35, drag: 4 });
+  });
   // Megalith: Suchtreffer ersetzt (gelber Blitz), Modul wieder eingemergt ("+1 import")
   on('bossReplace', (e) => {
     FX.ring(e.game, e.x, e.y, 54, e.color || '#ffe14d', 0.3, 4);
