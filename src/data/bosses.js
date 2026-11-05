@@ -55,7 +55,7 @@
     subtitle: 'What could go wrong at 16:55?',
     hp: 240, r: 38, speed: 175, contactDamage: 2, flying: true,
     behavior: 'friday_deploy', sprite: 'boss_friday_deploy', color: '#ff7a2f',
-    minFloor: 4, weight: 3,
+    minFloor: 4, maxFloor: 7, weight: 3,
     desc: 'A burning server rack bouncing off the walls. Rollback scheduled for never.',
   };
 
@@ -94,7 +94,7 @@
     subtitle: 'This does, in fact, NOT look good to me.',
     hp: 340, r: 40, speed: 45, contactDamage: 2, flying: true,
     behavior: 'reviewer', sprite: 'boss_reviewer', color: '#e8b896',
-    minFloor: 4, weight: 3,
+    minFloor: 4, maxFloor: 9, weight: 3,
     desc: 'A floating face behind mirrored glasses. Slow, methodical, and never satisfied.',
   };
 
@@ -181,8 +181,9 @@
    * (Gewichte 3, Stakeholder 2 — er ist etwas seltener, weil man ihn auf Etage 1 schon oft gesehen hat).
    * Etage 2: je 27 %, Stakeholder 18 %; Etage 3 (Forgotten Branches): Octopus Merge 52 %, sonst je 13 %, Stakeholder 9 %;
    * Etage 4 (Dependency Hell): Memory Hog 26 %, sonst je 13 %, Stakeholder 9 %; Etage 5–7: je 15 %, Stakeholder 10 %;
-   * ab Etage 8 kommt Ransomware dazu (je 13 %; Etage 10, /dev/null: Ransomware 33 %, sonst je 11 %);
-   * Etage 14, 25, ...: Octopus Merge 38 %, sonst je 9 %, The Shareholder 6 %.
+   * Friday Deploy endet nach Etage 7, der Reviewer nach Etage 9, die Memory Hog nach Etage 9. Ab Etage 8 kommt Ransomware
+   * dazu (Etage 8–9: je 14 %; Etage 10, /dev/null: Ransomware 42 %, sonst je 14 %; Etage 11: je 19 %).
+   * Etage 14, 25, ...: Octopus Merge 46 %, sonst je 12 %, The Shareholder 8 %.
    */
   /**
    * Boss-Abwechslung ueber einen Run (game.assignFloorBoss ruft das beim Betreten jeder Etage auf):

@@ -133,6 +133,8 @@ Live state is under `BOTA.game` (`.player`, `.room`, `.floor`, `.depth`, `.state
   draws from `game.rng`, ignores disguised Hallucinations and doesn't change in empty rooms; Deep Packet Inspection
   marks the boss and secret room without changing `room.seen` and drops a mark once visited; To the Moon ignores
   spikes, cacti and puddles (checked against a player without it) while cacti, pits and rocks stay solid;
+- retirement: the Bug and Friday Deploy end after floor 7, the Null Pointer and the Reviewer after floor 9, on every later cycle too,
+  and every floor keeps at least two possible bosses;
 - the Game-breaking Bug and Dangling Pointer match the Bug and Null Pointer except for 2 contact damage, never roll
   before floor 8, stay at 2.5–9 % of enemies on floors 8–22, and one touch costs a full heart;
 - the Off-Brand GPU turns about 12 % of shots into duds that deal no damage, and the GPU prices are 30¢ / 20¢;
@@ -640,8 +642,8 @@ Item conventions:
 
 | id | behaviour | minFloor | HP |
 |---|---|---|---|
-| bug | wander | 1 | 8 |
-| null_pointer | fly_chase | 1 | 5 |
+| bug | wander | 1 to 7 | 8 |
+| null_pointer | fly_chase | 1 to 9 | 5 |
 | memory_leak | split | 1 | 14 |
 | hallucination | mimic | 1 | 6 (bonus spawn) |
 | flaky_test | blink | 2 | 10 |
@@ -679,6 +681,9 @@ and follows the same rule: **it must stay indistinguishable from what it imitate
 with `drawProps`' shadow on a tile centre and stays `intangible` and `ignoreForClear`, so homing shots, followers, Code Review
 and the Calculator can't give it away; for the same reason it checks player shots itself. Change `drawProps` and you must
 change its `draw`. A real prop is solid and the disguise isn't, but the player reveals it at 100 px, before touching it.
+
+**Retired enemies:** like bosses, an enemy can end at `maxFloor` (2026-11-05, from the weights review): the Bug after floor 7 and
+the Null Pointer after 9, also on the second cycle, so The Backlog II has neither. `enemyWeightAt` returns 0 past it.
 
 The **Game-breaking Bug** and **Dangling Pointer** (2026-11-04) are recoloured Bug and Null Pointer for floors 8+: same
 stats and behaviour (they share `BUG_FRAMES` / `POINTER_FRAMES`), but contact damage 2 and cost 1.5. They have no `home`
@@ -853,10 +858,10 @@ away from home weighs at most 3 (`BOSS_LEAK_WEIGHT` in `bosses.js`): the Octopus
 16 % on floor 16 instead of dominating. Check that themed content reads on any floor: dark floors are fine for both
 families (screenshots 2026-11-03); cacti stay a Sandbox Borders floor feature.
 
-**Bosses** (base HP): `monolith` 360 (floors 1–6), `stakeholder` 250 (floors 1–6), `friday_deploy` 240 (floor 4+),
+**Bosses** (base HP): `monolith` 360 (floors 1–6), `stakeholder` 250 (floors 1–6), `friday_deploy` 240 (floors 4–7),
 `infinite_loop` 300 (floors 2–7), `memory_hog` 300 (floors 4–9, ×2 on Dependency Hell), `megalith` 460 (floor 7+, replaces the Monolith), `shareholder` 380 (floor 7+,
 replaces the Stakeholder), `nested_loop` 450 (floor 8+, replaces the Infinite Loop), `rogue_swarm` 4 × 80 (floors 2–6), `agent_swarm` 4 × 115 (floor 7+, replaces the Rogue Agent Swarm), `ransomware` 460 (floor 8+, ×3 on /dev/null), `reviewer`
-340 (floor 4+), `octopus_merge` 300 (330 until 2026-11-03; Forgotten Branches only, weight 12: about 52 % on
+340 (floors 4–9), `octopus_merge` 300 (330 until 2026-11-03; Forgotten Branches only, weight 12: about 52 % on
 floor 3, about 41 % on floors 14, 25, …). Each replacement has its predecessor's weight and a `replaces` field, so
 a floor never has the predecessor as a side quest (the side quests keep the retired bosses alive past their `maxFloor`). Friday Deploy and the Reviewer moved from floors 2 and 3 to floor 4 on
 2026-11-02, which gives floor 3 to the Octopus Merge and floor 2 to Monolith, Stakeholder, Loop and Swarm.

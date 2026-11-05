@@ -88,6 +88,7 @@
  *     bei genug Schaden, sonst Wipe mit erreichbaren sicheren Spalten; Phase 2; keine Reste, Schloesser enden
  *   - Trojan: ab Etage 5 als Bonus, getarnt wie ein Objekt der Etage; Naehe, Schuss und Explosion enttarnen; Telegraph
  *     vor Ring und Kontakt; Luke vor dem Faecher; sperrt keinen geraeumten Raum
+ *   - Ruhestand: Bug und Friday Deploy enden nach Etage 7, Null Pointer und Reviewer nach Etage 9, auch im zweiten Durchgang
  *   - Verschaerfte Grundgegner: gleiche Werte wie Bug und Null Pointer ausser 2 Kontaktschaden, nie vor Etage 8, auf
  *     den Etagen 8–22 je 2.5–9 % der Gegner; ein Treffer kostet ein volles Herz
  *   - Team-Items: Pools; Von Neumann: Werte; Sharp Left Turn: Kurve einmal, 90 Grad links in jeder Richtung, Strecke
@@ -2591,6 +2592,34 @@ const URL = 'file://' + path.join(ROOT, 'index.html').replace(/\\/g, '/') + '?se
     return out;
   });
   problems.push(...eliteProblems);
+
+  // --- Ruhestand: Bug, Null Pointer, Friday Deploy und Reviewer enden auf ihrer maxFloor, auch im zweiten Durchgang ---
+  const retiredProblems = await page.evaluate(() => {
+    const out = [], E = BOTA.ENEMIES, BO = BOTA.BOSSES;
+    const rolled = (id, d) => {
+      for (let i = 0; i < 700; i++) if (BOTA.rollRoomEnemies(new BOTA.RNG(BOTA.hashString('ret' + d + ':' + i)), d).includes(id)) return true;
+      return false;
+    };
+    for (const [id, last] of [['bug', 7], ['null_pointer', 9]]) {
+      if (E[id].maxFloor !== last) out.push(id + ': maxFloor ' + E[id].maxFloor);
+      if (!rolled(id, last)) out.push(id + ': fehlt auf seiner letzten Etage ' + last);
+      for (const d of [last + 1, 12, 13, 16, 23]) {
+        if (rolled(id, d)) out.push(id + ': noch auf Etage ' + d);
+        if (BOTA.enemyWeightAt(E[id], d) !== 0) out.push(id + ': Gewicht auf Etage ' + d);
+      }
+    }
+    for (const [id, last] of [['friday_deploy', 7], ['reviewer', 9]]) {
+      if (!BOTA.bossEligible(BO[id], last, BOTA.themeKeyAt(last))) out.push(id + ': fehlt auf seiner letzten Etage ' + last);
+      for (let d = last + 1; d <= 30; d++) if (BOTA.bossEligible(BO[id], d, BOTA.themeKeyAt(d))) out.push(id + ': noch Boss auf Etage ' + d);
+    }
+    // Es bleibt auf jeder Etage genug Auswahl fuer die Regel "nie zweimal hintereinander"
+    for (let d = 1; d <= 30; d++) {
+      const n = Object.values(BO).filter((b) => BOTA.bossEligible(b, d, BOTA.themeKeyAt(d))).length;
+      if (n < 2) out.push('Etage ' + d + ': nur ' + n + ' Bosse');
+    }
+    return out;
+  });
+  problems.push(...retiredProblems);
 
   // --- The Memory Hog (Etage 4–9): reservierter Boden, Page Fault, Quill Dump, Stop-the-World ---
   const hogProblems = await page.evaluate(() => {

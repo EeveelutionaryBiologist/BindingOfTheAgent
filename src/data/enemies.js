@@ -28,6 +28,7 @@
  *     tags: [],               // fuer Layout-Bias: 'fly', 'ranged', 'melee', 'charge', 'turret'
  *     noFlip: false,          // Sprite nicht horizontal spiegeln (Text/Symbole)
  *     family: 'branches',     // optisch/akustische Familie: Treffer-/Tod-Effekte und -Sounds (effects.js, audio.js)
+ *     maxFloor: 7,            // optional: letzte Etage; danach taucht er nicht mehr auf (auch nicht auf Etage 12+)
  *     // --- Etagen-Themen (optional, siehe B.themeWeight unten) ---
  *     themes: { branches: 3, devnull: 0 }, // Gewichtsfaktor je Etagen-Thema (key in FLOOR_THEMES); 0 = dort nie
  *     themeOnly: ['branches'],             // taucht NUR auf Etagen mit diesen Themen auf (minFloor gilt weiterhin)
@@ -73,7 +74,7 @@
   E.bug = {
     name: 'Bug', hp: 8, r: 18, speed: 70, contactDamage: 1,
     behavior: 'wander', sprite: 'enemy_bug', color: '#6aa84f',
-    minFloor: 1, weight: 10, weightPerFloor: -1, minWeight: 3, cost: 1, tags: ['melee'],
+    minFloor: 1, maxFloor: 7, weight: 10, weightPerFloor: -1, minWeight: 3, cost: 1, tags: ['melee'],   // danach Game-breaking Bug
     home: ['backlog', 'legacy'],
     desc: "It's not a bug, it's a feature. A feature with mandibles.",
   };
@@ -81,7 +82,7 @@
   E.null_pointer = {
     name: 'Null Pointer', hp: 5, r: 14, speed: 140, contactDamage: 1, flying: true,
     behavior: 'fly_chase', sprite: 'enemy_null_pointer', color: '#c9ced6',
-    minFloor: 1, weight: 7, weightPerFloor: -0.3, minWeight: 4, cost: 1, tags: ['fly', 'melee'],
+    minFloor: 1, maxFloor: 9, weight: 7, weightPerFloor: -0.3, minWeight: 4, cost: 1, tags: ['fly', 'melee'],   // danach Dangling Pointer
     home: ['backlog', 'legacy', 'production'],
     desc: 'Points at nothing. Charges at you anyway.',
   };
@@ -871,7 +872,7 @@
    */
   B.enemyWeightAt = function (def, depth, theme) {
     const base = def.weight || 0;
-    if (base <= 0) return 0;
+    if (base <= 0 || (def.maxFloor !== undefined && depth > def.maxFloor)) return 0;
     const w = base + (def.weightPerFloor || 0) * Math.max(0, depth - (def.minFloor || 1));
     const clamped = B.M.clamp(w, def.minWeight || 0, def.maxWeight !== undefined ? def.maxWeight : 99);
     return clamped * B.themeWeight(def, theme === undefined ? B.themeKeyAt(depth) : theme, depth);
@@ -904,6 +905,7 @@
     for (const id of Object.keys(E)) {
       const def = E[id];
       if (def.spawn === false || (def.minFloor || 1) > d) continue;
+      if (def.maxFloor !== undefined && d > def.maxFloor) continue;   // im Ruhestand, auch im zweiten Durchgang
       // Auf dieser Etage ausgeschlossen (themeOnly / Faktor 0, vor der Kakophonie): weder im Pool noch als Bonus
       // (und damit auch kein RNG-Zug fuer seine Bonus-Chance)
       if (B.themeWeight(def, th, d) <= 0) continue;
