@@ -21,6 +21,21 @@
 'use strict';
 
 (function (B) {
+  /**
+   * Startphase des Wackelns (Temperature 1.5) aus den Startwerten des Schusses. Das Wackeln verschiebt echte Flugbahnen,
+   * Math.random waere hier also Spiellogik; game.rng wiederum wuerde jeden Seed mit diesem Item aendern. Deshalb ein
+   * reiner Hash: gleicher Schuss, gleiche Phase, und die Schuesse eines Faechers unterscheiden sich ueber ihre
+   * Geschwindigkeit. Ganzzahlig gerechnet (Raster 1/8 px), damit das Ergebnis in jedem Browser gleich ist.
+   */
+  function wobblePhaseOf(x, y, vx, vy) {
+    let h = 0x811c9dc5;
+    for (const v of [x, y, vx, vy]) {
+      h = Math.imul(h ^ (Math.round(v * 8) | 0), 0x01000193);
+      h ^= h >>> 13;
+    }
+    return (h >>> 0) / 4294967296 * Math.PI * 2;
+  }
+
   class Projectile extends B.Entity {
     constructor(o) {
       const isEnemy = o.team === 'enemy';
@@ -39,7 +54,7 @@
       this.isChild = !!o.isChild;
       this.bounces = 0;
       this.hitSet = new Set(); // bereits getroffene Gegner (fuer Durchschuss)
-      this.wobblePhase = Math.random() * Math.PI * 2;
+      this.wobblePhase = wobblePhaseOf(this.x, this.y, this.vx, this.vy);
     }
 
     get speed() { return Math.hypot(this.vx, this.vy); }

@@ -267,6 +267,8 @@ Live state is under `BOTA.game` (`.player`, `.room`, `.floor`, `.depth`, `.state
   does nothing there and `R` changes the seed;
 - `game.runLog` records floors, items, secret rooms, bosses, side quests and the death line, holds at most 40 entries,
   empties on a new run, survives "keep going" and never draws from `game.rng`;
+- the wobble phase is the same for identical shots, differs across a fan, is well spread over 0–2π, and uses neither
+  `Math.random` nor `game.rng`; `rm -rf` and the On-Call Pager deal 25/10 on floor 1 and 51.25/20.5 on floor 8;
 - the door transition, special rooms, pause screen and death screen work.
 
 Screenshots go to `tools/out/` (scratch; don't commit or ship). One-time setup without admin rights:
@@ -288,7 +290,7 @@ swatch (`floor_<key>_swatch.png`). Run it after changing a theme, pattern or dec
 Testing tips:
 - Headless Chromium can't play audio. Instead, check `BOTA.audio.play(name)` doesn't throw after a key press unlocks the AudioContext.
 - Use `page.keyboard.down/up` for movement and `BOTA.debug.*` for setup.
-- `teleport`/`gotoRoom` **skip the boss intro card**, which only triggers when you walk through a door (see §8).
+- `teleport`/`gotoRoom` **skip the boss intro card**, which only triggers when you walk through a door (see §6).
 - God mode doesn't stop "Retry with Backoff" from intercepting a lethal hit. To force death, call `hurt` repeatedly.
 
 ---
@@ -516,6 +518,8 @@ The previous floor's boss is excluded, and bosses already met count `weight · t
     of every living enemy in the room that has one (the Dust Daemon's swirl, the Bit Bucket's disc). It may change
     `vx/vy` or end the shot (it then doesn't move or hit anything that tick) and must be deterministic. Enemy shots
     are never bent.
+  - **Wobble:** `wobblePhase` (Temperature 1.5) is a pure hash of the shot's spawn values, because it changes real
+    shot paths: no `Math.random`, and no `game.rng` either, or every seed with that item would change.
 - **`Bomb`:** sits in `room.projectiles` with a 1.5 s fuse, then calls `game.explode(…, 110, 30)`. It hurts the player too.
 - **`Enemy`** (`entities/enemy.js`):
   - **Behaviour contract:** `init`, `update`, `afterMove`, `onDeath`, `onLethal`, `onExplosion`, `onHitPlayer`,
@@ -686,6 +690,7 @@ Item conventions:
 - A player shot with `damage <= 0` is a dud (Off-Brand GPU): it fizzles on enemies and breakable objects without
   damage, knockback or `onHitEnemy` hooks (`projectile.js`).
 - The default price is 15 (`B.itemPrice(id)`).
+- Flat item damage scales like enemy HP: `rm_rf` (25) and On-Call Pager (10) multiply by `B.hpScale(depth)`.
 - **Team suggestions** (2026-11-04):
   - **Calculator** computes enemies × visited rooms of the floor when entering a room with enemies and shows the sum
     (`4 x 7 = 28`). `B.calcResult(n)` hashes n into small changes to damage, shot speed, speed and fire delay (55 % plus,
@@ -1126,8 +1131,6 @@ modules rely on these implicitly through the bus.
 - **Item repeats.** Once every item has been seen in a run, `rollItem` falls back to the full list. Duplicate follower
   items then stack (several ducks or orbitals).
 - **Few-Shot plus Regex** gives a 3-way fan, because the larger `multishot` wins and `parallel` only applies to a count of 2.
-- **Flat item damage.** `rm_rf` (25) and On-Call Pager (10) deal fixed damage while enemy HP scales with depth, so
-  they get weaker deeper down.
 - **Stat recalculation timing.** `player.recalcStats()` runs on item pickup, hurt and heal, but **not** when guardrail
   pickups are collected. `git_blame` works around this with an `update` hook.
 - **Hallucination and room clearing.** While disguised it is `ignoreForClear`. Because `onRoomClear` fires only once,
@@ -1172,7 +1175,6 @@ work again, the same file-ownership split works well.
 - Gamepad support (`navigator.getGamepads()` polled in `input.js`).
 - A local leaderboard for the daily run (the daily seed and today's best exist since 2026-11-05).
 - A separate music toggle (extend the `storage` schema with validation).
-- Scale item damage with depth.
 - Better item-pool exhaustion handling (e.g. hand out `blockchain` forever).
 - A human balance pass on boss HP and spawn budgets, and on enemy and boss odds per floor (`minFloor`, `weight`,
   `weightPerFloor`, `themes`, `home`, `AWAY`, the `mixAt` curve, side-quest HP and count). The floor-3/4 boss shuffle

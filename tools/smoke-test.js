@@ -136,6 +136,8 @@
  *   - Derselbe Seed: T nach der Sperre im Post-Mortem und auf der Score-Karte, S und zu fruehes T wirken nicht
  *   - Zeitleiste (game.runLog): Etagen, Items, Geheimraeume, Bosse, Zwischenbosse, Tod; hoechstens 40 Eintraege, neuer
  *     Run leert sie, Weitermachen behaelt sie, kein game.rng
+ *   - Wackelphase: gleicher Schuss gleiche Phase, Faecher verschieden, gut verteilt, ohne Math.random und game.rng
+ *   - rm -rf und On-Call Pager skalieren wie die Gegner-HP
  *   - Spezialraeume, Pause- und Todesbildschirm rendern
  * Screenshots landen in tools/out/ (nicht einchecken).
  *
@@ -5905,6 +5907,43 @@ const URL = 'file://' + path.join(ROOT, 'index.html').replace(/\\/g, '/') + '?se
     await rtap('KeyR');
     if (await rp.evaluate(() => BOTA.game.runLog.length) !== 1) problems.push('Neuer Run leert die Zeitleiste nicht');
 
+    // Wackelphase und Item-Schaden
+    problems.push(...await rp.evaluate(() => {
+      const B = BOTA, g = B.game, out = [];
+      const shot = (x, y, vx, vy) => new B.Projectile({ x, y, vx, vy, team: 'player', flags: { wobble: true } });
+      if (shot(100, 200, 480, 0).wobblePhase !== shot(100, 200, 480, 0).wobblePhase) out.push('Wackelphase: gleicher Schuss, andere Phase');
+      const fan = [-24, -12, 0, 12, 24].map((deg) => { const a = deg * Math.PI / 180; return shot(100, 200, Math.cos(a) * 480, Math.sin(a) * 480).wobblePhase; });
+      if (new Set(fan).size !== fan.length) out.push('Wackelphase: Faecher hat gleiche Phasen ' + fan);
+      const real = Math.random, rng = g.rng.state;
+      let calls = 0;
+      Math.random = () => { calls++; return real(); };
+      const buckets = new Array(8).fill(0);
+      for (let i = 0; i < 2000; i++) {
+        const ph = shot(64 + (i * 7) % 830, 64 + (i * 13) % 440, 480 - (i % 11) * 30, (i % 17) * 25 - 200).wobblePhase;
+        if (!(ph >= 0 && ph < Math.PI * 2)) out.push('Wackelphase ausserhalb 0..2pi: ' + ph);
+        buckets[Math.floor(ph / (Math.PI / 4))]++;
+      }
+      Math.random = real;
+      if (calls || g.rng.state !== rng) out.push('Wackelphase nutzt Math.random (' + calls + ') oder game.rng');
+      if (Math.min(...buckets) < 170) out.push('Wackelphase schlecht verteilt: ' + buckets);
+
+      for (const [depth, rm, pager] of [[1, 25, 10], [8, 51.25, 20.5]]) {
+        g.enterFloor(depth); g.setState('play');
+        g.room.enemies.length = 0;
+        const p = g.player;
+        const e = B.debug.spawn('memory_leak', p.x + 60, p.y);
+        // Gegner-HP sind gerundet, deshalb nur auf einen Punkt genau
+        if (Math.abs(e.maxHp - B.ENEMIES.memory_leak.hp * B.hpScale(depth)) > 1) out.push('hpScale passt nicht zu den Gegner-HP: ' + e.maxHp);
+        e.spawnDelay = 0; e.hp = e.maxHp = 100000;
+        B.ITEMS.rm_rf.use(p, g);
+        const a = 100000 - e.hp;
+        const hp = e.hp;
+        B.ITEMS.on_call_pager.onHurt(p, g);
+        if (a !== rm || hp - e.hp !== pager) out.push('Item-Schaden auf Etage ' + depth + ': rm -rf ' + a + ', Pager ' + (hp - e.hp));
+        g.room.enemies.length = 0;
+      }
+      return out;
+    }));
     await rp.close();
   }
 

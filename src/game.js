@@ -546,7 +546,7 @@
     spawnEnemy(id, x, y, room) {
       const def = B.ENEMIES[id];
       if (!def) { console.warn('[game] unknown enemy', id); return null; }
-      const e = new B.Enemy(def, id, x, y, this, 1 + 0.15 * (this.depth - 1));
+      const e = new B.Enemy(def, id, x, y, this, B.hpScale(this.depth));
       (room || this.room).enemies.push(e);
       return e;
     }

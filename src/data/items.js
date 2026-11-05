@@ -705,7 +705,8 @@
       const R = 200;
       for (const e of livingEnemies(g)) {
         if (B.M.dist(player.x, player.y, e.x, e.y) > R + e.r) continue;
-        if (e.hurt(10, g, null) && !e.noKnockback) e.knockback(e.x - player.x, e.y - player.y, 420);
+        // 10 Schaden auf Etage 1, skaliert wie die Gegner-HP (sonst waere das Item tief unten wirkungslos)
+        if (e.hurt(10 * B.hpScale(g.depth), g, null) && !e.noKnockback) e.knockback(e.x - player.x, e.y - player.y, 420);
       }
       fx.ring(g, player.x, player.y, R, '#e05a4f', 0.35);
       fx.popText(g, player.x, player.y - 60, 'PAGE!', '#ff8a7a');
@@ -859,7 +860,8 @@
       if (!list.length) return deny(player, g, 'already deleted');
       for (const e of list) {
         if (e.dead) continue; // kann durch Abspaltungen anderer Gegner inzwischen tot sein
-        if (e.hurt(25, g, null) && !e.noKnockback) e.knockback(e.x - player.x, e.y - player.y, 300);
+        // 25 Schaden auf Etage 1, skaliert wie die Gegner-HP (sonst waere das Item tief unten wirkungslos)
+        if (e.hurt(25 * B.hpScale(g.depth), g, null) && !e.noKnockback) e.knockback(e.x - player.x, e.y - player.y, 300);
         fx.burst(g, e.x, e.y, '#ffb347', 10, 260);
       }
       g.shake(14, 0.4);

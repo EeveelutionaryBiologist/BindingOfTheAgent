@@ -233,7 +233,7 @@ big **name**, small *tagline*. The pause screen lists collected items with their
 |---|---|---|---|
 | Regenerate Response | 2 | Rerolls item pedestals in the room | Same prompt. Different answer. Same disappointment. |
 | Stop Generating | 3 | Freezes all enemies for 4 s | ■ Stop. Everyone stop. Thank you. |
-| `rm -rf node_modules` | 4 | 25 damage to every enemy in the room | Freed 4.2 GB. Feels incredible. Nothing builds anymore. |
+| `rm -rf node_modules` | 4 | 25 damage to every enemy in the room (floor 1; scales with enemy HP) | Freed 4.2 GB. Feels incredible. Nothing builds anymore. |
 | /compact | 6 | Heals 2 hearts | Forget everything except the important bits. You feel lighter. |
 
 ### Pickups
@@ -436,6 +436,9 @@ All milestones done. What shipped, compared with this doc:
     15 % fewer shots per second in both phases. The breaks shrink with depth, back to roughly the old pace.
   - Guaranteed Approval per floor from depth 2 (see §6, step 8). Before this, 55–80 % of floors had no
     Approval drop at all.
+- **Surprise round (2026-11-05):** own enemies for floors 8–10 (Cosine Similarity, Heisenbug, Bit Bucket), Terms of Service
+  rooms, seed entry, a daily run with today's best score, same-seed retry and an incident timeline on the post-mortem.
+  `rm -rf` and the On-Call Pager now scale with depth. Details in AGENTS.md.
 - **Floor themes for spawns (2026-11-02):** enemies and bosses can be weighted per floor theme (`themes`) or limited
   to certain themes (`themeOnly`), so a floor like Forgotten Branches can get its own enemy family. Details in
   AGENTS.md §4. First users: Stale Branch, Detached HEAD, Cherry-Pick and Orphan Commit, which only appear on Forgotten Branches.

@@ -77,7 +77,7 @@ All items and pickups in the game.
 | ![Constitutional Guardrails](images/item_constitutional_guardrails.png) | **Constitutional Guardrails** `constitutional_guardrails` | +2 guardrail (blue) hearts | Treasure, Shop, Boss | 12¢ | Principles: has them, mentions them, often. |
 | ![Retry with Backoff](images/item_retry_backoff.png) | **Retry with Backoff** `retry_backoff` | Once per run, survive a lethal hit: come back with half your hearts (at least 1), 2 s invulnerable, enemies frozen for 1.5 s. Costs speed −0.1 for the rest of the run | Treasure, Secret | — | Failed? Try again. Slower. |
 | ![git blame](images/item_git_blame.png) | **git blame** `git_blame` | Damage +2 while you have 1 heart or less left (red + blue) | Treasure, Secret | — | It was never your fault. The logs prove it. |
-| ![On-Call Pager](images/item_on_call_pager.png) | **On-Call Pager** `on_call_pager` | When you get hit, enemies within 200 px take 10 damage and are pushed away | Treasure, Secret | — | Woken up at 3 a.m.? Then so is everyone within a 200 px radius. |
+| ![On-Call Pager](images/item_on_call_pager.png) | **On-Call Pager** `on_call_pager` | When you get hit, enemies within 200 px take 10 damage (floor 1; scales with enemy HP) and are pushed away | Treasure, Secret | — | Woken up at 3 a.m.? Then so is everyone within a 200 px radius. |
 | ![Garbage Collector](images/item_garbage_collector.png) | **Garbage Collector** `garbage_collector` | Every 12 kills: heal half a heart (or +2¢ at full health) and freeze enemies for 0.6 s | Treasure, Boss | — | Every 12 kills it reclaims half a heart. Stop-the-world pauses included. |
 | ![The Cloud](images/item_the_cloud.png) | **The Cloud** `the_cloud` | Flight: fly over pits, rocks and spikes | Treasure, Secret | — | It's just someone else's computer. But it floats. |
 | ![Von Neumann Architecture](images/item_von_neumann.png) | **Von Neumann Architecture** `von_neumann` | +1 heart container, a full heal and +1 blue heart; speed −0.1, shot speed −0.1 | Treasure, Shop, Boss | 15¢ | Obsolete...? |
@@ -105,7 +105,7 @@ You can carry one at a time; picking up another swaps them. If there's nothing t
 |---|---|---|---|---|---|---|
 | ![Regenerate Response](images/item_regenerate_response.png) | **Regenerate Response** `regenerate_response` | 2 | Rerolls every item pedestal in the room (shop prices update), or the pickups if there are no pedestals | Treasure, Shop | 15¢ | Same prompt. Different answer. Same disappointment. |
 | ![Stop Generating](images/item_stop_generating.png) | **Stop Generating** `stop_generating` | 3 | Freezes all enemies for 4 s | Treasure, Shop | 15¢ | ■ Stop. Everyone stop. Thank you. |
-| ![rm -rf node_modules](images/item_rm_rf.png) | **rm -rf node_modules** `rm_rf` | 4 | 25 damage to every enemy in the room | Treasure, Shop, Boss | 18¢ | Freed 4.2 GB. Feels incredible. Nothing builds anymore. |
+| ![rm -rf node_modules](images/item_rm_rf.png) | **rm -rf node_modules** `rm_rf` | 4 | 25 damage (floor 1; scales with enemy HP) to every enemy in the room | Treasure, Shop, Boss | 18¢ | Freed 4.2 GB. Feels incredible. Nothing builds anymore. |
 | ![/compact](images/item_compact.png) | **/compact** `compact` | 6 | Heals 2 hearts | Treasure, Shop | 15¢ | Forget everything except the important bits. You feel lighter. |
 | ![Ctrl+Z](images/item_ctrl_z.png) | **Ctrl+Z** `ctrl_z` | 3 | Restores your health and guardrails to what they were when you entered the room | Treasure, Shop, Secret | 15¢ | Restores your health to how it was when you entered the room. Unlike prod. |
 

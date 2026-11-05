@@ -172,6 +172,12 @@ window.BOTA = window.BOTA || {};
   /** Seed des Daily Runs: gleicher Tag, gleicher Seed, also gleiche Karten fuer das ganze Team */
   B.dailySeed = function (date) { return 'DAILY-' + B.dailyKey(date); };
 
+  /**
+   * HP-Faktor normaler Gegner auf einer Tiefe. game.spawnEnemy nutzt ihn, und Items mit festem Schaden skalieren
+   * damit (rm -rf, On-Call Pager): Ihr Schaden behaelt so sein Verhaeltnis zu den Gegner-HP.
+   */
+  B.hpScale = function (depth) { return 1 + 0.15 * (depth - 1); };
+
   // ---------------------------------------------------------------------------
   // URL-Parameter (?seed=abc&debug)
   // SICHERHEIT: Seed wird strikt validiert, alles andere wird ignoriert.
