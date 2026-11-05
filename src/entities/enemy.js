@@ -11,8 +11,9 @@
  *     onLethal(e, game, source) {}, // optional: true zurueckgeben = Tod verhindern (z. B. Zombie Process)
  *     onExplosion(e, game, x, y, radius) {}, // optional: jede Explosion im Raum (game.explode), egal wie nah
  *     onHitPlayer(e, game) {},      // optional: Kontaktschaden hat den Spieler wirklich getroffen
- *     bendShot(e, shot, dt, game) {}, // optional: darf vx/vy eines SPIELERschusses aendern (jeder Tick, vor
- *                                   // dessen Bewegung; Aufruf aus projectile.js) — Dust Daemon; deterministisch!
+ *     bendShot(e, shot, dt, game) {}, // optional: darf vx/vy eines SPIELERschusses aendern oder ihn beenden (jeder
+ *                                   // Tick, vor dessen Bewegung; Aufruf aus projectile.js) — Dust Daemon, Bit
+ *                                   // Bucket; deterministisch!
  *     draw(e, ctx, game) {},        // optional — ersetzt das Standard-Sprite-Zeichnen komplett
  *     drawUnder(e, ctx, game) {},   // optional — wird VOR dem Standard-Sprite gezeichnet (Bodenmarker)
  *     drawOver(e, ctx, game) {},    // optional — wird NACH dem Standard-Sprite gezeichnet (Telegraphen)

@@ -15,11 +15,27 @@
  *   isChild           Abspaltung (spaltet sich nicht weiter)
  *
  * Schuss-Felder: Spielerschuesse rufen jeden Tick vor der Bewegung den Verhaltens-Hook bendShot(e, shot, dt, game)
- * aller lebenden Gegner im Raum auf, die ihn haben (Dust Daemon: Wirbel lenkt Schuesse ab, enemy.js).
+ * aller lebenden Gegner im Raum auf, die ihn haben (Dust Daemon: Wirbel lenkt Schuesse ab, enemy.js; Bit Bucket:
+ * schluckt Schuesse, enemies-deep.js).
  */
 'use strict';
 
 (function (B) {
+  /**
+   * Startphase des Wackelns (Temperature 1.5) aus den Startwerten des Schusses. Das Wackeln verschiebt echte Flugbahnen,
+   * Math.random waere hier also Spiellogik; game.rng wiederum wuerde jeden Seed mit diesem Item aendern. Deshalb ein
+   * reiner Hash: gleicher Schuss, gleiche Phase, und die Schuesse eines Faechers unterscheiden sich ueber ihre
+   * Geschwindigkeit. Ganzzahlig gerechnet (Raster 1/8 px), damit das Ergebnis in jedem Browser gleich ist.
+   */
+  function wobblePhaseOf(x, y, vx, vy) {
+    let h = 0x811c9dc5;
+    for (const v of [x, y, vx, vy]) {
+      h = Math.imul(h ^ (Math.round(v * 8) | 0), 0x01000193);
+      h ^= h >>> 13;
+    }
+    return (h >>> 0) / 4294967296 * Math.PI * 2;
+  }
+
   class Projectile extends B.Entity {
     constructor(o) {
       const isEnemy = o.team === 'enemy';
@@ -38,7 +54,7 @@
       this.isChild = !!o.isChild;
       this.bounces = 0;
       this.hitSet = new Set(); // bereits getroffene Gegner (fuer Durchschuss)
-      this.wobblePhase = Math.random() * Math.PI * 2;
+      this.wobblePhase = wobblePhaseOf(this.x, this.y, this.vx, this.vy);
     }
 
     get speed() { return Math.hypot(this.vx, this.vy); }
@@ -76,13 +92,15 @@
 
       // Schuss-Felder: Gegner, deren Verhalten den Hook bendShot(e, shot, dt, game) hat, duerfen die Richtung
       // (vx/vy) von Spielerschuessen aendern, bevor diese sich bewegen — z. B. der Wirbel des Dust Daemon.
-      // Gegnerschuesse bleiben unberuehrt. Der Hook muss deterministisch sein (kein Zufall).
+      // Gegnerschuesse bleiben unberuehrt. Der Hook muss deterministisch sein (kein Zufall). Er darf den Schuss auch
+      // beenden (Bit Bucket schluckt ihn); dann fliegt er nicht weiter und trifft in diesem Tick nichts mehr.
       if (this.team === 'player') {
         const list = room.enemies;
-        for (let i = 0; i < list.length; i++) {
+        for (let i = 0; i < list.length && !this.dead; i++) {
           const e = list[i];
           if (!e.dead && e.behavior && e.behavior.bendShot) e.behavior.bendShot(e, this, dt, game);
         }
+        if (this.dead) return;
       }
 
       // Effektive Geschwindigkeit (Wackeln = seitlicher Sinus-Anteil)

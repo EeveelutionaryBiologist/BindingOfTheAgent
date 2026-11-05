@@ -8,6 +8,8 @@
  *   - 300 generierte Etagen enthalten Start/Boss/Schatz/Shop; alle Layouts bestehen validateLayout (strict)
  *   - lose Pickups nur in Kampfraeumen (~18 %) und beim Betreten gelegt; Hallucination nutzt jede Tarnung,
  *     eine nahe Explosion enttarnt sie
+ *   - Etagen 8–10 (enemies-deep.js): Cosine Similarity, Heisenbug und Bit Bucket rollen erst ab ihrer Etage; Spiegelung,
+ *     Beobachtung und Schlucken samt Telegraphen, Schusstempo, sauberem Tod und ohne liegengebliebene Listener
  *   - Graphics Glitch: Kontakt verfremdet das HUD (Neustart statt Stapeln), jeder Bereich rendert, Spruenge
  *     landen nie in Hindernissen
  *   - Antagonistic Reviewer: Laser und Stempel treffen genau dort, wo sie sollen; jede Nitpick-Reihe hat eine Luecke
@@ -125,6 +127,17 @@
  *     Approvals an Tuer und Truhe, Items nur einmal (kein Tausch-Farmen), Etagen-Boss und Zwischenboss genau einmal;
  *     nach der letzten Etage die Score-Karte (nicht nach anderen Etagen), Tasten erst nach der Sperre, Enter fuehrt
  *     zu The Backlog II mit Score und Zyklen, R startet bei null; Karte zieht nichts aus game.rng; Tod zeigt Score
+ *   - Terms-of-Service-Raeume: Erzeugung, Klauseln, der Handel und seine Sonderfaelle
+ *   - Seed-Dialog: nur [A-Z0-9-], hoechstens 32, Grossschreibung, Backspace, Enter leer wirkungslos, Esc, Einfuegen
+ *     nur im Dialog und gefiltert, Zeichen aus e.key (QWERTZ), M/F2 wirkungslos, gehaltenes S tippt nichts nach; der
+ *     Seed ergibt dieselbe Etage wie newRun mit ihm; URL-Seed steht schon im Feld
+ *   - Daily Run: D startet DAILY-YYYYMMDD; Storage verwirft manipulierte Werte; neuer Tag setzt den Bestwert zurueck;
+ *     nur der heutige Daily-Seed zaehlt (Tod und Score-Karte); game.rng bleibt unberuehrt
+ *   - Derselbe Seed: T nach der Sperre im Post-Mortem und auf der Score-Karte, S und zu fruehes T wirken nicht
+ *   - Zeitleiste (game.runLog): Etagen, Items, Geheimraeume, Bosse, Zwischenbosse, Tod; hoechstens 40 Eintraege, neuer
+ *     Run leert sie, Weitermachen behaelt sie, kein game.rng
+ *   - Wackelphase: gleicher Schuss gleiche Phase, Faecher verschieden, gut verteilt, ohne Math.random und game.rng
+ *   - rm -rf und On-Call Pager skalieren wie die Gegner-HP
  *   - Spezialraeume, Pause- und Todesbildschirm rendern
  * Screenshots landen in tools/out/ (nicht einchecken).
  *
@@ -4889,6 +4902,1050 @@ const URL = 'file://' + path.join(ROOT, 'index.html').replace(/\\/g, '/') + '?se
     const g = BOTA.game;
     return g.depth === 1 && g.scoreTotal() === 0 && g.cycles === 0 ? [] : ['Neustart von der Karte: Tiefe ' + g.depth + ', Score ' + g.scoreTotal() + ', Zyklen ' + g.cycles];
   }));
+
+  // --- Eigene Gegner der Etagen 8–10 (enemies-deep.js): Cosine Similarity, Heisenbug, Bit Bucket ---
+  //     Etagen: nie vor minFloor, volles Gewicht auf der Heimat-Etage, danach nur abgeschwaecht ueber die Kakophonie.
+  //     Cosine Similarity: steht punktgespiegelt, haelt Abstand, schiesst nur nach einem Spielerschuss, nach vollem
+  //     Telegraph und genau entgegengesetzt, hoechstens einmal je windup; schraeg zu ihm feuern ist sicher.
+  //     Heisenbug: im Blickkegel steht er, ist unberuehrbar und harmlos; Schuesse in der Luft treffen, sobald man
+  //     loslaesst oder wegdreht; Ring nur nach calm + tell, Hinsehen bricht ihn ab; Explosionen treffen immer.
+  //     Bit Bucket: schluckt eintretende Schuesse (auch spektrale und durchschlagende), drinnen abgefeuerte nicht,
+  //     eingefroren gar keine; nach 4 Schuessen Telegraph, 5er-Faecher in die festgelegte Richtung, dann leer.
+  //     Alle: Schuesse 165–260 px/s, sauberer Tod, killAll laesst nichts zurueck, keine liegengebliebenen Listener.
+  const deepProblems = await page.evaluate(() => {
+    const out = [];
+    const g = BOTA.game, DT = 1 / 60, E = BOTA.ENEMIES, inp = BOTA.input, bus = BOTA.bus;
+    const DEEP = [['cosine_similarity', 'latent', 8], ['heisenbug', 'undefined', 9], ['bit_bucket', 'devnull', 10]];
+    const keys = BOTA.FLOOR_THEMES.map((t) => t.key);
+
+    // 1) Daten und Wuerfeln
+    for (const [id, theme, floor] of DEEP) {
+      const def = E[id];
+      if (!def || !BOTA.BEHAVIORS[def.behavior]) { out.push(id + ': Definition oder Verhalten fehlt'); return out; }
+      if (keys.indexOf(theme) + 1 !== floor || def.minFloor !== floor || (def.themeOnly || []).join() !== theme) out.push(id + ': Etage oder Thema falsch');
+      if (BOTA.spriteFrameCount('enemy_' + id) !== 2) out.push(id + ': Sprite ohne 2 Frames');
+      if (def.contactDamage !== 1) out.push(id + ': Kontaktschaden ' + def.contactDamage);
+      for (let d = 1; d < floor; d++) {
+        for (let i = 0; i < 150; i++) if (BOTA.rollRoomEnemies(new BOTA.RNG(BOTA.hashString('deep' + d + ':' + i)), d).includes(id)) { out.push(id + ' auf Etage ' + d); break; }
+      }
+      if (BOTA.enemyWeightAt(def, floor) !== def.weight) out.push(id + ': Gewicht auf der Heimat-Etage ' + BOTA.enemyWeightAt(def, floor));
+      let home = 0;
+      for (let i = 0; i < 400; i++) {
+        const l = BOTA.rollRoomEnemies(new BOTA.RNG(BOTA.hashString('deeph' + floor + ':' + i)), floor);
+        const k = l.filter((x) => x === id).length;
+        if (k > def.maxPerRoom) out.push(id + ': ' + k + ' in einem Raum');
+        home += k;
+      }
+      if (!(home > 40)) out.push(id + ': auf Etage ' + floor + ' nur ' + home + ' in 400 Raeumen');
+      // Spaeter: sickert ein, immer schwaecher als daheim; auf der naechsten Runde wieder volles Gewicht
+      const later = 12;
+      const w = BOTA.enemyWeightAt(def, later);
+      if (Math.abs(w - def.weight * BOTA.mixAt(later)) > 1e-9) out.push(id + ': Gewicht auf Etage ' + later + ': ' + w);
+      if (BOTA.enemyWeightAt(def, floor + keys.length) !== def.weight) out.push(id + ': zweite Runde nicht auf vollem Gewicht');
+    }
+
+    const d0 = g.depth, p = g.player;
+    const realMove = inp.moveVector, realDir = inp.shootDir, realHurt = p.hurt, realShoot = BOTA.AI.shoot;
+    let dir = null;
+    const hurts = [], ev = [];
+    const offs = ['enemyWindup', 'enemyFlush', 'enemySwallow', 'enemyDeath'].map((n) => bus.on(n, (e) => ev.push({ n, enemy: e.enemy, sound: e.sound, tick: ticks })));
+    let ticks = 0;
+    const shots = [];
+    const shotsOf = () => g.room.projectiles.filter((pr) => pr.team === 'enemy');
+    const step = (n, each) => {
+      for (let i = 0; i < n; i++) {
+        g.update(DT); inp.endStep(); ticks++;
+        if (each && each(i) === false) break;
+      }
+    };
+    const clearRoom = () => {
+      for (let i = 0; i < 4; i++) BOTA.debug.killAll();
+      g.room.enemies = g.room.enemies.filter((en) => !en.dead);
+      g.room.projectiles.length = 0;
+      p.vx = p.vy = p.kbx = p.kby = 0;
+      dir = null; ev.length = 0; hurts.length = 0; shots.length = 0;
+    };
+    const enter = (depth) => {
+      g.enterFloor(depth); g.setState('play');
+      BOTA.debug.gotoRoom('start');
+      clearRoom();
+      p.fireCooldown = 0;
+    };
+    const spawn = (id, x, y) => { const e = BOTA.debug.spawn(id, x, y); e.spawnDelay = 0; return e; };
+    const place = (x, y) => { p.x = x; p.y = y; p.vx = p.vy = p.kbx = p.kby = 0; };
+    const fairSpeed = (pr, label) => { const v = Math.hypot(pr.vx, pr.vy); if (!(v >= 165 && v <= 260)) out.push(label + ': Schuss mit ' + v.toFixed(0) + ' px/s'); };
+    const handlers = () => JSON.stringify(Object.keys(bus.handlers).sort().map((k) => k + ':' + bus.handlers[k].length));
+
+    try {
+      inp.moveVector = () => ({ x: 0, y: 0 });
+      inp.shootDir = () => dir;
+      p.hurt = function (n, src) { hurts.push(src); return false; };
+      BOTA.AI.shoot = function (game, e, a, sp, o) { const pr = realShoot.call(this, game, e, a, sp, o); if (pr) shots.push({ pr, tick: ticks, a }); return pr; };
+      const listeners0 = handlers();
+
+      // 2) Cosine Similarity
+      enter(8);
+      {
+        const CX = 480, CY = 288;
+        place(260, 200);
+        const c = spawn('cosine_similarity', 500, 150), P = c.params, S = c.state;
+        if (!(P.windup >= 0.5)) out.push('Cosine Similarity: Telegraph kuerzer als 0.5 s');
+        const rng0 = g.rng.state;
+        step(60 * 6);
+        const off = Math.hypot(c.x - (960 - p.x), c.y - (576 - p.y));
+        if (off > 12) out.push('Cosine Similarity: steht ' + off.toFixed(0) + ' px neben dem Spiegelpunkt');
+        if (shots.length || shotsOf().length || S.shots) out.push('Cosine Similarity: schiesst, obwohl der Spieler nicht schiesst');
+        if (g.rng.state !== rng0) out.push('Cosine Similarity: zieht aus game.rng');
+
+        // Spieler nahe der Mitte: kein Gratis-Kontakt, er haelt Abstand, auch wenn er auf dem Spieler entsteht
+        for (const [px, py, sx, sy] of [[CX, CY, CX + 200, CY], [CX + 24, CY + 12, CX - 180, CY + 60], [CX, CY, CX + 30, CY], [CX - 10, CY, CX, CY]]) {
+          clearRoom();
+          place(px, py);
+          const e2 = spawn('cosine_similarity', sx, sy);
+          step(70);
+          hurts.length = 0;   // Wer auf dem Spieler entsteht, beruehrt ihn beim Weglaufen; danach darf das nicht mehr sein
+          let minD = 1e9;
+          step(60 * 3, () => { minD = Math.min(minD, Math.hypot(e2.x - p.x, e2.y - p.y)); });
+          if (minD < 85) out.push('Cosine Similarity: nur ' + minD.toFixed(0) + ' px Abstand bei Spieler (' + px + ',' + py + ')');
+          if (hurts.length) out.push('Cosine Similarity: ' + hurts.length + ' Kontakte, Spieler (' + px + ',' + py + ')');
+        }
+
+        // Steht der Spieler zwischen ihm und dem Spiegelpunkt, geht er aussen herum
+        clearRoom();
+        place(400, 288);
+        const e3 = spawn('cosine_similarity', 240, 288);
+        let minD = 1e9;
+        step(60 * 6, () => { minD = Math.min(minD, Math.hypot(e3.x - p.x, e3.y - p.y)); });
+        if (minD < 85) out.push('Cosine Similarity: laeuft durch den Spieler (' + minD.toFixed(0) + ' px)');
+        if (Math.hypot(e3.x - 560, e3.y - 288) > 30) out.push('Cosine Similarity: kommt nicht um den Spieler herum');
+
+        // Gegenschuss: alle vier Richtungen, nach vollem Telegraph, genau entgegengesetzt
+        for (const d of ['right', 'left', 'up', 'down']) {
+          clearRoom();
+          place(260, 200);
+          p.fireCooldown = 0;
+          const e4 = spawn('cosine_similarity', 700, 376);
+          dir = d; step(1); dir = null;
+          const t0 = ticks;
+          if (!ev.some((x) => x.n === 'enemyWindup' && x.enemy === e4 && x.sound === 'mirrorPing')) out.push('Cosine Similarity: Telegraph ohne Ton (' + d + ')');
+          step(60);
+          if (shots.length !== 1) { out.push('Cosine Similarity: ' + shots.length + ' Gegenschuesse auf einen Schuss (' + d + ')'); continue; }
+          const v = BOTA.DIRS[d];
+          const a = shots[0].a, want = Math.atan2(-v.dy, -v.dx);
+          if (Math.abs(BOTA.M.angleDiff(a, want)) > 1e-6) out.push('Cosine Similarity: Gegenrichtung falsch (' + d + ')');
+          if ((shots[0].tick - t0 + 1) * DT < 0.5) out.push('Cosine Similarity: Telegraph nur ' + ((shots[0].tick - t0 + 1) * DT).toFixed(2) + ' s');
+          fairSpeed(shots[0].pr, 'Cosine Similarity');
+        }
+
+        // Genau auf ihn geschossen: Der Schuss kommt zurueck. Schraeg zu ihm: sicher.
+        clearRoom();
+        place(120, 288);
+        const e5 = spawn('cosine_similarity', 840, 288);
+        step(30);
+        p.fireCooldown = 0;
+        dir = 'right'; step(1); dir = null;
+        step(60 * 5, () => { place(120, 288); });
+        if (!hurts.includes('Cosine Similarity')) out.push('Cosine Similarity: Schuss auf der Achse trifft nicht zurueck');
+        clearRoom();
+        place(260, 200);
+        const e6 = spawn('cosine_similarity', 700, 376);
+        step(30);
+        p.fireCooldown = 0;
+        dir = 'right'; step(1); dir = null;
+        step(60 * 5, () => { place(260, 200); });
+        if (hurts.length) out.push('Cosine Similarity: Schuss neben der Achse trifft trotzdem: ' + hurts.join());
+        void e5; void e6;
+
+        // Dauerfeuer: hoechstens ein Gegenschuss je windup
+        clearRoom();
+        place(260, 200);
+        const e7 = spawn('cosine_similarity', 700, 376);
+        p.stats.fireDelay = 0.1;
+        dir = 'right';
+        step(60 * 5, () => { place(260, 200); });
+        dir = null;
+        p.recalcStats();
+        if (shots.length < 5) out.push('Cosine Similarity: nur ' + shots.length + ' Gegenschuesse bei Dauerfeuer');
+        for (let i = 1; i < shots.length; i++) if ((shots[i].tick - shots[i - 1].tick) * DT < 0.59) out.push('Cosine Similarity: Gegenschuesse zu dicht');
+        void e7;
+
+        // Eingefroren oder spaeter erschienen: Alte Schuesse werden nie nachgeholt
+        clearRoom();
+        place(260, 200);
+        const e8 = spawn('cosine_similarity', 700, 376);
+        e8.frozen = 0.5;
+        p.fireCooldown = 0;
+        dir = 'right'; step(1); dir = null;
+        step(60 * 2);
+        if (shots.length || e8.state.aim !== null) out.push('Cosine Similarity: holt einen Schuss aus der Eiszeit nach');
+        p.fireCooldown = 0;
+        dir = 'right'; step(1); dir = null;
+        const e9 = spawn('cosine_similarity', 760, 300);
+        step(60 * 2);
+        if (e9.state.shots) out.push('Cosine Similarity: reagiert auf einen Schuss von vor seinem Erscheinen');
+      }
+
+      // 3) Heisenbug
+      enter(9);
+      {
+        place(160, 288);
+        const h = spawn('heisenbug', 500, 288), P = h.params, S = h.state;
+        if (!(P.tell >= 0.6)) out.push('Heisenbug: Telegraph kuerzer als 0.6 s');
+        // Blickkegel: 30 Grad gesehen, 40 Grad nicht; keine Feuerrichtung = nie gesehen
+        for (const [deg, want] of [[0, true], [30, true], [-30, true], [40, false], [-40, false], [180, false]]) {
+          const r = deg * Math.PI / 180;
+          h.x = p.x + Math.cos(r) * 200; h.y = p.y + Math.sin(r) * 200;
+          dir = 'right'; step(1);
+          if (S.observed !== want || h.intangible !== want) out.push('Heisenbug: Blickkegel bei ' + deg + ' Grad: ' + S.observed);
+          dir = null; step(1);
+          if (S.observed || h.intangible) out.push('Heisenbug: gesehen ohne Feuerrichtung');
+        }
+
+        // Beobachtet: steht still, Schuesse fliegen durch, kein Kontakt, auch wenn er am Spieler klebt
+        clearRoom();
+        place(160, 288);
+        const h2 = spawn('heisenbug', 500, 288);
+        const hp2 = h2.hp, x2 = h2.x;
+        dir = 'right';
+        step(60 * 4);
+        if (h2.hp !== hp2) out.push('Heisenbug: Dauerfeuer trifft ihn');
+        if (Math.abs(h2.x - x2) > 1) out.push('Heisenbug: bewegt sich unter Beobachtung');
+        if (shots.length) out.push('Heisenbug: schiesst unter Beobachtung');
+        h2.x = p.x + 24; h2.y = p.y;
+        step(30);
+        if (hurts.length) out.push('Heisenbug: Kontaktschaden unter Beobachtung');
+        dir = null; step(1);
+        if (!hurts.includes('Heisenbug')) out.push('Heisenbug: kein Kontaktschaden, wenn er fest ist');
+
+        // Tippen: Der Schuss in der Luft trifft, sobald man loslaesst. Wegdrehen wirkt genauso.
+        for (const after of [null, 'left']) {
+          clearRoom();
+          place(160, 288);
+          const h3 = spawn('heisenbug', 520, 288);
+          const hp3 = h3.hp;
+          p.fireCooldown = 0;
+          dir = 'right';
+          step(2);
+          dir = after;
+          p.fireCooldown = 5;
+          step(60);
+          if (!(h3.hp < hp3)) out.push('Heisenbug: Schuss in der Luft trifft nicht nach ' + (after || 'Loslassen'));
+          p.fireCooldown = 0;
+        }
+
+        // Unbeobachtet: schleicht heran; nach calm Telegraph, dann Ring aus 6 Schuessen entlang der Strahlen
+        clearRoom();
+        place(120, 288);
+        const h4 = spawn('heisenbug', 840, 288);
+        const d0h = Math.hypot(h4.x - p.x, h4.y - p.y);
+        let tellAt = -1;
+        step(60 * 5, () => { if (tellAt < 0 && h4.state.tell > 0) tellAt = ticks; if (shots.length) return false; });
+        if (!(Math.hypot(h4.x - p.x, h4.y - p.y) < d0h - 100)) out.push('Heisenbug: schleicht nicht heran');
+        if (shots.length !== h4.params.shots) out.push('Heisenbug: Ring aus ' + shots.length + ' Schuessen');
+        else {
+          if ((shots[0].tick - tellAt + 1) * DT < 0.6) out.push('Heisenbug: Telegraph nur ' + ((shots[0].tick - tellAt + 1) * DT).toFixed(2) + ' s');
+          const want = shots.map((s, i) => h4.state.off + (i * Math.PI * 2) / 6);
+          shots.forEach((s, i) => { fairSpeed(s.pr, 'Heisenbug'); if (Math.abs(BOTA.M.angleDiff(s.a, want[i])) > 1e-6) out.push('Heisenbug: Ring weicht von den Strahlen ab'); });
+        }
+        if (!ev.some((x) => x.n === 'enemyWindup' && x.enemy === h4)) out.push('Heisenbug: Telegraph ohne enemyWindup');
+
+        // Hinsehen bricht den Telegraph ab; danach laeuft die Uhr von vorn
+        clearRoom();
+        place(120, 288);
+        const h5 = spawn('heisenbug', 840, 288);
+        step(60 * 3, () => { if (h5.state.tell > 0) return false; });
+        if (!(h5.state.tell > 0)) out.push('Heisenbug: kein Telegraph nach calm');
+        dir = 'right'; step(1);
+        if (h5.state.tell !== 0 || h5.state.calm !== 0) out.push('Heisenbug: Hinsehen bricht den Telegraph nicht ab');
+        step(60);
+        dir = null;
+        step(60 * 2);
+        if (shots.length) out.push('Heisenbug: Ring trotz Abbruch oder vor Ablauf der Uhr');
+
+        // Eingefroren: Die Beobachtung gilt weiter, die Uhr steht
+        clearRoom();
+        place(120, 288);
+        const h6 = spawn('heisenbug', 600, 288);
+        h6.frozen = 2;
+        dir = 'right'; step(2);
+        if (!h6.intangible) out.push('Heisenbug: eingefroren nicht beobachtbar');
+        dir = null; step(2);
+        if (h6.intangible) out.push('Heisenbug: bleibt eingefroren unberuehrbar');
+        step(30);
+        if (h6.state.calm !== 0) out.push('Heisenbug: Uhr laeuft eingefroren');
+
+        // Explosionen treffen auch beobachtet; zielsuchende Schuesse lassen ihn dann in Ruhe
+        clearRoom();
+        place(120, 288);
+        const h7 = spawn('heisenbug', 600, 288);
+        h7.hp = h7.maxHp = 500;
+        dir = 'right'; step(2);
+        const hp7 = h7.hp;
+        g.explode(h7.x, h7.y, 60, 30, 'test');
+        if (h7.hp !== hp7 - 30) out.push('Heisenbug: Explosion trifft ihn beobachtet nicht (' + (hp7 - h7.hp) + ')');
+        if (!h7.intangible) out.push('Heisenbug: nach der Explosion nicht mehr beobachtet');
+        const homer = g.spawnProjectile({ x: 300, y: 240, vx: 480, vy: 0, team: 'player', damage: 1, flags: { homing: true }, range: 900 });
+        step(10);
+        if (Math.abs(homer.vy) > 1e-6) out.push('Heisenbug: zielsuchender Schuss steuert ihn beobachtet an');
+        dir = null;
+
+        // Raum bleibt raeumbar: mit getipptem Feuer bis zum Clearing, ein Tod, leere Liste
+        clearRoom();
+        place(120, 288);
+        g.room.cleared = false;
+        const h8 = spawn('heisenbug', 700, 288);
+        let cleared = 0;
+        const offClear = bus.on('roomClear', () => cleared++);
+        for (let i = 0; i < 400 && !h8.dead; i++) {
+          p.fireCooldown = 0;
+          dir = 'right'; step(1); dir = null;
+          step(24, () => { place(120, 288); });
+        }
+        step(2);
+        offClear();
+        if (!h8.dead) out.push('Heisenbug: mit Tippen nicht totzukriegen');
+        if (cleared !== 1) out.push('Heisenbug: Raum nicht genau einmal geraeumt (' + cleared + ')');
+        if (ev.filter((x) => x.n === 'enemyDeath' && x.enemy === h8).length !== 1) out.push('Heisenbug: kein sauberer Tod');
+        g.room.pickups = g.room.pickups.filter((pk) => !(pk instanceof BOTA.Pickup));
+      }
+
+      // 4) Bit Bucket
+      enter(10);
+      {
+        place(120, 288);
+        const b = spawn('bit_bucket', 640, 288), P = b.params, S = b.state;
+        b.hp = b.maxHp = 9000;
+        if (!(P.tell >= 0.6)) out.push('Bit Bucket: Telegraph kuerzer als 0.6 s');
+        if (P.fan !== 5 || P.fillMax !== 4 || P.discR !== 110) out.push('Bit Bucket: Parameter geaendert');
+        const R = P.discR;
+        const send = (flags, x0) => g.spawnProjectile({ x: x0 === undefined ? 400 : x0, y: b.y, vx: 480, vy: 0, team: 'player', damage: 5, flags: flags || {}, range: 900 });
+        // Von aussen: weg, am Rand; spektral und durchschlagend genauso
+        for (const flags of [{}, { spectral: true }, { piercing: true }]) {
+          const hp0 = b.hp, sw0 = S.swallowed;
+          const s1 = send(flags);
+          let at = -1;
+          step(50, () => { if (s1.dead) { at = Math.hypot(s1.x - b.x, s1.y - b.y); return false; } });
+          if (!s1.dead || S.swallowed !== sw0 + 1) out.push('Bit Bucket: Schuss nicht geschluckt ' + JSON.stringify(flags));
+          if (!(at > R - 14 && at <= R + 1)) out.push('Bit Bucket: Schuss endet ' + at.toFixed(0) + ' px vor dem Eimer');
+          if (b.hp !== hp0) out.push('Bit Bucket: geschluckter Schuss macht Schaden');
+        }
+        if (S.fill !== 3) out.push('Bit Bucket: Pegel ' + S.fill + ' nach drei Schuessen');
+        if (S.mode !== 'drift') out.push('Bit Bucket: zu frueh im Telegraph');
+        if (ev.filter((x) => x.n === 'enemySwallow').length !== 3) out.push('Bit Bucket: enemySwallow fehlt');
+        // Drinnen abgefeuert: trifft den Eimer und schluckt nichts
+        S.fill = 0;
+        const hp1 = b.hp, sw1 = S.swallowed;
+        send({}, b.x - 90);
+        step(20);
+        if (!(b.hp < hp1)) out.push('Bit Bucket: Schuss von drinnen trifft nicht');
+        if (S.swallowed !== sw1) out.push('Bit Bucket: schluckt Schuesse von drinnen');
+        // Hinaus und wieder hinein: dann schluckt er auch diesen
+        const s2 = send({}, b.x - 90);
+        step(1);
+        s2.x = b.x - R - 40; step(1);
+        s2.vx = 480; s2.y = b.y;
+        step(20, () => { if (s2.dead) return false; });
+        if (S.swallowed !== sw1 + 1) out.push('Bit Bucket: wiederkehrender Schuss nicht geschluckt');
+        // Gegnerschuesse bleiben unberuehrt
+        const es = g.spawnProjectile({ x: b.x - R - 60, y: b.y - 40, vx: 200, vy: 0, team: 'enemy', damage: 1, range: 900 });
+        step(45);
+        if (es.dead) out.push('Bit Bucket: schluckt Gegnerschuesse');
+        // Gegner in der Scheibe sind gegen Schuesse von aussen geschuetzt
+        S.fill = 0;
+        const guard = spawn('bug', b.x - 60, b.y + 2);
+        guard.static = true;
+        const hpG = guard.hp;
+        send();
+        step(45);
+        if (guard.hp !== hpG) out.push('Bit Bucket: Schuss kommt durch die Scheibe');
+        guard.die(g);
+        // Ein geschluckter Schuss trifft auch im selben Tick nichts mehr: Der Gegner steht so, dass der Schuss ihn erst
+        // mit der Bewegung NACH dem Schlucken beruehren wuerde (Reichweite 18 + 9 px, seitlich 24 px versetzt)
+        g.room.enemies = g.room.enemies.filter((en) => !en.dead);
+        S.fill = 0;
+        b.static = true;
+        const edge = spawn('bug', b.x - R + 23.4, b.y + 24);
+        edge.static = true;
+        const hpEdge = edge.hp, swEdge = S.swallowed;
+        g.spawnProjectile({ x: b.x - R - 1, y: b.y, vx: 480, vy: 0, team: 'player', damage: 5, r: 9, range: 900 });
+        step(4);
+        if (S.swallowed !== swEdge + 1) out.push('Bit Bucket: Randschuss nicht geschluckt');
+        if (edge.hp !== hpEdge) out.push('Bit Bucket: geschluckter Schuss trifft noch im selben Tick');
+        edge.die(g);
+        b.static = false;
+        // Eingefroren: schluckt nicht, der Schuss trifft
+        clearRoom();
+        place(120, 288);
+        const b2 = spawn('bit_bucket', 640, 288);
+        b2.hp = b2.maxHp = 9000;
+        b2.frozen = 3;
+        const hpF = b2.hp;
+        g.spawnProjectile({ x: 400, y: b2.y, vx: 480, vy: 0, team: 'player', damage: 5, range: 900 });
+        step(50);
+        if (b2.state.swallowed) out.push('Bit Bucket: schluckt eingefroren');
+        if (!(b2.hp < hpF)) out.push('Bit Bucket: eingefroren nicht verwundbar');
+        // Explosion von aussen wirkt
+        const hpE = b2.hp;
+        g.explode(b2.x - 30, b2.y, 60, 30, 'test');
+        if (!(b2.hp < hpE)) out.push('Bit Bucket: Explosion wirkt nicht');
+        // Voll: bleibt stehen, Telegraph, 5er-Faecher in die festgelegte Richtung, leer
+        clearRoom();
+        place(120, 288);
+        const b3 = spawn('bit_bucket', 640, 288), S3 = b3.state;
+        b3.hp = b3.maxHp = 9000;
+        const rng0 = g.rng.state;
+        for (let i = 0; i < 4; i++) {
+          g.spawnProjectile({ x: 400, y: b3.y, vx: 480, vy: 0, team: 'player', damage: 5, range: 900 });
+          step(40);
+        }
+        const x3 = b3.x;
+        step(2);
+        if (S3.mode !== 'tell') out.push('Bit Bucket: kein Telegraph nach 4 Schuessen (' + S3.mode + ')');
+        const w3 = ev.find((x) => x.n === 'enemyWindup' && x.enemy === b3);
+        const t3 = w3 ? w3.tick : ticks;
+        const aim = S3.aim;
+        place(300, 120);   // Richtung ist festgelegt: Wer wegrennt, bekommt die alte Bahn
+        step(60, () => { if (shots.length) return false; });
+        if (shots.length !== P.fan) out.push('Bit Bucket: Faecher aus ' + shots.length + ' Schuessen');
+        else {
+          if ((shots[0].tick - t3) * DT < 0.6) out.push('Bit Bucket: Telegraph nur ' + ((shots[0].tick - t3) * DT).toFixed(2) + ' s');
+          shots.forEach((s, i) => { fairSpeed(s.pr, 'Bit Bucket'); if (Math.abs(BOTA.M.angleDiff(s.a, aim + (i - 2) * P.spread)) > 1e-6) out.push('Bit Bucket: Faecher weicht vom Telegraph ab'); });
+        }
+        if (Math.abs(b3.x - x3) > 2) out.push('Bit Bucket: bewegt sich im Telegraph');
+        if (S3.fill !== 0 || ev.filter((x) => x.n === 'enemyFlush').length !== 1) out.push('Bit Bucket: nach dem Faecher nicht leer');
+        if (g.rng.state !== rng0) out.push('Bit Bucket: zieht aus game.rng');
+        // Treibt langsam auf den Spieler zu, bleibt im Raum und bei near stehen
+        clearRoom();
+        place(300, 288);
+        const b4 = spawn('bit_bucket', 800, 288);
+        const dA = Math.hypot(b4.x - p.x, b4.y - p.y);
+        step(60 * 4);
+        const dB = Math.hypot(b4.x - p.x, b4.y - p.y);
+        if (!(dB < dA - 80 && dB > dA - 170)) out.push('Bit Bucket: Treiben ' + (dA - dB).toFixed(0) + ' px in 4 s');
+        step(60 * 16);
+        const dC = Math.hypot(b4.x - p.x, b4.y - p.y);
+        if (dC < b4.params.near - 6) out.push('Bit Bucket: treibt bis auf ' + dC.toFixed(0) + ' px heran');
+      }
+
+      // 5) Alle: Tod, killAll, Listener
+      enter(10);
+      const pick0 = g.room.pickups.length;
+      for (const [id] of DEEP) { spawn(id, 300, 200); spawn(id, 660, 380); }
+      place(480, 440);
+      step(90);
+      BOTA.debug.killAll();
+      step(2);
+      if (g.room.enemies.length) out.push('Etagen 8–10: killAll laesst Gegner zurueck: ' + g.room.enemies.map((e) => e.id).join());
+      if (g.room.pickups.length !== pick0) out.push('Etagen 8–10: Reste in room.pickups');
+      if (handlers() !== listeners0) out.push('Etagen 8–10: Listener bleiben liegen');
+    } finally {
+      for (const off of offs) off();
+      inp.moveVector = realMove;
+      inp.shootDir = realDir;
+      delete p.hurt;
+      if (p.hurt !== realHurt) p.hurt = realHurt;
+      BOTA.AI.shoot = realShoot;
+      clearRoom();
+      p.recalcStats();
+      g.enterFloor(Math.max(1, d0)); g.setState('play');
+    }
+    return out;
+  });
+  problems.push(...deepProblems);
+  // Screenshot auf der Heimat-Etage des Bit Bucket, alle drei zusammen
+  await page.evaluate(() => {
+    const g = BOTA.game;
+    g.enterFloor(10); g.setState('play'); BOTA.debug.gotoRoom('start'); BOTA.debug.god(true);
+    for (const [id, x, y] of [['bit_bucket', 640, 200], ['heisenbug', 300, 180], ['cosine_similarity', 760, 430]]) BOTA.debug.spawn(id, x, y);
+  });
+  await page.waitForTimeout(700);
+  await shot('17-deep-enemies');
+  for (let i = 0; i < 3; i++) await page.evaluate(() => BOTA.debug.killAll());
+  // --- Terms of Service: Erzeugung ---------------------------------------------
+  problems.push(...await page.evaluate(() => {
+    const B = BOTA, out = [], T = B.TILES;
+    const proto = B.Floor.prototype, real = proto.assignTerms;
+    const seedOf = (d, i) => B.hashString('TERMS' + d + ':' + i);
+    const snap = (c) => ({
+      type: c.type, dist: c.dist, layout: c.room.layout && c.room.layout.id, tiles: Array.from(c.room.tiles).join(''),
+      enemies: c.room.plannedEnemies.join(), loot: c.room.looseLoot.join(), pipe: c.room.hasPipe, key: c.room.guaranteedKey,
+      readme: c.room.hasReadme, boss: c.room.encounterBoss, bossId: c.room.bossId,
+      props: JSON.stringify([...c.room.props.entries()]),
+      doors: Object.keys(c.room.doors).sort().map((k) => { const e = c.room.doors[k].edge; return k + ':' + e.kind + ':' + e.locked + ':' + e.hidden; }).join(),
+    });
+    // Ohne den Raum: dieselbe Etage mit abgeschaltetem assignTerms
+    const without = (d, seed) => {
+      proto.assignTerms = function () { this.termsRoom = null; };
+      try { return new B.Floor(d, seed); } finally { proto.assignTerms = real; }
+    };
+    for (const d of [1, 2, 3, 4, 5, 6, 7, 8, 10, 11, 14, 20]) {
+      const N = 200;
+      let hits = 0;
+      for (let i = 0; i < N; i++) {
+        const seed = seedOf(d, i), f = new B.Floor(d, seed), cell = f.termsRoom;
+        const types = [...f.cells.values()].map((c) => c.type);
+        if (types.filter((t) => t === 'terms').length !== (cell ? 1 : 0)) out.push('Terms: Raumzahl falsch auf Etage ' + d);
+        for (const t of ['start', 'boss', 'treasure', 'shop']) if (!types.includes(t)) out.push('Terms: ' + t + ' fehlt auf Etage ' + d);
+        if (d >= 2 && !f.keyRoom) out.push('Terms: Schluessel-Raum fehlt auf Etage ' + d);
+        if (d >= 2 && f.keyRoom.type !== 'normal') out.push('Terms: Schluessel-Raum umgebaut');
+        if (f.readmeRoom && f.readmeRoom.type !== 'normal') out.push('Terms: README-Raum umgebaut');
+        if (f.encounterRooms.some((c) => c.type !== 'normal' || !c.room.encounterBoss)) out.push('Terms: Begegnung umgebaut');
+        // Alles ausserhalb des Raums bleibt exakt wie ohne ihn (nur die Kante zum Raum heisst anders)
+        const base = without(d, seed);
+        for (const c of f.cells.values()) {
+          const o = base.get(c.x, c.y), a = snap(c), b = snap(o);
+          if (c === cell) {
+            if (o.type !== 'normal') out.push('Terms: Raum war kein normaler Raum, sondern ' + o.type);
+            continue;
+          }
+          a.doors = a.doors.replace(/:terms:/g, ':normal:');
+          for (const k of Object.keys(a)) if (a[k] !== b[k]) out.push('Terms aendert ' + k + ' eines anderen Raums auf Etage ' + d);
+        }
+        const again = new B.Floor(d, seed);
+        const same = cell ? again.termsRoom && again.termsRoom.x === cell.x && again.termsRoom.y === cell.y && snap(again.termsRoom).tiles === snap(cell).tiles : !again.termsRoom;
+        if (!same) out.push('Terms nicht deterministisch auf Etage ' + d);
+        if (!cell) continue;
+        hits++;
+        const room = cell.room;
+        if (room.type !== 'terms') out.push('Terms: room.type ' + room.type);
+        const open = Object.values(room.doors).filter((x) => !x.edge.hidden);
+        if (open.length !== 1) out.push('Terms: keine Sackgasse, ' + open.length + ' Tueren');
+        if (open.some((x) => x.edge.kind !== 'terms' || x.edge.locked)) out.push('Terms: Tuer falsch ' + JSON.stringify(open[0].edge));
+        if (open.some((x) => !['normal', 'start'].includes(x.target.type))) out.push('Terms: Nachbar ist ' + open[0].target.type);
+        if (room.plannedEnemies.length || room.looseLoot.length || room.hasPipe || room.guaranteedKey || room.hasReadme || room.encounterBoss) out.push('Terms: Raum hat Kampf- oder Sonderinhalt');
+        if (room.props.size) out.push('Terms: Raum hat Objekte');
+        if (Array.from(room.tiles).some((t) => t === T.PROP || t === T.CACTUS)) out.push('Terms: Objekt- oder Kaktuskachel');
+        if (!room.layout || !room.layout.tags.includes('special')) out.push('Terms: kein special-Layout');
+        if (room.tileAt(7, 4) !== T.FLOOR) out.push('Terms: Mitte nicht frei');
+      }
+      const share = hits / N;
+      if (d === 1 ? hits !== 0 : share < 0.3 || share > 0.65) out.push('Terms-Anteil Etage ' + d + ': ' + share);
+    }
+    return out;
+  }));
+
+  // --- Terms of Service: Klauseln ------------------------------------------------
+  problems.push(...await page.evaluate(() => {
+    const B = BOTA, out = [], list = B.TEXT.TERMS_CLAUSES;
+    const bad = { speed: -1, damage: -1, shotSpeed: -1, luck: -1, range: -1, fireDelay: 1 };
+    for (const c of list) {
+      if (!c.sec || !c.text || !c.fx) out.push('Klausel unvollstaendig: ' + c.sec);
+      for (const k of Object.keys(c.add || {})) if (!bad[k] || Math.sign(c.add[k]) !== bad[k]) out.push('Klausel ' + c.sec + ' ist keine Strafe: ' + k);
+    }
+    if (new Set(list.map((c) => c.sec)).size !== list.length) out.push('Klauseln: doppelte Paragrafen');
+    const rng = new B.RNG(4711), seen = new Set(), N = 20000;
+    let real = 0;
+    for (let i = 0; i < N; i++) { const c = B.rollTermsClause(rng); seen.add(c); if (c.add) real++; }
+    if (seen.size !== list.length) out.push('Klauseln: nur ' + seen.size + ' von ' + list.length + ' gewuerfelt');
+    if (real / N < 0.57 || real / N > 0.63) out.push('Klauseln: Anteil echter Strafen ' + real / N);
+    const a = new B.RNG(9), b = new B.RNG(9);
+    for (let i = 0; i < 50; i++) if (B.rollTermsClause(a) !== B.rollTermsClause(b)) out.push('Klauseln nicht deterministisch');
+    if (!B.hasSprite('map_terms')) out.push('Sprite map_terms fehlt');
+    if (!B.audio.names().includes('sign')) out.push('Sound sign fehlt');
+    return out;
+  }));
+
+  // --- Terms of Service: der Handel -----------------------------------------------
+  problems.push(...await page.evaluate(() => {
+    const B = BOTA, g = B.game, out = [], dt = 1 / 60;
+    g.newRun('TERMS-DEAL');
+    let d = 2;
+    g.enterFloor(d);
+    while (!g.floor.termsRoom && d < 30) g.enterFloor(++d);
+    const cell = g.floor.termsRoom;
+    if (!cell) return ['Terms: kein Raum bis Etage ' + d];
+    g.setState('play');
+    const p = g.player, room = cell.room;
+    p.god = false; p.invuln = 0;
+
+    // Echter Zugang durch die Tuer: nicht aus Versehen auf dem Podest, Raum ist sofort frei
+    const door = Object.values(room.doors).find((x) => !x.edge.hidden);
+    const opp = B.OPPOSITE[door.dir];
+    g.teleport(door.target.room);
+    g.room.enemies.length = 0; g.room.combatClosed = false;
+    g.changeRoom(opp);
+    g.setState('play'); g.transition = null;
+    if (g.room !== room) out.push('Terms: Tuer fuehrt nicht in den Raum');
+    if (!g.bannerState || g.bannerState.title !== 'Terms of Service' || !B.TEXT.TERMS_LINES.includes(g.bannerState.sub)) out.push('Terms: kein Banner beim Betreten');
+    const peds = room.pickups.filter((x) => x instanceof B.Pedestal);
+    const notes = room.pickups.filter((x) => x instanceof B.TermsNotice);
+    if (peds.length !== 1 || notes.length !== 1) out.push('Terms: ' + peds.length + ' Podeste, ' + notes.length + ' Vertraege');
+    if (room.enemies.length || !room.cleared || room.combatClosed) out.push('Terms: Raum nicht frei');
+    const ped = peds[0];
+    if (!ped.terms || !ped.terms.clause || ped.price) out.push('Terms: Podest ohne Vertrag oder mit Preis');
+    if (!(B.ITEMS[ped.itemId].pools || []).includes('treasure')) out.push('Terms: Item nicht aus dem Schatz-Pool: ' + ped.itemId);
+    if (B.M.circlesOverlap(ped, p)) out.push('Terms: Spieler steht nach der Tuer auf dem Podest');
+    for (const populated of [false, true]) {
+      const r2 = room;
+      r2.populated = populated;
+      if (populated) { g.teleport(r2); if (B.M.circlesOverlap(ped, p)) out.push('Terms: Teleport landet auf dem Podest'); }
+      r2.populated = true;
+    }
+
+    const clauseOf = (key) => B.TEXT.TERMS_CLAUSES.find((c) => (key ? c.add && c.add[key] !== undefined : !c.add));
+    const fresh = (item, key) => new B.Pedestal(item, 480, 288, { terms: { clause: clauseOf(key) } });
+    const ticks = (pd, x, y, secs) => { p.x = x; p.y = y; for (let i = 0; i < Math.round(secs * 60); i++) pd.update(dt, g); };
+    const reset = () => { p.health = p.maxHealth = 6; p.guardrails = 0; p.bonus = {}; p.items = []; p.active = null; p.god = false; p.invuln = 0; p.dead = false; p.recalcStats(); };
+    const readThenStep = (pd) => { ticks(pd, 480, 288 + 100, 1.1); ticks(pd, 480, 288, 0.1); };
+    let hurtEvents = 0, denied = 0, signedEvents = 0;
+    const offs = [B.bus.on('playerHurt', () => hurtEvents++), B.bus.on('denied', (e) => { if (e.reason === 'terms') denied++; }), B.bus.on('termsSigned', () => signedEvents++)];
+
+    // Unterschrift: genau 2 halbe Herzen, Klausel genau einmal, Guardrails zahlen nicht, ein Treffer ist es nicht
+    reset();
+    p.guardrails = 4;
+    const score0 = g.score.items;
+    let pd = fresh('cold_brew', 'speed');
+    readThenStep(pd);
+    if (p.health !== 4 || p.guardrails !== 4) out.push('Terms: Preis falsch: ' + p.health + ' / ' + p.guardrails);
+    if (Math.abs((p.bonus.speed || 0) + 0.1) > 1e-9) out.push('Terms: Klausel nicht angewendet: ' + p.bonus.speed);
+    const withClause = p.stats.speed;
+    p.bonus = {}; p.recalcStats();
+    if (Math.abs(p.stats.speed - withClause - 0.1) > 1e-9) out.push('Terms: Klausel erreicht die Stats nicht');
+    p.bonus = { speed: -0.1 }; p.recalcStats();
+    if (!p.items.includes('cold_brew') || pd.itemId || pd.terms) out.push('Terms: Item nicht uebergeben');
+    if (g.score.items !== score0 + 1) out.push('Terms: Score zaehlt ' + (g.score.items - score0));
+    if (p.invuln !== 0 || hurtEvents) out.push('Terms: Unterschrift zaehlt als Treffer');
+    if (signedEvents !== 1) out.push('Terms: termsSigned ' + signedEvents + 'x');
+    if (!g.bannerState || !g.bannerState.sub.includes('§' + clauseOf('speed').sec)) out.push('Terms: Banner nennt die Klausel nicht: ' + JSON.stringify(g.bannerState));
+    ticks(pd, 480, 400, 0.2); ticks(pd, 480, 288, 0.2);
+    if (p.health !== 4 || Math.abs(p.bonus.speed + 0.1) > 1e-9) out.push('Terms: Zweite Abbuchung');
+
+    // Witz-Klausel: Herz weg, sonst keine Wirkung
+    reset();
+    pd = fresh('cold_brew', null);
+    readThenStep(pd);
+    if (p.health !== 4 || Object.keys(p.bonus).length) out.push('Terms: Witz-Klausel wirkt: ' + JSON.stringify(p.bonus));
+
+    // Nicht aus Versehen: Durchrennen in beiden Tempi, und Stehenbleiben unterschreibt auch nicht
+    for (const speed of [240, 480]) {
+      reset();
+      pd = fresh('cold_brew', 'damage');
+      for (let y = 90; y < 486; y += speed * dt) ticks(pd, 480, y, 1 / 60);
+      if (p.health !== 6 || !pd.terms) out.push('Terms: Durchrennen mit ' + speed + ' px/s unterschreibt');
+    }
+    reset();
+    pd = fresh('cold_brew', 'damage');
+    ticks(pd, 480, 288, 3);
+    if (p.health !== 6 || !pd.terms) out.push('Terms: Stehenbleiben unterschreibt');
+    if (pd.terms.readT < B.TERMS.readTime) out.push('Terms: Lesezeit laeuft auf dem Podest nicht');
+    ticks(pd, 480, 400, 0.1); ticks(pd, 480, 288, 0.1);
+    if (p.health !== 4 || pd.terms) out.push('Terms: Herunter- und Heraufsteigen unterschreibt nicht');
+
+    // Abweisung: nie toedlich, Guardrails helfen nicht, keine Klausel
+    for (const hp of [2, 1]) {
+      reset();
+      p.health = hp; p.guardrails = 6;
+      denied = 0;
+      pd = fresh('cold_brew', 'damage');
+      readThenStep(pd);
+      if (p.health !== hp || p.guardrails !== 6 || !pd.terms || pd.itemId !== 'cold_brew' || p.items.length || Object.keys(p.bonus).length) out.push('Terms: Bei ' + hp + ' halben Herzen nicht abgewiesen');
+      if (denied !== 1) out.push('Terms: denied ' + denied + 'x bei ' + hp);
+    }
+    reset();
+    p.health = 3;
+    pd = fresh('cold_brew', null);
+    readThenStep(pd);
+    if (p.health !== 1 || p.dead || g.state !== 'play') out.push('Terms: 3 halbe Herzen: ' + p.health + ', ' + g.state);
+
+    // God Mode zahlt, Retry with Backoff greift nicht ein
+    reset();
+    p.god = true;
+    pd = fresh('cold_brew', null);
+    readThenStep(pd);
+    if (p.health !== 4) out.push('Terms: God Mode zahlt nicht');
+    reset();
+    p.giveItem('retry_backoff', g);
+    p.health = 3;
+    const lethal = JSON.stringify(p.itemState.retry_backoff);
+    pd = fresh('cold_brew', null);
+    readThenStep(pd);
+    if (p.health !== 1 || JSON.stringify(p.itemState.retry_backoff) !== lethal) out.push('Terms: Retry with Backoff greift ein');
+
+    // Regenerate Response: Vertrag bleibt, das neue Item kostet genauso
+    reset();
+    p.giveItem('regenerate_response', g);
+    p.active.charge = B.ITEMS.regenerate_response.maxCharge;
+    p.x = 480; p.y = 450;
+    const clause = ped.terms.clause, before = ped.itemId;
+    if (!B.ITEMS.regenerate_response.use(p, g)) out.push('Terms: Reroll abgelehnt');
+    if (ped.terms === null || ped.terms.clause !== clause) out.push('Terms: Reroll verliert die Klausel');
+    if (ped.price) out.push('Terms: Reroll setzt einen Preis');
+    if (ped.itemId === before) out.push('Terms: Reroll aendert das Item nicht');
+
+    // Aktiv-Tausch: das alte Item liegt danach kostenlos da, Zuruecktauschen kostet nichts und zaehlt nicht
+    reset();
+    p.giveItem('stop_generating', g);
+    const score1 = g.score.items;
+    pd = fresh('regenerate_response', 'luck');
+    readThenStep(pd);
+    if (p.health !== 4 || p.bonus.luck !== -1) out.push('Terms: Tausch-Preis falsch: ' + p.health + ' / ' + p.bonus.luck);
+    if (!p.active || p.active.id !== 'regenerate_response' || pd.itemId !== 'stop_generating' || pd.terms) out.push('Terms: Tausch legt nicht ab');
+    ticks(pd, 480, 400, 1.2); ticks(pd, 480, 288, 0.1);
+    if (p.active.id !== 'stop_generating' || p.health !== 4 || p.bonus.luck !== -1) out.push('Terms: Zuruecktauschen kostet etwas');
+    if (g.score.items !== score1 + 1) out.push('Terms: Tausch zaehlt ' + (g.score.items - score1) + ' Items');
+
+    // Der Vertrag verschwindet mit der Unterschrift
+    reset();
+    pd = fresh('cold_brew', null);
+    const note = new B.TermsNotice(pd);
+    g.banner('Terms of Service', 'test');
+    p.x = 480; p.y = 540; note.update(dt, g);
+    if (note.fade > 0) out.push('Terms: Vertrag erscheint aus der Ferne');
+    if (!g.bannerState) out.push('Terms: Banner verschwindet schon aus der Ferne');
+    p.x = 480; p.y = 400; note.update(dt, g);
+    if (note.dead || note.fade <= 0) out.push('Terms: Vertrag erscheint nicht in Lesenaehe');
+    if (g.bannerState) out.push('Terms: Banner beim Betreten liegt ueber dem Vertrag');
+    g.banner('Application declined', 'test');
+    note.update(dt, g);
+    if (!g.bannerState) out.push('Terms: Vertrag raeumt fremde Banner weg');
+    readThenStep(pd);
+    note.update(dt, g);
+    if (!note.dead) out.push('Terms: Vertrag bleibt nach der Unterschrift');
+    offs.forEach((off) => off());
+    reset();
+    return out;
+  }));
+
+  // --- Terms of Service: echtes Spiel und Bilder ----------------------------------
+  await page.evaluate(() => {
+    const g = BOTA.game;
+    g.newRun('TERMS-LOOK');
+    let d = 2;
+    g.enterFloor(d);
+    while (!g.floor.termsRoom && d < 30) g.enterFloor(++d);
+    BOTA.debug.god(true);
+    const door = Object.values(g.floor.termsRoom.room.doors).find((x) => !x.edge.hidden);
+    g.teleport(door.target.room);
+    g.room.enemies.length = 0; g.room.projectiles.length = 0;
+    g.setState('play');
+  });
+  await page.waitForTimeout(300);
+  await shot('terms-door');
+  problems.push(...await page.evaluate(() => (BOTA.debug.gotoRoom('terms') && BOTA.game.room.type === 'terms' ? [] : ['Terms: gotoRoom findet den Raum nicht'])));
+  await page.evaluate(() => { const g = BOTA.game, p = g.player; p.x = 480; p.y = 400; p.health = p.maxHealth = 6; });
+  await page.waitForTimeout(1300);
+  await shot('terms-notice-above');
+  await page.evaluate(() => { const p = BOTA.game.player; p.x = 480; p.y = 170; });
+  await page.waitForTimeout(300);
+  await shot('terms-notice-below');
+  await page.evaluate(() => { const p = BOTA.game.player; p.x = 480; p.y = 400; });
+  await page.keyboard.down('KeyW');
+  await page.waitForFunction(() => BOTA.game.player.y < 330 || BOTA.game.player.items.length, null, { timeout: 3000 }).catch(() => {});
+  await page.keyboard.up('KeyW');
+  await page.waitForTimeout(150);
+  await shot('terms-signed');
+  problems.push(...await page.evaluate(() => {
+    const g = BOTA.game, p = g.player, out = [];
+    if (p.health !== 4) out.push('Terms: Mit der Tastatur nicht unterschrieben, health ' + p.health);
+    if (!g.runLog.some((l) => l.text.startsWith('Accepted the Terms'))) out.push('Terms: Unterschrift fehlt in der Zeitleiste');
+    if (g.room.pickups.some((x) => x instanceof BOTA.TermsNotice)) out.push('Terms: Vertrag bleibt im Raum');
+    BOTA.debug.god(false);
+    return out;
+  }));
+  // --- Seed-Dialog, Daily Run, derselbe Seed, Zeitleiste, Wackelphase, Item-Schaden -------------------------------
+  // Eigene Seite ohne ?seed und mit eigenem Speicher: Der Titel kommt nur einmal, und der Daily-Bestwert startet leer.
+  {
+    const rp = await browser.newPage({ viewport: { width: 960, height: 640 } });
+    rp.on('console', (m) => { if (m.type() === 'error' || m.type() === 'warning') errors.push(m.type() + ': ' + m.text()); });
+    rp.on('pageerror', (e) => errors.push('pageerror: ' + e.message));
+    const rshot = (name) => rp.screenshot({ path: path.join(OUT, name + '.png') });
+    const rtap = async (key) => { await rp.keyboard.down(key); await rp.waitForTimeout(50); await rp.keyboard.up(key); await rp.waitForTimeout(50); };
+    const rtype = async (text) => { await rp.keyboard.type(text); await rp.waitForTimeout(80); };
+    const sim = async (code, key) => {
+      await rp.evaluate(([c, k]) => BOTA.input._simulate(c, true, k), [code, key]);
+      await rp.waitForTimeout(60);
+      await rp.evaluate((c) => BOTA.input._simulate(c, false), code);
+    };
+    const paste = async (text) => {
+      await rp.evaluate((t) => {
+        const data = new DataTransfer();
+        data.setData('text', t);
+        window.dispatchEvent(new ClipboardEvent('paste', { clipboardData: data, cancelable: true }));
+      }, text);
+      await rp.waitForTimeout(80);
+    };
+    const seedText = () => rp.evaluate(() => BOTA.game.seedInput);
+    const stateOf = () => rp.evaluate(() => BOTA.game.state);
+    const expectText = async (want, label) => { const got = await seedText(); if (got !== want) problems.push('Seed-Dialog, ' + label + ': "' + got + '" statt "' + want + '"'); };
+    // Fingerabdruck der Etage: Zellen, Typen, geplante Gegner
+    const fingerprint = () => rp.evaluate(() => [...BOTA.game.floor.cells.values()]
+      .map((c) => [c.x, c.y, c.type, c.room.plannedEnemies.join('+')].join(':')).sort().join('|'));
+    // Stirbt ohne Items und ohne Rettung; geht auch aus der Etagenkarte
+    const dieNow = (killer) => rp.evaluate((who) => {
+      const g = BOTA.game, p = g.player;
+      g.setState('play');
+      p.god = false; p.invuln = 0; p.guardrails = 0; p.health = 1;
+      p.hurt(2, who, g);
+      return g.state;
+    }, killer || 'a test fixture');
+
+    // URL-Seed steht schon im Feld
+    await rp.goto(URL.split('?')[0] + '?seed=ab-12');
+    await rp.waitForTimeout(300);
+    await rtap('KeyS');
+    await expectText('AB-12', 'URL-Seed');
+
+    await rp.goto(URL.split('?')[0]);
+    await rp.waitForTimeout(300);
+    await rshot('17-title-hints');
+
+    // Einfuegen ausserhalb des Dialogs wird nicht gelesen
+    await paste('OUTSIDE');
+    await rtype('q');
+    await rtap('KeyS');
+    if (await stateOf() !== 'seedEntry') problems.push('S auf dem Titel oeffnet den Seed-Dialog nicht: ' + await stateOf());
+    await expectText('', 'S selbst oder Einfuegen ausserhalb darf nichts eintragen');
+    await rtap('Enter');
+    if (await stateOf() !== 'seedEntry') problems.push('Enter bei leerem Seed startet einen Run');
+    // Gehaltenes S: Auto-Repeat tippt nichts nach
+    await rp.keyboard.down('s'); await rp.keyboard.down('s'); await rp.keyboard.down('s'); await rp.keyboard.up('s');
+    await rp.waitForTimeout(80);
+    await expectText('S', 'Auto-Repeat');
+    await rtap('Backspace');
+    // Filter, Grossschreibung, Backspace
+    await rtype('ab!c d_e.f-1');
+    await expectText('ABCDEF-1', 'Filter');
+    await rtap('Backspace');
+    await expectText('ABCDEF-', 'Backspace');
+    // Strg-Kuerzel tippen nichts
+    await rp.keyboard.down('Control'); await rp.keyboard.press('a'); await rp.keyboard.up('Control');
+    await rp.waitForTimeout(80);
+    await expectText('ABCDEF-', 'Strg+A');
+    // M und F2 sind hier Text bzw. wirkungslos
+    const before = await rp.evaluate(() => ({ muted: BOTA.audio.muted, debug: BOTA.debug.enabled }));
+    await rtype('m');
+    await rtap('F2');
+    await expectText('ABCDEF-M', 'M tippt ein M');
+    const after = await rp.evaluate(() => ({ muted: BOTA.audio.muted, debug: BOTA.debug.enabled }));
+    if (before.muted !== after.muted || before.debug !== after.debug) problems.push('M oder F2 schalten im Seed-Dialog: ' + JSON.stringify([before, after]));
+    // Zeichen kommen aus e.key: QWERTZ meldet die Y-Taste als KeyZ und umgekehrt
+    await sim('KeyZ', 'y');
+    await sim('KeyY', 'z');
+    await rp.waitForTimeout(80);
+    await expectText('ABCDEF-MYZ', 'QWERTZ');
+    // Laengenlimit, auch beim Einfuegen
+    await rtype('X'.repeat(40));
+    if ((await seedText()).length !== 32) problems.push('Seed-Dialog: Limit 32 verletzt: ' + await seedText());
+    await rshot('18-seed-entry');
+    // Esc zurueck, danach ist die Eingabe aus
+    await rtap('Escape');
+    const esc = await rp.evaluate(() => ({ s: BOTA.game.state, t: BOTA.input.textMode }));
+    if (esc.s !== 'title' || esc.t) problems.push('Esc im Seed-Dialog: ' + JSON.stringify(esc));
+    await rtap('KeyS');
+    await expectText('', 'neu geoeffnet');
+    await paste('  ab c-1!é\n');
+    await expectText('ABC-1', 'Einfuegen filtert');
+    await paste('Z'.repeat(5000));
+    if ((await seedText()).length !== 32) problems.push('Einfuegen ueberschreitet 32: ' + (await seedText()).length);
+    for (let i = 0; i < 32; i++) await rp.keyboard.press('Backspace');
+    await rp.waitForTimeout(80);
+    await expectText('', 'Backspace bis leer');
+    await rtype('share-me-42');
+    await rtap('Enter');
+    const started = await rp.evaluate(() => ({ s: BOTA.game.state, seed: BOTA.game.seed, t: BOTA.input.textMode }));
+    if (started.s !== 'floorCard' || started.seed !== 'SHARE-ME-42' || started.t) problems.push('Start aus dem Seed-Dialog: ' + JSON.stringify(started));
+    const typedFloor = await fingerprint();
+    await rp.evaluate(() => BOTA.game.newRun('SHARE-ME-42'));
+    if (await fingerprint() !== typedFloor) problems.push('Eingetippter Seed ergibt eine andere Etage als newRun mit demselben Seed');
+
+    // Daily Run: Format, Taste D, ungueltige Speicherwerte, Tageswechsel
+    problems.push(...await rp.evaluate(() => {
+      const B = BOTA, out = [];
+      if (B.dailySeed(new Date(2026, 0, 5)) !== 'DAILY-20260105') out.push('Daily-Seed: ' + B.dailySeed(new Date(2026, 0, 5)));
+      if (!/^DAILY-\d{8}$/.test(B.dailySeed()) || B.cleanSeed(B.dailySeed()) !== B.dailySeed()) out.push('Daily-Seed passt nicht zur Whitelist: ' + B.dailySeed());
+      const load = (raw) => {
+        localStorage.setItem('bota.v1', raw);
+        Object.assign(B.storage.data, { dailyDate: '', dailyBest: 0 });
+        B.storage.load();
+        return B.storage.data.dailyDate + '/' + B.storage.data.dailyBest;
+      };
+      const j = (d, b) => JSON.stringify({ dailyDate: d, dailyBest: b });
+      const cases = [
+        [j('20261105', 77), '20261105/77'], [j('2026', 5), '/0'], [j(20261105, 5), '/0'], [j('20261105\n', 5), '/0'],
+        [j('2026110x', 5), '/0'], [j('20261105', -1), '20261105/0'], [j('20261105', 1.5), '20261105/0'],
+        [j('20261105', 1e9), '20261105/0'], [j('20261105', '12'), '20261105/0'], ['{broken', '/0'],
+        [JSON.stringify({ dailyBest: 9 }), '/0'],
+      ];
+      for (const [raw, want] of cases) { const got = load(raw); if (got !== want) out.push('Storage ' + raw + ': ' + got + ' statt ' + want); }
+      Object.assign(B.storage.data, { dailyDate: '', dailyBest: 0 });
+      const s = B.storage, steps = [
+        [s.recordDaily('20261105', 100), true], [s.recordDaily('20261105', 50), false], [s.dailyBestFor('20261105'), 100],
+        [s.recordDaily('20261106', 10), true], [s.dailyBestFor('20261105'), 0], [s.dailyBestFor('20261106'), 10],
+        [s.recordDaily('20261107', 0), false], [s.data.dailyDate, '20261107'], [s.data.dailyBest, 0],
+        [s.recordDaily('nope', 5), false], [s.recordDaily('20261107', 1.5), false], [s.recordDaily('20261107', -1), false],
+        [s.data.dailyBest, 0],
+      ];
+      steps.forEach(([got, want], i) => { if (got !== want) out.push('Daily-Bestwert, Schritt ' + i + ': ' + got); });
+      Object.assign(s.data, { dailyDate: '', dailyBest: 0 });
+      return out;
+    }));
+
+    // Nur der heutige Daily-Seed zaehlt, und das Eintragen zieht nichts aus game.rng
+    await rp.evaluate(() => { const g = BOTA.game; g.newRun('NOT-DAILY'); g.score.kills = 50; });
+    await dieNow();
+    problems.push(...await rp.evaluate(() => {
+      const d = BOTA.storage.data, g = BOTA.game;
+      return !d.dailyDate && d.dailyBest === 0 && !g.death.newDailyBest ? [] : ['Fremder Seed zaehlt als Daily: ' + JSON.stringify(d)];
+    }));
+    await rp.evaluate(() => { const g = BOTA.game; g.newRun(BOTA.dailySeed(new Date(2020, 0, 1))); g.score.kills = 50; });
+    await dieNow();
+    problems.push(...await rp.evaluate(() => (BOTA.storage.data.dailyBest === 0 ? [] : ['Alter Daily-Seed zaehlt'])));
+    await rp.evaluate(() => BOTA.game.setState('title'));
+    await rp.waitForTimeout(60);
+    await rtap('KeyD');
+    problems.push(...await rp.evaluate(() => {
+      const g = BOTA.game, out = [];
+      if (g.seed !== BOTA.dailySeed() || g.state !== 'floorCard') out.push('D auf dem Titel: ' + g.seed + ', ' + g.state);
+      g.score.kills = 100;
+      const rng = g.rng.state;
+      if (g.recordDaily() !== true || BOTA.storage.dailyBestFor(BOTA.dailyKey()) !== 200) out.push('Daily-Bestwert nicht eingetragen: ' + JSON.stringify(BOTA.storage.data));
+      if (g.recordDaily() !== false) out.push('Gleicher Score zaehlt erneut als Bestwert');
+      if (g.rng.state !== rng) out.push('Daily-Bestwert zieht aus game.rng');
+      g.score.kills = 150;
+      return out;
+    }));
+    await dieNow();
+    problems.push(...await rp.evaluate(() => {
+      const g = BOTA.game;
+      return g.death.newDailyBest && BOTA.storage.data.dailyBest === 300 ? [] : ['Tod traegt den Daily-Bestwert nicht ein: ' + JSON.stringify(BOTA.storage.data)];
+    }));
+    await rp.waitForTimeout(1000);
+    await rshot('19-post-mortem-short');
+
+    // Derselbe Seed: nur T, nur nach der Sperre; S bleibt wirkungslos (Bewegungstaste)
+    await rp.evaluate(() => BOTA.game.newRun('RETRY-1'));
+    const retryFloor = await fingerprint();
+    await rp.evaluate(() => { BOTA.game.score.kills = 3; });
+    await dieNow();
+    await rtap('KeyT');
+    if (await stateOf() !== 'dead') problems.push('T wirkt waehrend der Sperre im Post-Mortem');
+    await rp.waitForTimeout(900);
+    await rtap('KeyS');
+    if (await stateOf() !== 'dead') problems.push('S beendet das Post-Mortem');
+    await rtap('KeyT');
+    const retry = await rp.evaluate(() => { const g = BOTA.game; return { seed: g.seed, s: g.state, score: g.scoreTotal(), depth: g.depth, log: g.runLog.length }; });
+    if (retry.seed !== 'RETRY-1' || retry.s !== 'floorCard' || retry.score !== 0 || retry.depth !== 1 || retry.log !== 1) problems.push('Derselbe Seed: ' + JSON.stringify(retry));
+    if (await fingerprint() !== retryFloor) problems.push('Derselbe Seed ergibt eine andere Etage');
+    await dieNow();
+    await rp.waitForTimeout(900);
+    await rtap('KeyR');
+    if (await rp.evaluate(() => BOTA.game.seed === 'RETRY-1')) problems.push('R im Post-Mortem behaelt den Seed');
+    await rp.evaluate(() => { const g = BOTA.game; g.newRun('RETRY-2'); g.setState('play'); g.showScoreCard(); });
+    await rtap('KeyT');
+    if (await stateOf() !== 'scoreCard') problems.push('T wirkt waehrend der Sperre der Score-Karte');
+    await rp.waitForTimeout(900);
+    await rtap('KeyT');
+    problems.push(...await rp.evaluate(() => { const g = BOTA.game; return g.seed === 'RETRY-2' && g.state === 'floorCard' && g.cycles === 0 ? [] : ['T auf der Score-Karte: ' + g.seed + ', ' + g.state]; }));
+
+    // Zeitleiste: echte Ereignisse aus dem Spiel
+    await rp.evaluate(() => {
+      const g = BOTA.game;
+      g.newRun('LOG-1'); g.setState('play'); BOTA.debug.god(true);
+      g.runStats.time = 65;
+      g.player.giveItem('cold_brew', g);
+      BOTA.bus.emit('secretFound', { game: g });
+      BOTA.bus.emit('itemGet', { id: 'cold_brew', def: BOTA.ITEMS.cold_brew });   // ohne Spiel: kein Eintrag, kein Fehler
+      g.enterFloor(2); g.setState('play');
+      BOTA.debug.gotoRoom('boss'); BOTA.debug.killAll();
+    });
+    await rp.waitForTimeout(400);
+    await rp.evaluate(() => {
+      const g = BOTA.game;
+      g.enterFloor(8); g.setState('play');
+      BOTA.debug.gotoRoom('encounter'); BOTA.debug.killAll();
+    });
+    await rp.waitForTimeout(400);
+    await rp.evaluate(() => BOTA.debug.killAll());
+    await rp.waitForTimeout(300);
+    problems.push(...await rp.evaluate(() => {
+      const g = BOTA.game, B = BOTA, log = g.runLog, out = [];
+      const has = (re) => log.some((e) => re.test(e.text));
+      if (log[0].text !== 'Shift started: The Backlog' || log[0].t !== 0) out.push('Zeitleiste, erster Eintrag: ' + JSON.stringify(log[0]));
+      if (!log.some((e) => e.text === 'Deployed: ' + B.ITEMS.cold_brew.name && e.t === 65)) out.push('Zeitleiste ohne Item oder Zeit');
+      if (log.filter((e) => e.text.startsWith('Deployed')).length !== 1) out.push('Item ohne Spiel landet in der Zeitleiste');
+      if (!has(/undocumented endpoint/)) out.push('Zeitleiste ohne Geheimraum');
+      if (!has(/^Paged: entered Legacy Codebase$/)) out.push('Zeitleiste ohne Etage');
+      if (!has(/^Resolved: /)) out.push('Zeitleiste ohne Boss');
+      if (!has(/^Side quest closed: /)) out.push('Zeitleiste ohne Zwischenboss');
+      const rng = g.rng.state, n = log.length;
+      g.logRun('noise');
+      B.bus.emit('secretFound', { game: g });
+      if (g.rng.state !== rng || log.length !== n + 2) out.push('Zeitleiste zieht aus game.rng oder zaehlt falsch');
+      for (let i = 0; i < 100; i++) g.logRun('noise ' + i);
+      if (log.length !== 40 || log[39].text !== 'noise 99') out.push('Zeitleiste, Deckel: ' + log.length);
+      g.setState('play');
+      g.showScoreCard();
+      return out;
+    }));
+    await rp.waitForTimeout(900);
+    await rtap('Enter');
+    problems.push(...await rp.evaluate(() => {
+      const g = BOTA.game, log = g.runLog;
+      return g.depth === 9 && log.length === 40 && log[38].text === 'noise 99' && /^Paged: entered Undefined Behavior$/.test(log[39].text)
+        ? [] : ['Weitermachen behaelt die Zeitleiste nicht: Tiefe ' + g.depth + ', ' + JSON.stringify(log.slice(-2))];
+    }));
+    await rp.evaluate(() => {
+      const g = BOTA.game;
+      g.player.god = false;
+      for (const id of Object.keys(BOTA.ITEMS).filter((k) => !BOTA.ITEMS[k].active && !BOTA.ITEMS[k].onLethal).slice(0, 30)) g.player.giveItem(id, g);
+      g.runStats.time = 3725;
+      g.logRun('Side quest closed: a name long enough that it has to be cut off before it reaches the edge of the paper');
+    });
+    await rp.evaluate(() => {
+      const g = BOTA.game, p = g.player;
+      g.setState('play');
+      p.god = false; p.invuln = 0; p.guardrails = 0; p.health = 1;
+      p.fireHook = () => [];   // keine Rettung durch Items, damit der Tod sicher eintritt
+      p.hurt(2, 'an extremely long-winded enemy whose name is mostly a stack trace from a forgotten logging module', g);
+    });
+    await rp.waitForTimeout(1200);
+    await rshot('20-post-mortem-long');
+    problems.push(...await rp.evaluate(() => {
+      const g = BOTA.game, last = g.runLog[g.runLog.length - 1];
+      return g.state === 'dead' && /^Outage: lost to an extremely/.test(last.text) && last.t === g.runStats.time ? [] : ['Zeitleiste ohne Todeszeile: ' + JSON.stringify(last) + ', ' + g.state];
+    }));
+    await rtap('KeyR');
+    if (await rp.evaluate(() => BOTA.game.runLog.length) !== 1) problems.push('Neuer Run leert die Zeitleiste nicht');
+
+    // Wackelphase und Item-Schaden
+    problems.push(...await rp.evaluate(() => {
+      const B = BOTA, g = B.game, out = [];
+      const shot = (x, y, vx, vy) => new B.Projectile({ x, y, vx, vy, team: 'player', flags: { wobble: true } });
+      if (shot(100, 200, 480, 0).wobblePhase !== shot(100, 200, 480, 0).wobblePhase) out.push('Wackelphase: gleicher Schuss, andere Phase');
+      const fan = [-24, -12, 0, 12, 24].map((deg) => { const a = deg * Math.PI / 180; return shot(100, 200, Math.cos(a) * 480, Math.sin(a) * 480).wobblePhase; });
+      if (new Set(fan).size !== fan.length) out.push('Wackelphase: Faecher hat gleiche Phasen ' + fan);
+      const real = Math.random, rng = g.rng.state;
+      let calls = 0;
+      Math.random = () => { calls++; return real(); };
+      const buckets = new Array(8).fill(0);
+      for (let i = 0; i < 2000; i++) {
+        const ph = shot(64 + (i * 7) % 830, 64 + (i * 13) % 440, 480 - (i % 11) * 30, (i % 17) * 25 - 200).wobblePhase;
+        if (!(ph >= 0 && ph < Math.PI * 2)) out.push('Wackelphase ausserhalb 0..2pi: ' + ph);
+        buckets[Math.floor(ph / (Math.PI / 4))]++;
+      }
+      Math.random = real;
+      if (calls || g.rng.state !== rng) out.push('Wackelphase nutzt Math.random (' + calls + ') oder game.rng');
+      if (Math.min(...buckets) < 170) out.push('Wackelphase schlecht verteilt: ' + buckets);
+
+      for (const [depth, rm, pager] of [[1, 25, 10], [8, 51.25, 20.5]]) {
+        g.enterFloor(depth); g.setState('play');
+        g.room.enemies.length = 0;
+        const p = g.player;
+        const e = B.debug.spawn('memory_leak', p.x + 60, p.y);
+        // Gegner-HP sind gerundet, deshalb nur auf einen Punkt genau
+        if (Math.abs(e.maxHp - B.ENEMIES.memory_leak.hp * B.hpScale(depth)) > 1) out.push('hpScale passt nicht zu den Gegner-HP: ' + e.maxHp);
+        e.spawnDelay = 0; e.hp = e.maxHp = 100000;
+        B.ITEMS.rm_rf.use(p, g);
+        const a = 100000 - e.hp;
+        const hp = e.hp;
+        B.ITEMS.on_call_pager.onHurt(p, g);
+        if (a !== rm || hp - e.hp !== pager) out.push('Item-Schaden auf Etage ' + depth + ': rm -rf ' + a + ', Pager ' + (hp - e.hp));
+        g.room.enemies.length = 0;
+      }
+      return out;
+    }));
+    await rp.close();
+  }
 
   await browser.close();
 

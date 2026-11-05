@@ -121,6 +121,17 @@ These only appear on The Training Data floors.
 |---|---|---|---|---|---|
 | ![Dry Run](images/enemy_dry_run.png) | **Dry Run** `dry_run` | 7 (The Training Data only) | 14 | A crash-test dummy that rehearses everything first: a translucent white ghost labelled "--dry-run" walks, winds up and attacks, and exactly 1 s later the real dummy does the same thing on the same path, with the same aim and the same timing (a dotted line shows the path it is about to walk). Attacks: a dash in a straight line (full heart) or a sweep of 5 shots across a fan. Each attack starts with a 0.5 s windup (dashed line or rays), which the real one repeats. The ghost can't hurt you and can't be hit, and its shots are hollow rings. Watch the ghost and you know exactly where to stand. Max 2 per room | Rehearses every move in front of you. No changes were made. Yet. |
 
+### Floors 8–10
+
+One enemy each for The Latent Space, Undefined Behavior and /dev/null. They aren't a family. At home each makes up 6–9 % of
+enemies, and from then on they turn up on every other floor at about 2.5 %.
+
+| | Name | First floor | HP | Behaviour | Flavour text |
+|---|---|---|---|---|---|
+| ![Cosine Similarity](images/enemy_cosine_similarity.png) | **Cosine Similarity** `cosine_similarity` | 8 (The Latent Space only) | 14 | Flies to the spot opposite you through the room centre, keeping at least 90 px away. It only attacks when you do: each time you fire it glows for 0.6 s, then fires one shot in the exact opposite direction, so firing straight at it means it fires straight back. Max 2 per room | Perfectly opposed to you, in every dimension that counts. |
+| ![Heisenbug](images/enemy_heisenbug.png) | **Heisenbug** `heisenbug` | 9 (Undefined Behavior only) | 12 | While you hold fire within about 35° of it, it freezes, turns into a harmless outline and your shots pass through. Look away and it's solid and stalks you, and after 2.5 s unobserved it fires a telegraphed ring of 6. Shots already in flight hit once you stop aiming at it, so tap instead of holding. Explosions always hurt it. Max 2 per room | Stops misbehaving the moment you look at it. |
+| ![Bit Bucket](images/enemy_bit_bucket.png) | **Bit Bucket** `bit_bucket` | 10 (/dev/null only) | 20 | Drifts slowly over a dark disc of 110 px radius that swallows every shot entering it, spectral and piercing ones too. Shots fired from inside the disc work, and so do explosions. After 4 swallowed shots it telegraphs for 0.8 s and flushes a 5-shot fan at you. Max 2 per room | Everything you send it is gone. For a while. |
+
 ### The Context Limit family
 
 These first appear on The Context Limit (floor 11) and, weaker, on every floor after it. They're pale and waterlogged; in

@@ -21,7 +21,7 @@
     constructor(floor, cell) {
       this.floor = floor;
       this.cell = cell;
-      this.type = cell.type; // 'start' | 'normal' | 'boss' | 'treasure' | 'shop' | 'secret'
+      this.type = cell.type; // 'start' | 'normal' | 'boss' | 'treasure' | 'shop' | 'secret' | 'terms'
       this.tiles = new Uint8Array(COLS * ROWS);
       this.doors = {};       // dir -> { dir, edge: {kind, locked, hidden}, target: cell }
 

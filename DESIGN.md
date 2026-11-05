@@ -233,7 +233,7 @@ big **name**, small *tagline*. The pause screen lists collected items with their
 |---|---|---|---|
 | Regenerate Response | 2 | Rerolls item pedestals in the room | Same prompt. Different answer. Same disappointment. |
 | Stop Generating | 3 | Freezes all enemies for 4 s | ■ Stop. Everyone stop. Thank you. |
-| `rm -rf node_modules` | 4 | 25 damage to every enemy in the room | Freed 4.2 GB. Feels incredible. Nothing builds anymore. |
+| `rm -rf node_modules` | 4 | 25 damage to every enemy in the room (floor 1; scales with enemy HP) | Freed 4.2 GB. Feels incredible. Nothing builds anymore. |
 | /compact | 6 | Heals 2 hearts | Forget everything except the important bits. You feel lighter. |
 
 ### Pickups
@@ -417,25 +417,28 @@ clearly marked hook additions.
 All milestones done. What shipped, compared with this doc:
 - **Items:** 55 (50 passive, 5 active). There are 19 extras beyond §9, including five that add heart containers (2026-11-03) and five team suggestions (2026-11-04), e.g. Ctrl+C Ctrl+V, On-Call Pager,
   Garbage Collector, Feature Flag, Ctrl+Z (active), and the Extra GPU / Off-Brand GPU pair (added 2026-11-02). Locked chests cost an Approval.
-- **Enemies and bosses:** 33 spawnable enemies plus 13 minions. Floor families: Forgotten Branches (4, 2026-11-02), Sandbox Borders (Spinlock, Rootkit, Dust Daemon), Legacy Codebase (Stack Trace), Dependency Hell (Honeypot, Rolling Release), Production (Rate Limiter, Port Scanner) and The Training Data (Dry Run), the last five added 2026-11-03, plus The Context Limit (Overflow Buffer, Summarizer, Lost in the Middle; also 2026-11-03). The Dust Daemon bends your shots, the Dry Run rehearses every move as a ghost before doing it for real, and the Rate Limiter pauses with a "429" after every burst. Each of the 11 bosses has phases and telegraphed attacks; the Octopus Merge (2026-11-02) is the floor boss of Forgotten Branches (300 HP since 2026-11-03, was 330), the Nested Infinite Loop (2026-11-02) replaces the Infinite Loop from floor 8, and The Megalith and The Shareholder (2026-11-03) replace the Monolith and the Stakeholder from floor 7.
+- **Enemies and bosses:** 36 spawnable enemies plus 13 minions. Floor families: Forgotten Branches (4, 2026-11-02), Sandbox Borders (Spinlock, Rootkit, Dust Daemon), Legacy Codebase (Stack Trace), Dependency Hell (Honeypot, Rolling Release), Production (Rate Limiter, Port Scanner) and The Training Data (Dry Run), the last five added 2026-11-03, plus The Context Limit (Overflow Buffer, Summarizer, Lost in the Middle; also 2026-11-03). The Dust Daemon bends your shots, the Dry Run rehearses every move as a ghost before doing it for real, and the Rate Limiter pauses with a "429" after every burst. Each of the 11 bosses has phases and telegraphed attacks; the Octopus Merge (2026-11-02) is the floor boss of Forgotten Branches (300 HP since 2026-11-03, was 330), the Nested Infinite Loop (2026-11-02) replaces the Infinite Loop from floor 8, and The Megalith and The Shareholder (2026-11-03) replace the Monolith and the Stakeholder from floor 7.
 - **Stack Trace (2026-11-03):** first Legacy Codebase enemy, a paper-tailed scorpion that stings along a telegraphed line (see AGENTS.md §4).
 - **Layouts:** 30 (27 combat, the rest for special rooms), all validated.
 - **Presentation:**
   - 11 floor themes (Sandbox Borders, a desert with cacti and border fences, added 2026-11-02) and an animated avatar with 4 directions plus hurt and item poses.
-    - 82 synthesized SFX (plus a rain bed on The Context Limit) and a procedural chiptune loop per floor, with a boss variant.
+    - 89 synthesized SFX (plus a rain bed on The Context Limit) and a procedural chiptune loop per floor, with a boss variant.
   - Pixel-font HUD and screens, including the "post-mortem" death report.
 - **QA:** headless-browser tests found zero console errors and held 60 fps with all items, 30 enemies and about 150 bullets.
   They also covered 300+ fuzzed floors, every enemy and boss, and multi-floor runs.
 - **Known gaps:**
   - Balance hasn't been playtested by humans.
   - Once the item pools run dry, items can repeat.
-  - Gamepad support and seed entry on the title screen are still stretch goals.
+  - Gamepad support is still a stretch goal.
 - **Balance pass (2026-10-31), after player reports:**
   - The Stakeholder takes longer breaks between attacks (1.5 s / 1.1 s by phase instead of 1.1 / 0.8),
     waits longer between fan volleys, and its phase-1 spiral is a bit sparser. On floor 1 that's about
     15 % fewer shots per second in both phases. The breaks shrink with depth, back to roughly the old pace.
   - Guaranteed Approval per floor from depth 2 (see §6, step 8). Before this, 55–80 % of floors had no
     Approval drop at all.
+- **Surprise round (2026-11-05):** own enemies for floors 8–10 (Cosine Similarity, Heisenbug, Bit Bucket), Terms of Service
+  rooms, seed entry, a daily run with today's best score, same-seed retry and an incident timeline on the post-mortem.
+  `rm -rf` and the On-Call Pager now scale with depth. Details in AGENTS.md.
 - **Floor themes for spawns (2026-11-02):** enemies and bosses can be weighted per floor theme (`themes`) or limited
   to certain themes (`themeOnly`), so a floor like Forgotten Branches can get its own enemy family. Details in
   AGENTS.md §4. First users: Stale Branch, Detached HEAD, Cherry-Pick and Orphan Commit, which only appear on Forgotten Branches.

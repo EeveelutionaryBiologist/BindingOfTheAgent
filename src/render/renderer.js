@@ -693,6 +693,29 @@
         g.fillStyle = 'rgba(120,80,200,0.10)';
         g.fillRect(TILE, TILE, ROOM_W - 2 * TILE, ROOM_H - 2 * TILE);
         break;
+      case 'terms': {
+        // Toenung ins Purpurrote, dann der ganze Boden voller Kleingedrucktem: Zeilen aus winzigen "Woertern",
+        // die nur als Struktur lesbar sind. Darauf ein Siegelring unter dem Podest. Feste Zufallsfolge (decoRng).
+        g.fillStyle = 'rgba(95,0,40,0.26)';
+        g.fillRect(TILE, TILE, ROOM_W - 2 * TILE, ROOM_H - 2 * TILE);
+        const rnd = decoRng(depth * 777 + 13);
+        g.fillStyle = 'rgba(240,200,190,0.09)';
+        for (let y = TILE + 14; y < ROOM_H - TILE - 8; y += 14) {
+          let x = TILE + 16;
+          const end = ROOM_W - TILE - 16 - rnd() * 90;
+          while (x < end) {
+            const w = 8 + Math.floor(rnd() * 34);
+            g.fillRect(x, y, Math.min(w, end - x), 3);
+            x += w + 7;
+          }
+        }
+        g.strokeStyle = 'rgba(214,69,69,0.5)';
+        g.lineWidth = 4;
+        g.beginPath(); g.arc(cx, cy + 6, 62, 0, Math.PI * 2); g.stroke();
+        g.lineWidth = 2;
+        g.beginPath(); g.arc(cx, cy + 6, 52, 0, Math.PI * 2); g.stroke();
+        break;
+      }
       default: break;
     }
   }
@@ -1085,6 +1108,7 @@
     treasure: { frame: '#a8841c', light: '#f2d36b', leaf: '#6a5320', leafDark: '#3e3010', glow: 'rgba(255,210,90,' },
     shop:     { frame: '#2f7047', light: '#7bc96f', leaf: '#2e5a3a', leafDark: '#1a3522', glow: 'rgba(120,220,140,' },
     secret:   { frame: null, light: null, leaf: '#3a3046', leafDark: '#221c2a', glow: 'rgba(170,130,255,' },
+    terms:    { frame: '#47162c', light: '#c2375a', leaf: '#3a1224', leafDark: '#220a15', glow: 'rgba(225,40,90,' },
   };
 
   // Animationszustand der Tuerfluegel pro Raum (0 = offen, 1 = zu); WeakMap -> kein Leck beim Etagenwechsel
@@ -1222,6 +1246,13 @@
       g.fillStyle = '#1a3522'; g.fillRect(p.x - 11, p.y - 10, 22, 20);
       g.fillStyle = '#7bc96f'; g.fillRect(p.x - 11, p.y - 10, 22, 2);
       B.text(g, '¢', p.x, p.y + 1, { size: 16, align: 'center', baseline: 'middle', color: '#c8f0b8', shadow: false });
+    }
+    if (kind === 'terms') {
+      // Vertragsblatt mit Paragrafenzeichen, Platzierung wie beim Shop-Schild
+      const p = dir === 'left' || dir === 'right' ? { x: cx, y: cy - 46 } : doorPoint(dir, 0, -20);
+      g.fillStyle = '#e9dfc8'; g.fillRect(p.x - 10, p.y - 11, 20, 22);
+      g.fillStyle = '#c2375a'; g.fillRect(p.x - 10, p.y - 11, 20, 2);
+      B.text(g, '§', p.x, p.y + 1, { size: 16, align: 'center', baseline: 'middle', color: '#8a1c3a', shadow: false });
     }
   }
 

@@ -2148,4 +2148,91 @@
     scale: 4,
     frames: [PORT_ROWS, PORT_ROWS.map((r) => r.replace(/o/g, 'c').replace(/O/g, 'y'))],
   });
+
+  // ===========================================================================
+  // Eigene Gegner der Etagen 8–10 (Verhalten in entities/enemies-deep.js)
+  // ===========================================================================
+
+  // Cosine Similarity — Kompass-Stern aus zwei Vektoren: heller Pfeil oben links, dunkler unten rechts (das Gegenstueck),
+  // violetter Kern. Frame 1: die kleinen Sterne daneben wandern auf die andere Diagonale.
+  // Zeichen: k Kontur, w/g/G hell/gold/dunkel, o Kern, * Stern
+  const COS_ROWS = (a, b) => [
+    '......k......',
+    '.....kwk.....',
+    '..' + a + '..kwk..' + b + '..',
+    '.....kgk.....',
+    '....kwgGk....',
+    '.kkkwggGGkkk.',
+    'kwwwgGoGgGGGk',
+    '.kkkwggGGkkk.',
+    '....kgGGk....',
+    '.....kGk.....',
+    '..' + b + '..kGk..' + a + '..',
+    '.....kGk.....',
+    '......k......',
+  ];
+  B.defineSprite('enemy_cosine_similarity', {
+    palette: { k: '#14102a', w: '#fff3c4', g: '#ffd166', G: '#d98a2b', o: '#a78bfa', '*': '#fff3c4' },
+    scale: 4,
+    frames: [COS_ROWS('*', '.'), COS_ROWS('.', '*')],
+  });
+
+  // Heisenbug — Kaefer, von dem nur eine Haelfte sicher existiert: Die andere ist durchbrochen und wechselt von Frame zu
+  // Frame die Seite (mal so, mal so gerendert). Tuerkis auf dem magentafarbenen Boden, gelbe Augen.
+  // Zeichen: k Kontur, T/t Panzer hell/dunkel, y Augen
+  const HEISEN_FRAMES = [
+    [
+      '...k...k...',
+      '....k.k....',
+      '...kkkkk...',
+      '..kyTkTyk..',
+      'k.kTTkT.k.k',
+      '.kkTtk.T.k.',
+      'k.kTTkT.k.k',
+      '.kkTtk.T.k.',
+      'k.kTTkT.k.k',
+      '...kTk.k...',
+      '....kk.....',
+    ],
+    [
+      '...k...k...',
+      '....k.k....',
+      '...kkkkk...',
+      '..kyTkTyk..',
+      'k.k.TkTTk.k',
+      '.k.T.ktTkk.',
+      'k.k.TkTTk.k',
+      '.k.T.ktTkk.',
+      'k.k.TkTTk.k',
+      '...k.kTk...',
+      '.....kk....',
+    ],
+  ];
+  B.defineSprite('enemy_heisenbug', {
+    palette: { k: '#0e1a1c', T: '#4fe0d0', t: '#1f8f88', y: '#f5ff4a' },
+    scale: 4,
+    frames: HEISEN_FRAMES,
+  });
+
+  // Bit Bucket — Blecheimer mit Henkel und rotem Band, die Oeffnung ist schwarz. Hell und mit grauer statt dunkler Kontur,
+  // weil er auf seiner eigenen schwarzen Scheibe steht (eine dunkle Kontur samt Henkel verschwand dort).
+  // Frame 1: der Henkel kippt auf die andere Seite.
+  // Zeichen: k Kontur, L/s/d Blech hell/mittel/dunkel, r Oeffnung, R Band
+  const BUCKET_BODY = [
+    '.kkkkkkkkkk.',
+    'kLLLLLLLLLsk',
+    'krrrrrrrrrrk',
+    'kLLLLLLLssdk',
+    '.kLLsssssdk.',
+    '.kRRRRRRRRk.',
+    '.kLLsssssdk.',
+    '..kLssssdk..',
+    '..kLssssdk..',
+    '..kkkkkkkk..',
+  ];
+  B.defineSprite('enemy_bit_bucket', {
+    palette: { k: '#8a8a96', L: '#e6e6ec', s: '#a6a6b2', d: '#696974', r: '#000000', R: '#ff4d3d' },
+    scale: 4,
+    frames: [['...kkkk.....', '..k....k....', '.k......k...'].concat(BUCKET_BODY), ['.....kkkk...', '....k....k..', '...k......k.'].concat(BUCKET_BODY)],
+  });
 })(window.BOTA);

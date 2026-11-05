@@ -4,7 +4,8 @@
  * Zustaende: title -> floorCard -> play <-> pause
  *                                  play -> roomTransition -> play (ggf. -> bossIntro -> play)
  *                                  play -> floorTransition -> floorCard
- *                                  play -> dead -> floorCard (neuer Run)
+ *                                  play -> dead -> floorCard (neuer Run, zufaellig oder derselbe Seed)
+ *            title -> seedEntry -> floorCard (Seed eintippen; Esc zurueck zum Titel)
  *
  * Welt-API (fuer Verhalten, Items, Effekte):
  *   game.player, game.room, game.floor, game.depth, game.rng, game.followers
@@ -37,6 +38,7 @@
     ['items', 'Items taken'], ['bosses', 'Floor bosses'], ['quests', 'Side quests'],
   ];
   const freshScore = () => ({ coins: 0, kills: 0, keys: 0, items: 0, bosses: 0, quests: 0, rooms: 0 });
+  const RUN_LOG_MAX = 40; // Eintraege der Zeitleiste (game.runLog); deutlich mehr, als der Post-Mortem anzeigt
 
   class Game {
     constructor() {
@@ -65,6 +67,9 @@
       this.runStats = { kills: 0, rooms: 0, time: 0 };
       this.score = freshScore(); // Ereignis-Zaehler fuer den Final Score (siehe B.SCORE_VALUES)
       this.cycles = 0;           // abgeschlossene Durchgaenge durch alle Etagen (siehe showScoreCard)
+      this.runLog = [];          // Zeitleiste fuer den Post-Mortem-Bericht (siehe logRun)
+      this.seedInput = '';       // Text im Seed-Dialog (Zustand 'seedEntry')
+      this.newDailyBest = false; // Score-Karte: dieser Run hat gerade den Tagesbestwert verbessert
       this.lockDeniedT = 0;
       this.fps = 60;
       this.titleTagline = B.TEXT.TAGLINES ? B.TEXT.TAGLINES[Math.floor(Math.random() * B.TEXT.TAGLINES.length)] : '';
@@ -83,6 +88,8 @@
       this.runStats = { kills: 0, rooms: 0, time: 0 };
       this.score = freshScore();
       this.cycles = 0;
+      this.runLog = [];
+      this.newDailyBest = false;
       this.death = null;
       this.bannerState = null;
       this.hudGlitch = null;
@@ -121,6 +128,7 @@
     setState(s, t) {
       this.state = s;
       this.stateT = t || 0;
+      B.input.textMode = s === 'seedEntry';
     }
 
     /** Score-Ereignis zaehlen (kind: Schluessel aus B.SCORE_VALUES); unbekannte Arten werden ignoriert */
@@ -146,8 +154,29 @@
      */
     showScoreCard() {
       this.cycles++;
+      this.newDailyBest = this.recordDaily();
       this.setState('scoreCard', 0);
       B.bus.emit('cycleComplete', { game: this, cycles: this.cycles, score: this.scoreTotal() });
+    }
+
+    /**
+     * Endstand eines Runs auf dem heutigen Daily-Seed eintragen (Tod oder Score-Karte). Andere Seeds und Daily-Seeds
+     * von gestern zaehlen nicht. Zieht nichts aus game.rng.
+     * @returns {boolean} true bei einem neuen Tagesbestwert
+     */
+    recordDaily() {
+      if (this.seed !== B.dailySeed()) return false;
+      return B.storage.recordDaily(B.dailyKey(), this.scoreTotal());
+    }
+
+    /**
+     * Eintrag in die Zeitleiste des Runs ({ t: Spielzeit in s, text }). Die aeltesten Eintraege fallen heraus, der
+     * Post-Mortem zeigt ohnehin nur die letzten. Reine Buchfuehrung ohne game.rng. Wer was eintraegt, steht am
+     * Dateiende (Bus-Listener).
+     */
+    logRun(text) {
+      this.runLog.push({ t: this.runStats.time, text: String(text) });
+      if (this.runLog.length > RUN_LOG_MAX) this.runLog.shift();
     }
 
     onPlayerDeath(killer) {
@@ -160,6 +189,7 @@
         time: this.runStats.time,
         score: this.scoreTotal(),
         cycles: this.cycles,
+        newDailyBest: this.recordDaily(),
       };
       B.storage.data.deaths++;
       B.storage.save();
@@ -213,6 +243,7 @@
       B.bus.emit('roomEnter', { game: this, room, first });
       if (first && room.type === 'boss' && room.enemies.some((e) => e.isBoss)) this.pendingBossIntro = true;
       if (first && room.type === 'shop' && B.TEXT.SHOP_LINES) this.banner('Shop', this.rng.pick(B.TEXT.SHOP_LINES));
+      if (first && room.type === 'terms') this.banner('Terms of Service', B.TEXT.pick(B.TEXT.TERMS_LINES)); // nur Text: kein game.rng
     }
 
     /** Raumwechsel mit Slide-Animation durch die Tuer in Richtung dir */
@@ -306,6 +337,13 @@
             const w = wares[i % wares.length];
             this.spawnPickup(w[0], room.tileCenter(col, 4).x, center.y, { price: w[1] }, room);
           });
+          room.cleared = true;
+          break;
+        }
+        case 'terms': {
+          // Ein Item, das ein Herz und eine Klausel kostet (Podest in pickup.js, Raum: dungeon.js assignTerms)
+          const pd = this.spawnPedestal(this.rollItem('treasure'), center.x, center.y, { terms: { clause: B.rollTermsClause(rng) } }, room);
+          room.pickups.push(new B.TermsNotice(pd));
           room.cleared = true;
           break;
         }
@@ -508,7 +546,7 @@
     spawnEnemy(id, x, y, room) {
       const def = B.ENEMIES[id];
       if (!def) { console.warn('[game] unknown enemy', id); return null; }
-      const e = new B.Enemy(def, id, x, y, this, 1 + 0.15 * (this.depth - 1));
+      const e = new B.Enemy(def, id, x, y, this, B.hpScale(this.depth));
       (room || this.room).enemies.push(e);
       return e;
     }
@@ -680,14 +718,26 @@
 
     update(dt) {
       const inp = B.input;
-      if (inp.pressed('KeyM')) B.audio.toggleMute();
-      if (inp.pressed('F2')) B.debug.enabled = !B.debug.enabled;
+      // Im Seed-Dialog sind Tasten Text: M und F2 duerfen dort nicht nebenbei schalten
+      if (this.state !== 'seedEntry') {
+        if (inp.pressed('KeyM')) B.audio.toggleMute();
+        if (inp.pressed('F2')) B.debug.enabled = !B.debug.enabled;
+      }
       if (this.shakeT > 0) { this.shakeT -= dt; if (this.shakeT <= 0) this.shakeI = 0; }
       if (this.bannerState) { this.bannerState.t -= dt; if (this.bannerState.t <= 0) this.bannerState = null; }
 
       switch (this.state) {
         case 'title':
           if (inp.pressed('Enter') || inp.pressed('Space') || inp.pressed('NumpadEnter')) this.newRun(B.params.seed || B.randomSeed());
+          else if (inp.pressed('KeyD')) this.newRun(B.dailySeed());
+          else if (inp.pressed('KeyS')) {
+            this.seedInput = B.params.seed || '';   // ein Seed aus der URL steht zum Aendern schon im Feld
+            this.setState('seedEntry');
+          }
+          break;
+
+        case 'seedEntry':
+          this.updateSeedEntry(inp);
           break;
 
         case 'floorCard':
@@ -726,6 +776,7 @@
           if (this.stateT > 0.8) {
             if (inp.pressed('Enter') || inp.pressed('NumpadEnter')) this.enterFloor(this.depth + 1);
             else if (inp.pressed('KeyR')) this.newRun(B.randomSeed());
+            else if (inp.pressed('KeyT')) this.newRun(this.seed);
           }
           break;
 
@@ -739,13 +790,27 @@
           // Effekte (Partikel) weiterlaufen lassen
           for (const fx of this.room.effects) fx.update(dt, this);
           this.room.effects = this.room.effects.filter((fx) => !fx.dead);
-          if (this.stateT > 0.8 && (inp.pressed('KeyR') || inp.pressed('Enter'))) this.newRun(B.randomSeed());
+          // T statt S fuer "derselbe Seed": S ist eine Bewegungstaste, und wer gerade stirbt, haemmert noch darauf
+          if (this.stateT > 0.8) {
+            if (inp.pressed('KeyR') || inp.pressed('Enter')) this.newRun(B.randomSeed());
+            else if (inp.pressed('KeyT')) this.newRun(this.seed);
+          }
           break;
 
         case 'play':
           this.updatePlay(dt);
           break;
       }
+    }
+
+    /** Seed-Dialog: Zeichen filtern (B.cleanSeed), Backspace loescht, Enter startet (nicht leer), Esc zurueck zum Titel */
+    updateSeedEntry(inp) {
+      if (inp.pressed('Escape')) { this.setState('title'); return; }
+      for (const entry of inp.typed()) {
+        if (entry === inp.BACKSPACE) this.seedInput = this.seedInput.slice(0, -1);
+        else this.seedInput = B.cleanSeed(this.seedInput + entry);
+      }
+      if ((inp.pressed('Enter') || inp.pressed('NumpadEnter')) && this.seedInput) this.newRun(this.seedInput);
     }
 
     /** R gedrueckt halten (1 s) startet einen neuen Run */
@@ -895,6 +960,24 @@
       if (inp.pressed('KeyH')) this.resources(10);
     },
   };
+
+  // ===========================================================================
+  // Zeitleiste des Runs (game.runLog, angezeigt im Post-Mortem). Haengt an denselben Events wie Audio und Effekte,
+  // damit die Spiellogik dafuer nirgends geaendert werden muss. e.game fehlt, wenn ein Item ohne Spiel vergeben wird.
+  // ===========================================================================
+  B.bus.on('floorEnter', (e) => {
+    const name = B.floorInfo(e.depth).name;
+    e.game.logRun(e.depth === 1 ? 'Shift started: ' + name : 'Paged: entered ' + name);
+  });
+  B.bus.on('itemGet', (e) => { if (e.game) e.game.logRun('Deployed: ' + e.def.name); });
+  B.bus.on('secretFound', (e) => e.game.logRun('Found an undocumented endpoint'));
+  B.bus.on('termsSigned', (e) => e.game.logRun('Accepted the Terms of Service, unread'));
+  B.bus.on('roomClear', (e) => {
+    const r = e.room;
+    const boss = B.BOSSES[r.type === 'boss' ? r.bossId : r.encounterBoss];
+    if (boss) e.game.logRun((r.type === 'boss' ? 'Resolved: ' : 'Side quest closed: ') + boss.name);
+  });
+  B.bus.on('playerDeath', (e) => e.game.logRun('Outage: lost to ' + (e.killer || 'unknown causes')));
 
   B.Game = Game;
 })(window.BOTA);

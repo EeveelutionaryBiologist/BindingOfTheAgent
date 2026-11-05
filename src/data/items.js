@@ -705,7 +705,8 @@
       const R = 200;
       for (const e of livingEnemies(g)) {
         if (B.M.dist(player.x, player.y, e.x, e.y) > R + e.r) continue;
-        if (e.hurt(10, g, null) && !e.noKnockback) e.knockback(e.x - player.x, e.y - player.y, 420);
+        // 10 Schaden auf Etage 1, skaliert wie die Gegner-HP (sonst waere das Item tief unten wirkungslos)
+        if (e.hurt(10 * B.hpScale(g.depth), g, null) && !e.noKnockback) e.knockback(e.x - player.x, e.y - player.y, 420);
       }
       fx.ring(g, player.x, player.y, R, '#e05a4f', 0.35);
       fx.popText(g, player.x, player.y - 60, 'PAGE!', '#ff8a7a');
@@ -793,7 +794,7 @@
   // ===========================================================================
 
   /** Welcher Item-Pool passt zum Raumtyp (fuer Regenerate Response) */
-  const POOL_BY_ROOM = { treasure: 'treasure', shop: 'shop', boss: 'boss', secret: 'secret' };
+  const POOL_BY_ROOM = { treasure: 'treasure', shop: 'shop', boss: 'boss', secret: 'secret', terms: 'treasure' };
 
   I.regenerate_response = {
     name: 'Regenerate Response', tagline: 'Reroll items',
@@ -806,7 +807,8 @@
       const room = g.room;
       const pool = POOL_BY_ROOM[room.type] || 'treasure';
 
-      // 1) Item-Podeste mit Item neu wuerfeln (Shop-Preise passend zum neuen Item)
+      // 1) Item-Podeste mit Item neu wuerfeln (Shop-Preise passend zum neuen Item; ein Terms-Podest behaelt
+      //    seine Klausel und seinen Preis in Herzen, denn pd.terms bleibt unberuehrt)
       const peds = room.pickups.filter((pk) => B.Pedestal && pk instanceof B.Pedestal && pk.itemId && !pk.dead);
       if (peds.length) {
         for (const pd of peds) {
@@ -858,7 +860,8 @@
       if (!list.length) return deny(player, g, 'already deleted');
       for (const e of list) {
         if (e.dead) continue; // kann durch Abspaltungen anderer Gegner inzwischen tot sein
-        if (e.hurt(25, g, null) && !e.noKnockback) e.knockback(e.x - player.x, e.y - player.y, 300);
+        // 25 Schaden auf Etage 1, skaliert wie die Gegner-HP (sonst waere das Item tief unten wirkungslos)
+        if (e.hurt(25 * B.hpScale(g.depth), g, null) && !e.noKnockback) e.knockback(e.x - player.x, e.y - player.y, 300);
         fx.burst(g, e.x, e.y, '#ffb347', 10, 260);
       }
       g.shake(14, 0.4);

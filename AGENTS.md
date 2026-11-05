@@ -18,7 +18,7 @@ ideas live in `ENEMY_IDEAS.md`; remove an entry there once it's built.
   forever. It's an internal team distraction with no meta-progression. There's no real ending: after the 11th floor a
   score card offers to keep going (The Backlog II) or start over.
 - **Stack:** vanilla JavaScript (ES2020), Canvas 2D and Web Audio, with **zero dependencies and no build step**.
-  `index.html` loads about 30 classic `<script>` files in a fixed order, and everything hangs off `window.BOTA`.
+  `index.html` loads 37 classic `<script>` files in a fixed order, and everything hangs off `window.BOTA`.
 - **Run:** open `index.html` directly from disk (`file://`). Use `?seed=ABCD-1234` for a fixed run and `?debug` for cheats.
 - **Verify:** `node tools/smoke-test.js` (needs Playwright with Chromium; see §2). Exit code 0 means no console errors and
   all content checks pass.
@@ -55,13 +55,20 @@ safeguard). No server is needed. If you want one anyway, any static server works
 - `?seed=XXXX-XXXX` sets a deterministic run seed (normalised to upper case).
 - `?debug` shows the debug overlay. `F2` toggles it in-game.
 
+### Title and end-of-run keys
+- **Title:** `Enter` random run (or the `?seed=` seed), `S` enter a seed, `D` daily run.
+- **Seed dialog:** letters, digits and hyphen, at most 32, upper-cased. `Backspace` deletes, `Ctrl+V` pastes, `Enter`
+  starts, `Esc` goes back. A `?seed=` value is pre-filled.
+- **Post-mortem:** `R` / `Enter` new random run, `T` same seed. **Score card:** `Enter` keep going, `R` start over, `T` same
+  seed. It's `T` and not `S` on purpose: `S` is a movement key, and players are still pressing it when they die.
+
 ### Debug keys (only while debug is enabled, during play)
 `G` god mode · `I` random item · `K` kill all · `N` next floor · `V` reveal map · `B` teleport to boss room ·
 `T` teleport to treasure room · `H` 10 of each resource and full heal.
 
 ### Scriptable debug API (works with or without the overlay)
 `BOTA.debug.god(on?)`, `.giveItem(id?)`, `.spawn(enemyId, x?, y?)`, `.spawnBoss(bossId, x?, y?)`, `.killAll()`,
-`.nextFloor()`, `.reveal()`, `.gotoRoom('start'|'treasure'|'shop'|'boss'|'secret'|'encounter')`, `.resources(n)`
+`.nextFloor()`, `.reveal()`, `.gotoRoom('start'|'treasure'|'shop'|'boss'|'secret'|'terms'|'encounter')`, `.resources(n)`
 (`'encounter'` = the floor's first side-quest room, floor 8+).
 Live state is under `BOTA.game` (`.player`, `.room`, `.floor`, `.depth`, `.state`, `.rng`, `.followers`).
 
@@ -231,6 +238,37 @@ Live state is under `BOTA.game` (`.player`, `.room`, `.floor`, `.depth`, `.state
   swapped active item back doesn't), floor bosses and side quests count once via `onRoomClear`; the score card comes
   after floor 11 and 22 but not floor 10, ignores keys for 0.8 s, doesn't touch `game.rng`, Enter leads to The Backlog II
   keeping score and cycles, R starts at zero; the post-mortem shows the same score;
+- the floor 8–10 enemies never roll before their `minFloor`, have full weight on their home floor and on the next cycle, and
+  only `weight × mix` elsewhere. **Cosine Similarity** reaches its mirror point, keeps ≥ 85 px when the player is near the
+  centre, goes around a player in the way, never shoots unless the player does, returns exactly the opposite direction
+  after the full windup in all four directions, hits on the axis and misses off it, stays ≥ 0.59 s apart under sustained
+  fire, and never replays frozen or earlier shots. **Heisenbug**'s cone is exact (30° seen, 40° not); observed it doesn't
+  move, shoot, hurt or take shots; shots in flight hit after release or turning away; its ring of 6 comes after the full
+  telegraph along its rays, and looking cancels it; observation holds while frozen, with the clock stopped; explosions
+  hit it observed, homing shots ignore it, and tap fire clears the room exactly once. **Bit Bucket** swallows normal,
+  spectral and piercing shots at the rim, spares shots fired inside, swallows a returning shot, leaves enemy shots alone,
+  shields enemies inside the disc, lets nothing hit in the swallowing tick, stops swallowing while frozen, takes
+  explosions, and flushes 5 shots in the locked direction after the full telegraph, then empties. All shots stay at
+  165–260 px/s, Cosine Similarity and Bit Bucket draw nothing from `game.rng`, `killAll` leaves nothing, and bus listener
+  counts don't change;
+- Terms of Service rooms: none on floor 1, 30–65 % of floors otherwise; one per floor at most, dead ends only, never the
+  key, README, encounter, boss, secret or start room; a `special` layout with a free centre and no enemies, props, cacti,
+  loot or pipe; every other room identical to the same floor without it, deterministic per seed. The deal takes exactly 2
+  halves and the clause once, guardrails don't pay, no hit event, the item is scored once, refused at 2 and 1 halves,
+  3 halves leaves 1; running through or standing still doesn't sign; god mode pays and Retry with Backoff doesn't
+  interfere; a reroll keeps the clause; a swapped active item is free and doesn't score again; the entry banner gives
+  way to the contract, other banners don't; signing by keyboard works in the real loop and shows on the timeline;
+- the seed dialog only accepts `[A-Z0-9-]` up to 32 and upper-cases; Backspace, Esc and Enter on empty work; paste is read
+  only in the dialog and is filtered; characters come from `e.key` (a QWERTZ `y` stays `Y`); M and F2 do nothing there,
+  and a held S types nothing more; the seed gives the same floor as `newRun` with it, and a URL seed is pre-filled;
+- the daily seed is `DAILY-YYYYMMDD` and `D` starts it; storage drops tampered `dailyDate`/`dailyBest`; a new day resets the
+  best; only today's daily seed counts, at death and on the score card, and `game.rng` stays untouched;
+- same seed: `T` only after the lockout, on the post-mortem and the score card, with the same floor and a fresh score; `S`
+  does nothing there and `R` changes the seed;
+- `game.runLog` records floors, items, secret rooms, bosses, side quests and the death line, holds at most 40 entries,
+  empties on a new run, survives "keep going" and never draws from `game.rng`;
+- the wobble phase is the same for identical shots, differs across a fan, is well spread over 0–2π, and uses neither
+  `Math.random` nor `game.rng`; `rm -rf` and the On-Call Pager deal 25/10 on floor 1 and 51.25/20.5 on floor 8;
 - the door transition, special rooms, pause screen and death screen work.
 
 Screenshots go to `tools/out/` (scratch; don't commit or ship). One-time setup without admin rights:
@@ -252,7 +290,7 @@ swatch (`floor_<key>_swatch.png`). Run it after changing a theme, pattern or dec
 Testing tips:
 - Headless Chromium can't play audio. Instead, check `BOTA.audio.play(name)` doesn't throw after a key press unlocks the AudioContext.
 - Use `page.keyboard.down/up` for movement and `BOTA.debug.*` for setup.
-- `teleport`/`gotoRoom` **skip the boss intro card**, which only triggers when you walk through a door (see §8).
+- `teleport`/`gotoRoom` **skip the boss intro card**, which only triggers when you walk through a door (see §6).
 - God mode doesn't stop "Retry with Backoff" from intercepting a lethal hit. To force death, call `hurt` repeatedly.
 
 ---
@@ -265,7 +303,7 @@ core/namespace → core/rng → core/math → core/input → core/sprites → co
 data/palette → data/text → data/sprites-core → data/sprites-enemies → data/sprites-items
 data/layouts → data/enemies → data/bosses → data/items
 world/room → world/dungeon
-entities/entity → projectile → player → enemy → boss → bosses-late → boss-memory-hog → boss-agent-swarm → boss-ransomware → enemy-trojan → pickup → familiar → effects
+entities/entity → projectile → player → enemy → enemies-context → enemies-deep → boss → bosses-late → boss-memory-hog → boss-agent-swarm → boss-ransomware → enemy-trojan → pickup → familiar → effects
 render/renderer → render/hud → render/screens
 game → main
 ```
@@ -289,11 +327,12 @@ depend on load order.
 |---|---|---|
 | `C`, `DIRS`, `OPPOSITE`, `TILES` | namespace | constants, directions, tile enum (FLOOR, WALL, ROCK, BLOCK, PIT, SPIKES, DOOR, PROP, CACTUS) |
 | `bus` | namespace | event bus `on/off/emit`; listener exceptions are caught and logged |
-| `storage`, `params` | namespace | validated localStorage (`muted, bestFloor, runs, deaths`); validated URL params |
+| `storage`, `params` | namespace | validated localStorage (`muted, bestFloor, runs, deaths, dailyDate, dailyBest`; `dailyBestFor(key)`, `recordDaily(key, score)`); validated URL params |
+| `cleanSeed, dailyKey, dailySeed, hpScale` | namespace | the only path for seed input (whitelist, 32 characters), local `YYYYMMDD`, `DAILY-YYYYMMDD`, enemy HP factor per depth (flat-damage items use it too) |
 | `ITEMS, ENEMIES, BOSSES, BEHAVIORS, BOSS_BEHAVIORS, PICKUP_TYPES, LAYOUTS, TEXT` | namespace (filled by data/entities) | content registries |
 | `RNG`, `hashString`, `randomSeed` | rng | mulberry32 PRNG (`next/float/int/chance/pick/weighted/shuffle/angle`), FNV-1a hash |
 | `M` | math | `clamp, lerp, approach, dist, norm, angleDiff, circlesOverlap, circleRectPush, …` |
-| `input` | input | `down(code)`, `pressed(code)` (edge since the last sim step), `moveVector()`, `shootDir()`, `_simulate()` |
+| `input` | input | `down(code)`, `pressed(code)` (edge since the last sim step), `moveVector()`, `shootDir()`, `_simulate()`; text input: `textMode` (set only by `game.setState` for `seedEntry`), `typed()`, `BACKSPACE`. Controls use `e.code`, typed text uses `e.key` (German keyboards) |
 | `defineSprite, drawSprite, hasSprite, spriteSize, spriteFrameCount` | sprites | ASCII sprite registry; unknown names draw a magenta placeholder |
 | `audio` | audio | `unlock, play(name), toggleMute, tone, names(), music.start/stop` |
 | `FONT, COLORS, FLOOR_THEMES, themeFor(depth)` | palette | colours and 11 floor themes (`gen`, `props`, `cacti` are read by the map generator; `tiles` swaps tile sprites; `ambient` / `wallDecor` add per-frame or baked atmosphere, e.g. `rain`) |
@@ -301,6 +340,7 @@ depend on load order.
 | `Room`, `Floor` | world | room model and floor generator |
 | `Entity, Projectile, Bomb, Player, Enemy, Boss, AI, BossHelpers` | entities | gameplay classes and AI helpers |
 | `Pickup, Pedestal, Trapdoor, rollRandomPickup, openChest, rerollPickup, drawSpriteIfExists` | pickup | economy objects |
+| `TERMS, rollTermsClause, TermsNotice` | pickup | Terms of Service deal: numbers, clause roll, contract overlay (§3.8) |
 | `syncFollowers, Duck, UnitTest` | familiar | followers (Rubber Duck, Unit Tests orbitals) |
 | `FX, Particle, Leaf` | effects | visual effects API (`Leaf` = falling leaf, used by the branches family) |
 | `itemPrice, itemFx` | items | price helper, pop-up text fallback |
@@ -323,8 +363,11 @@ title ─Enter─▶ floorCard ─(2.2 s or key)─▶ play ◀──Esc/P──
                    └──── newRun(seed) ◀──R────┴─ hp 0 ─▶ dead
 ```
 On the last floor of a cycle (`isCycleEnd()`: depth divisible by the number of themes) `floorTransition` leads to
-`scoreCard` instead of `enterFloor`: after 0.8 s Enter continues with `enterFloor(depth + 1)` and R calls `newRun`.
-Global keys handled in every state: `M` (mute) and `F2` (debug). Holding `R` for 1 s in play or pause restarts the run
+`scoreCard` instead of `enterFloor`: after 0.8 s Enter continues with `enterFloor(depth + 1)`, R calls `newRun` and T
+calls `newRun(game.seed)`, as on the death screen. On the title, `D` starts the daily run and `S` opens `seedEntry`
+(Enter: `newRun(seedInput)`, Esc: back to `title`); `Screens.title` draws that dialog over the title, because no room
+exists before the first run.
+Global keys handled in every state except `seedEntry`: `M` (mute) and `F2` (debug). Holding `R` for 1 s in play or pause restarts the run
 (`game.restartHold` drives the HUD ring).
 
 ### 3.5 World API (`game` is passed to every behaviour and hook)
@@ -335,7 +378,7 @@ game.score · game.cycles`
 - `spawnPickup(type, x, y, opts?, room?)`, `spawnPedestal(itemId, x, y, {price}?, room?)`
 - `explode(x, y, radius, damage, source)`: damages enemies and the player (2 halves), breaks rocks and cacti (8 % loot), reveals
   hidden doors, flings pickups, shakes the screen, emits `explosion`
-- `addScore(kind, n?)` · `scoreTotal()` (Final Score, §4)
+- `addScore(kind, n?)` · `scoreTotal()` (Final Score, §4) · `recordDaily()` · `logRun(text)` (`game.runLog`, §4)
 - `shake(intensity, seconds)` · `banner(title, subtitle)` · `freezeEnemies(seconds)` · `rollItem(pool)` ·
   `nearestFreePos(x, y, room?)` · `nextFloor()` · `teleport(room)` · `pipeWarp(pipe)` · `glitchHud(seconds)` (scrambles one HUD area,
   stored in `game.hudGlitch`; a new call restarts the timer instead of stacking)
@@ -390,6 +433,14 @@ game.score · game.cycles`
    `cacti` share (Sandbox Borders: 0.5), never in the 3 × 3 area in front of a door. Cacti are as solid as rocks, so
    walkability is unchanged. `game.checkCactus` (from `updatePlay`, not while flying) pricks the player for half a
    heart with knockback when their circle touches a cactus tile; `explode` breaks cacti like rocks.
+
+13. `assignTerms` (from floor 2, own stream `':terms'`, always the same number of draws, runs **last**) turns one dead-end
+   `normal` room into a **Terms of Service** room on 50 % of floors (`TERMS_CHANCE`; about 43 % on floor 2, where a free
+   dead end is sometimes missing). Candidates have exactly one visible door, of kind `normal`, and aren't the key room,
+   README room or an encounter; a hidden secret door may stay. It sets `cell.type` and `room.type` to `'terms'`, re-stamps a
+   `special` layout, empties enemies, loose loot, pipe and props, and sets the visible edge's kind to `'terms'` (unlocked).
+   `floor.termsRoom` holds the cell. It must stay last: the `':props'` and `':cacti'` streams span all rooms and draw per
+   layout, so converting earlier would shift other rooms.
 
 **Boss choice:** each room build still pre-rolls `bossId` with `B.rollBoss` (so the floor RNG is unchanged), but
 `game.enterFloor` then calls `assignFloorBoss`, which replaces it with `B.rollBossVaried(rng, depth, game.bossHistory)`.
@@ -464,8 +515,11 @@ The previous floor's boss is excluded, and bosses already met count `weight · t
   - **Sharp turn:** a shot with `turnAt` (px, set by Sharp Left Turn) turns 90° left once at that distance and emits
     `shotTurn`.
   - **Shot fields:** every tick, before moving, a player shot calls the behaviour hook `bendShot(e, shot, dt, game)`
-    of every living enemy in the room that has one (the Dust Daemon's swirl). It may change `vx/vy` and must be
-    deterministic. Enemy shots are never bent.
+    of every living enemy in the room that has one (the Dust Daemon's swirl, the Bit Bucket's disc). It may change
+    `vx/vy` or end the shot (it then doesn't move or hit anything that tick) and must be deterministic. Enemy shots
+    are never bent.
+  - **Wobble:** `wobblePhase` (Temperature 1.5) is a pure hash of the shot's spawn values, because it changes real
+    shot paths: no `Math.random`, and no `game.rng` either, or every seed with that item would change.
 - **`Bomb`:** sits in `room.projectiles` with a 1.5 s fuse, then calls `game.explode(…, 110, 30)`. It hurts the player too.
 - **`Enemy`** (`entities/enemy.js`):
   - **Behaviour contract:** `init`, `update`, `afterMove`, `onDeath`, `onLethal`, `onExplosion`, `onHitPlayer`,
@@ -494,6 +548,14 @@ The previous floor's boss is excluded, and bosses already met count `weight · t
     and all share `e.bossGroup` (one array), which the HUD sums into a single health bar. Non-final members set
     `isBoss = false` in `onDeath`, so only the last death plays the boss explosion and fanfare.
 - **`Pickup / Pedestal / Trapdoor`** (`entities/pickup.js`):
+  - **Terms of Service:** `B.Pedestal` takes `opts.terms = {clause}`; `pd.terms` keeps `clause, readT, touching`.
+    `Pedestal.updateTerms` needs `B.TERMS.readTime` (1 s) within `readRadius` (150 px), and signing happens only on stepping
+    onto the pedestal (rising edge), so running through doesn't sign. The cost `B.TERMS.cost` (2 halves) comes straight off
+    `player.health`, not through `hurt()`: no guardrails, i-frames, `onHurt` or `playerHurt`, and god mode pays too. At
+    health ≤ 2 it's refused (`denied`, reason `terms`), so it's never lethal and `onLethal` never runs. Clause `add` values go
+    into `player.bonus`. Signing sets `pd.terms = null`, so a swapped active item stays free; Regenerate Response keeps the
+    clause. `B.TermsNotice` (overlay in `room.pickups`, `drawLayer` 5) draws the contract on the side away from the player
+    and clears the room's entry banner, which would cover it.
   - A pickup type is `{name, sprite, color, r, weight, price?, heavy?, keepShell?, collect(player, game, pickup) → bool}`.
     Returning false means it isn't picked up (e.g. full HP), and the pickup is nudged away.
   - A `price` turns a pickup or pedestal into a shop item.
@@ -524,10 +586,12 @@ The previous floor's boss is excluded, and bosses already met count `weight · t
   boss and secret rooms are outlined red and blue, or shown as a dot on the window edge, see `HUD.scanMarks`), the item banner, the boss
   bar, and the hold-R ring. While `game.hudGlitch` is set, one area (hearts, active item, stats or minimap) is drawn
   as static or scrambled text; the noise is purely visual.
-- **Screens (`screens.js`):** title, floor card, boss intro VS card, pause (item grid browsed with the arrow keys),
-  the death "POST-MORTEM" (with final score and cycles), and the end-of-cycle score card.
+- **Screens (`screens.js`):** title (with the seed dialog), floor card, boss intro VS card, pause (item grid browsed
+  with the arrow keys), the death "POST-MORTEM" (final score, cycles, and the last 6 `runLog` entries as an incident
+  timeline; long text truncates via `clipText`), and the end-of-cycle score card.
   - Note: the pause screen registers its **own `window` keydown listener** for arrow-key browsing. It's display only,
-    and it's the one input listener outside `input.js`.
+    and it's the one keyboard listener outside `input.js`. `input.js` also has a `paste` listener on window that
+    ignores everything outside `textMode`.
 
 ### 3.10 Sprites
 - **Format:** `defineSprite(name, {palette: {ch: '#hex'}, rows: [...] | frames: [[...], ...], scale: 4})`. `.` and
@@ -536,7 +600,7 @@ The previous floor's boss is excluded, and bosses already met count `weight · t
 - **Naming:**
   - `player_{down,up,left,right}` (4 walk frames), `player_hurt`, `player_itemget`, `player_dead`
   - `tile_{rock(3 frames),block,pit,spikes}`, `tile_cactus` and `tile_sandstone` (3 frames each), `tile_border`
-    (3 frames: barrier, fence across, fence down), `hud_*`, `map_{boss,treasure,shop,secret}`, `pipe` (2 frames, generated),
+    (3 frames: barrier, fence across, fence down), `hud_*`, `map_{boss,treasure,shop,secret,terms}`, `pipe` (2 frames, generated),
     `tile_mem_zero` and `tile_mem_one` (2 frames; the Memory Hog's reserved floor, a drawn overlay, not real tiles),
     `prop_{crate,bush,package,carton}` (frame 1 = damaged)
   - `item_<id>`, `pickup_<type>`, `pedestal`, `trapdoor`, `bomb`, `familiar_duck`, `orbital_test`
@@ -568,11 +632,13 @@ Payloads usually include `game, x, y` and often `color`.
 | `bossExit` (`kind`: segfault/parachute/oom) | Megalith, Shareholder, Memory Hog (`onDeath`) | effects ("SEGMENTATION FAULT", golden parachute, "KILLED (out of memory)") |
 | `playerHurt`, `playerDeath` | player, game | audio, effects, HUD |
 | `pickup` (`type`), `itemGet` (`id, def`), `purchase`, `chestOpen` | pickup, player | audio, effects, HUD |
-| `denied` (`reason`: credits/locked/bomb/charge/encrypted) | various | audio, effects |
+| `denied` (`reason`: credits/locked/bomb/charge/encrypted/terms) | various | audio, effects |
 | `roomEnter` (`first`), `roomClear`, `doorsOpen`, `doorsClose`, `unlock`, `secretFound`, `rockBreak` (`kind`: rock/cactus) | game, room | audio, effects |
 | `cactusPrick` | game (`checkCactus`) | audio (`prick`), effects (spines) |
 | `enemyOverflow` (`r`) | Overflow Buffer (bursts) | audio (`overflowBurst`), effects (splash, glass shards) |
 | `enemyChomp` (`r, ate`), `enemyBounce`, `enemyUnpack` | Honeypot, Rolling Release | audio (`chomp`, `bump`, `unbox`), effects (cyan ring, dust, packing peanuts) |
+| `enemySwallow` (`fill, color`), `enemyFlush` (`r, color`) | Bit Bucket | audio (`swallow`, `flush`), effects (small burst and ring; ring and burst) |
+| `termsSigned` (`x, y, clause, item`) | Terms pedestal | audio (`sign`), effects (`-♥♥`, ring, sparkles), `game.runLog` |
 | `explosion` (`radius`), `bombPlaced`, `projectileEnd` (`team, impact`) | game, projectile, player | audio, effects |
 | `shotTurn` | projectile (Sharp Left Turn) | effects (small spark) |
 | `activeUsed`, `activeCharged` | player | audio, HUD |
@@ -580,10 +646,11 @@ Payloads usually include `game, x, y` and often `color`.
 | `cycleComplete` (`cycles, score`) | game (`showScoreCard`) | audio (`itemGet`) |
 
 Rule: audio and effects **only listen**. Game logic never calls them directly, except `game.shake`/`banner`, which
-are game state.
+are game state. `game.js` listens too, for `game.runLog` only (block at the end of the file). `enemyWindup` also carries
+`sound` for the floor 8–10 enemies: `mirrorPing` (Cosine Similarity), `glitch` (Heisenbug), `gurgle` (Bit Bucket).
 
 ### 3.12 Audio (`core/audio.js`) and effects (`entities/effects.js`)
-- **Audio:** 85 synthesized SFX in total, plus a looping rain bed (two filtered noise layers) that `music.start` switches
+- **Audio:** 89 synthesized SFX in total, plus a looping rain bed (two filtered noise layers) that `music.start` switches
   on for themes with `ambient: 'rain'` and `music.stop` switches off. Every sound has a name; `audio.names()` lists them.
   - Bus routing: voices → sfx/music bus → master → compressor.
   - Per-name rate limits (`RATE`) and a 40-voice cap keep it from getting noisy.
@@ -623,6 +690,7 @@ Item conventions:
 - A player shot with `damage <= 0` is a dud (Off-Brand GPU): it fizzles on enemies and breakable objects without
   damage, knockback or `onHitEnemy` hooks (`projectile.js`).
 - The default price is 15 (`B.itemPrice(id)`).
+- Flat item damage scales like enemy HP: `rm_rf` (25) and On-Call Pager (10) multiply by `B.hpScale(depth)`.
 - **Team suggestions** (2026-11-04):
   - **Calculator** computes enemies × visited rooms of the floor when entering a room with enemies and shows the sum
     (`4 x 7 = 28`). `B.calcResult(n)` hashes n into small changes to damage, shot speed, speed and fire delay (55 % plus,
@@ -675,6 +743,9 @@ Item conventions:
 | overflow_buffer | overflow_buffer (+ `overflow_puddle`) | 11, The Context Limit only | 18 (max 2 per room) |
 | summarizer | summarizer | 11, The Context Limit only | 16 (max 1 per room) |
 | lost_in_the_middle | lost_in_the_middle | 11, The Context Limit only | 14 (max 2 per room) |
+| cosine_similarity | cosine_similarity | 8, The Latent Space only | 14 (max 2 per room) |
+| heisenbug | heisenbug | 9, Undefined Behavior only | 12 (max 2 per room) |
+| bit_bucket | bit_bucket | 10, /dev/null only | 20 (max 2 per room) |
 
 The **Trojan** (2026-11-05, `entities/enemy-trojan.js`) is a bonus spawn like the Hallucination (`bonusChance` 0.09, no `home`),
 and follows the same rule: **it must stay indistinguishable from what it imitates**. It draws the floor's `prop_<kind>`
@@ -801,6 +872,31 @@ shared palette `B.CONTEXT_COLORS`); because the rain is light blue, **danger is 
   (`LostZoneMark`, an update/draw object in `room.pickups`, `drawLayer` −2, `noShadow`) draws the two boundaries as
   dotted lines with a faint haze; it is not an enemy, so killAll and room clearing ignore it, and it removes itself
   when none are left.
+
+The **floor 8–10 enemies** (2026-11-05, `entities/enemies-deep.js`, weight 6, cost 1.8, `themeOnly` + `minFloor`) are one per
+floor and deliberately not a family: no `family` field and no shared look. At home each is 6–9 % of enemies, about 2.5 % on
+any other floor from then on (the cacophony). They stay off the Summarizer's whitelist. `enemyWeightAt` ignores `minFloor`
+(only `rollRoomEnemies` enforces it), so anything reading weights directly shows them on earlier cacophony floors.
+- **Cosine Similarity** (gold `#ffd166`, flying) wants to stand at the player's position point-reflected through the room
+  centre. The target is pushed out to `keep` + 20 px, it goes around the player instead of through, and it flees below
+  `keep` (90 px). Its only attack mirrors the player: a player shot starts a 0.6 s windup (glow, dashed ray, "!",
+  `mirrorPing`), then it fires one shot in the exact opposite direction. Further shots during the windup don't count, so
+  that is at most one per 0.6 s. Because it stands mirrored, this only hits when you fire straight at it. Player shots are
+  detected by one file-level `shoot` listener compared with `runStats.time` (same tick only), so there are no per-enemy
+  listeners and frozen or earlier shots are never replayed.
+- **Heisenbug** (teal body, yellow `#f5ff4a` danger) is observed when the player holds a fire direction and it lies within
+  `cone` (0.61 rad, about 35°). While observed it stands still and is `intangible`: shots pass through, there's no contact
+  damage, it draws as a flickering outline, and it says a line at most every 5 s. A running telegraph cancels and the clock
+  resets. Unobserved it is solid and stalks the player; after 2.5 s in a row it telegraphs for 0.7 s, then fires a ring of
+  6. So tapping beats holding: a shot in flight hits once you release or turn away. Observation runs in `afterMove`, so it
+  also applies while frozen. `init` wraps `hurt` on that instance, so sourceless damage (explosions, `rm_rf`, On-Call Pager)
+  always counts. Homing shots and orbitals skip it while observed.
+- **Bit Bucket** (pale steel with a grey outline, red `#ff4d3d` danger, flying) drifts toward the player at 32 px/s over a
+  dark disc of radius 110, on `drawLayer` −1. Through `bendShot`, any player shot entering the disc is swallowed, spectral
+  and piercing included. `state.seen` (a WeakMap) tracks each shot, and only an outside-to-inside change swallows, so shots
+  fired inside are exempt until they leave and come back. It doesn't swallow while frozen or spawning. At 4 swallowed shots
+  it stops, locks its aim, telegraphs for 0.8 s and flushes a 5-shot fan (`enemyFlush`), then rests 0.6 s empty. It keeps
+  swallowing during the telegraph without filling. The disc is part of the enemy, so nothing is left behind.
 
 Minions (`spawn: false`): `leaklet`, `microservice`, `megalith_module` (Megalith phase 2; crawls back and heals it), `loop_segment`, `nested_loop_part`, `detached_head_tag` (Detached HEAD's head),
 `subagent` (Agent Swarm's small agents), `ransom_key` and `popup_close` (Ransomware's key fragments and window buttons), `octo_arm` (Octopus Merge arm segment), `spinlock_segment` (Spinlock body; invulnerable, shields the head),
@@ -942,10 +1038,16 @@ telegraphed attacks; enemy bullets travel at 165–260 px/s.
 **Final Score** (2026-11-04): `game.score` counts events, `game.scoreTotal()` multiplies them by `B.SCORE_VALUES` (top of
 `game.js`): coins 1 (a Credit Stack is 5 coins), kills 2, Approvals used 6, items taken 25, floor bosses 80, side quests
 40, rooms cleared 4. It's shown on the post-mortem and the score card, and it survives "keep going"; there's no
-live HUD display and nothing is stored between runs. Only credits from pickups count. Kills skip anything in
+live HUD display. The only stored score is the best of today's daily run (`dailyDate`/`dailyBest`): it unlocks nothing,
+expires with the date and is shown on the title, post-mortem and score card. Only the seed for today's date counts,
+checked when the run ends, so a run crossing midnight doesn't. Only credits from pickups count. Kills skip anything in
 `B.BOSSES`, `proxy` or `ignoreForClear` parts and minions with `state.owner` (boss-refilled, so they can't be farmed);
 keep that in mind when a new enemy respawns things. Bosses and rooms count in `onRoomClear`, so the Swarm's four
 entities score once. `game.cycles` counts finished cycles and resets with the run.
+
+**Incident timeline:** `game.runLog` holds `{t, text}` entries (at most 40, reset by `newRun`, kept through "keep going"),
+filled by bus listeners at the end of `game.js`: `Shift started:`, `Paged: entered`, `Deployed:`, `Found an undocumented
+endpoint`, `Accepted the Terms of Service, unread`, `Resolved:`, `Side quest closed:`, `Outage: lost to`.
 
 **Pickups:** `heart_half heart guardrail credit credit5 push push2 approval chest chest_locked readme` (`readme` is never
 a random drop; see §3.6 step 8).
@@ -959,7 +1061,7 @@ a random drop; see §3.6 step 8).
 checks the format and that all 4 door tiles are clear and mutually reachable. `{strict: true}` adds three house rules:
 every floor tile must be reachable, there must be no spikes next to doors, and special rooms need a clear centre.
 
-**Text** (`B.TEXT`): `FLOORS` (11), `EPITAPHS` (25), `TAGLINES`, `SHOP_LINES`, `ENCOUNTER_LINES` (side-quest banner), `CLEAR_QUIPS`, `DENIED`, `PICKUP`, `EVENTS`, `RANKS`,
+**Text** (`B.TEXT`): `FLOORS` (11), `EPITAPHS` (25), `TAGLINES`, `SHOP_LINES`, `ENCOUNTER_LINES` (side-quest banner), `TERMS_LINES` (entry banner), `TERMS_CLAUSES` (6 real clauses with `add`, 6 jokes; each has `sec`, `text`, `fx`; `B.rollTermsClause` picks a real one 60 % of the time), `CLEAR_QUIPS`, `DENIED`, `PICKUP`, `EVENTS`, `RANKS`,
 plus per-floor extras `THEME_QUIPS` / `THEME_EPITAPHS` keyed by theme `key` (currently `branches`, `sandbox` and `context`),
 and `CONTEXT_WHISPERS` (The Context Limit's floor fragments and whispers).
 
@@ -992,6 +1094,9 @@ for a second HUD line under the boss bar. `boss.js` is long; new bosses can go i
 
 **Add a layout:** use `L(id, ['normal'], weight, [7 rows × 13 chars], bias?)` in `layouts.js`. The characters are
 `. r b p s e` (`e` marks a preferred spawn point). It must pass `validateLayout(l, {strict: true})`.
+
+**Add a Terms of Service clause:** add an entry to `B.TEXT.TERMS_CLAUSES` with a unique `sec` and an honest `fx`, because the
+contract states the effect in plain words. A real clause's `add` must be a penalty (the smoke test enforces this).
 
 **Add a sound:** add an entry to `SOUNDS` in `audio.js` built from `voice({...})` / `noise({...})` / `arp(...)`, then
 hook it with `on('event', () => p('name'))`. Rate-limit it in `RATE` if it can fire every frame.
@@ -1026,8 +1131,6 @@ modules rely on these implicitly through the bus.
 - **Item repeats.** Once every item has been seen in a run, `rollItem` falls back to the full list. Duplicate follower
   items then stack (several ducks or orbitals).
 - **Few-Shot plus Regex** gives a 3-way fan, because the larger `multishot` wins and `parallel` only applies to a count of 2.
-- **Flat item damage.** `rm_rf` (25) and On-Call Pager (10) deal fixed damage while enemy HP scales with depth, so
-  they get weaker deeper down.
 - **Stat recalculation timing.** `player.recalcStats()` runs on item pickup, hurt and heal, but **not** when guardrail
   pickups are collected. `git_blame` works around this with an `update` hook.
 - **Hallucination and room clearing.** While disguised it is `ignoreForClear`. Because `onRoomClear` fires only once,
@@ -1070,11 +1173,8 @@ work again, the same file-ownership split works well.
 
 ## 9. Backlog
 - Gamepad support (`navigator.getGamepads()` polled in `input.js`).
-- Seed entry on the title screen.
-- Curse rooms ("Terms of Service": pay half a heart for an item).
-- A daily seed with a local leaderboard.
+- A local leaderboard for the daily run (the daily seed and today's best exist since 2026-11-05).
 - A separate music toggle (extend the `storage` schema with validation).
-- Scale item damage with depth.
 - Better item-pool exhaustion handling (e.g. hand out `blockchain` forever).
 - A human balance pass on boss HP and spawn budgets, and on enemy and boss odds per floor (`minFloor`, `weight`,
   `weightPerFloor`, `themes`, `home`, `AWAY`, the `mixAt` curve, side-quest HP and count). The floor-3/4 boss shuffle

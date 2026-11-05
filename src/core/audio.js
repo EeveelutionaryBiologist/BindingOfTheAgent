@@ -326,6 +326,12 @@
     // Kauf: "Ka-tsching"
     purchase() { noise({ dur: 0.06, vol: 0.08, filter: 'highpass', f: 4000 }); voice({ f: 1319, dur: 0.06, type: 'square', vol: 0.06, delay: 0.04 }); voice({ f: 1760, dur: 0.3, type: 'square', vol: 0.06, delay: 0.1 }); },
     // Abgelehnt: Fehler-Brummen (zwei Pulse)
+    // Unterschrift: zwei Federstriche, dann ein dumpfer Stempel (Terms of Service)
+    sign() {
+      noise({ dur: 0.09, vol: 0.05, filter: 'bandpass', f: 3200 });
+      noise({ dur: 0.12, vol: 0.05, filter: 'bandpass', f: 2400, delay: 0.1 });
+      voice({ f: 98, f2: 62, dur: 0.26, type: 'triangle', vol: 0.16, delay: 0.25 });
+    },
     denied() { voice({ f: 116, dur: 0.1, type: 'sawtooth', vol: 0.07 }); voice({ f: 110, dur: 0.14, type: 'sawtooth', vol: 0.07, delay: 0.12 }); },
     // Aufgeschlossen: Klick + steigende Toene
     unlock() { noise({ dur: 0.03, vol: 0.1, filter: 'highpass', f: 3000 }); arp([79, 86], 0.07, 'triangle', 0.12, 0.2); },
@@ -497,6 +503,23 @@
     },
   });
   Object.assign(RATE, { dripHit: 0.04, soggyDeath: 0.03, gurgle: 0.3 });
+
+  // Etagen 8–10 (entities/enemies-deep.js): gespiegeltes Pingen (Cosine Similarity), Schlucken und Spuelen (Bit Bucket)
+  Object.assign(SOUNDS, {
+    mirrorPing() {
+      voice({ f: 880, f2: 880, dur: 0.09, type: 'sine', vol: 0.05 });
+      voice({ f: 660, f2: 660, dur: 0.14, type: 'sine', vol: 0.05, delay: 0.09 });
+    },
+    swallow() {
+      voice({ f: 320, f2: 90, dur: 0.11, type: 'triangle', vol: 0.07 });
+      noise({ dur: 0.05, vol: 0.03, filter: 'lowpass', f: 700 });
+    },
+    flush() {
+      noise({ dur: 0.5, vol: 0.09, filter: 'bandpass', f: 500, f2: 2200, q: 1 });
+      voice({ f: 240, f2: 70, dur: 0.4, type: 'sawtooth', vol: 0.04 });
+    },
+  });
+  Object.assign(RATE, { mirrorPing: 0.15, swallow: 0.06, flush: 0.2 });
   SPAMMY.dripHit = true;
   SPAMMY.coinDrop = true;
 
@@ -787,6 +810,7 @@
   on('playerDeath', () => { p('playerDeath'); music.stop(0.6); });
   on('pickup', (e) => p(PICKUP_SOUND[e.type] || 'pickup'));
   on('itemGet', () => p('itemGet'));
+  on('termsSigned', () => p('sign'));          // Terms of Service unterschrieben
   on('doorsOpen', (e) => { if (isCurrentRoom(e.room)) p('doorOpen'); });
   on('doorsClose', (e) => { if (isCurrentRoom(e.room)) p('doorClose'); });
   on('explosion', () => p('explosion'));
@@ -815,6 +839,8 @@
   on('hudGlitch', () => p('glitch'));
   on('bossBeam', () => p('beam'));            // Reviewer-Laser, Shareholder-Monokel
   on('enemyOverflow', () => p('overflowBurst'));   // Overflow Buffer platzt
+  on('enemySwallow', () => p('swallow'));     // Bit Bucket schluckt einen Schuss
+  on('enemyFlush', () => p('flush'));         // ... und leert sich
   on('ambientWhisper', () => p('whisper'));    // The Context Limit: Satzfetzen huscht vorbei
   on('ambientThunder', () => p('thunder'));    // ... und fernes Wetterleuchten
   on('bossAlloc', () => p('malloc'));         // Memory Hog: malloc()

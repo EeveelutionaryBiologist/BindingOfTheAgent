@@ -60,7 +60,8 @@
  *
  * Etagen-Freischaltung (DESIGN.md §7): Etage 1 ist sanft (Bug, Null Pointer, Memory Leak, selten eine
  * Hallucination), ab 2 kommen Fernkaempfer, Charger, der Graphics Glitch und (fuer Legacy Codebase) Orbiter und
- * Zombies dazu, ab 4 Scope Creep, ab 7 der Rogue Agent, ab 8 die verschaerften Bug und Null Pointer.
+ * Zombies dazu, ab 4 Scope Creep, ab 7 der Rogue Agent, ab 8 die verschaerften Bug und Null Pointer. Die Etagen 8–10
+ * haben je einen eigenen Gegner (Cosine Similarity, Heisenbug, Bit Bucket; entities/enemies-deep.js).
  */
 'use strict';
 
@@ -810,6 +811,62 @@
     behavior: 'octo_arm', sprite: 'boss_octopus_merge_tip', color: '#a3602c', noFlip: true,
     spawn: false, cost: 0, family: 'branches',
     desc: 'One of eight branches. Soon to be one of seven.',
+  };
+
+  // ---------------------------------------------------------------------------
+  // Eigene Gegner der Etagen 8–10 (2026-11-05, Verhalten in entities/enemies-deep.js). themeOnly + minFloor halten sie
+  // von frueheren Etagen fern; auf spaetere Etagen sickern sie ueber die Kakophonie ein. Absichtlich keine Familie.
+  // ---------------------------------------------------------------------------
+
+  // Cosine Similarity (The Latent Space): will immer punktgespiegelt zum Spieler stehen, schiesst dessen Schuesse
+  // gespiegelt zurueck und tut sonst nichts.
+  E.cosine_similarity = {
+    name: 'Cosine Similarity', hp: 14, r: 18, speed: 120, contactDamage: 1, flying: true,
+    behavior: 'cosine_similarity', params: {
+      keep: 90,             // Mindestabstand zum Spieler (px); darunter flieht er, auch wenn das Spiegelbild naeher liegt
+      flee: 170,            // zusaetzliches Tempo beim Zurueckweichen (px/s)
+      windup: 0.6,          // Telegraph vor jedem Gegenschuss (s); zugleich der kleinste Abstand zweier Gegenschuesse
+      shotSpeed: 200,       // px/s (mit Tiefen-Skalierung max. 230)
+    },
+    sprite: 'enemy_cosine_similarity', color: '#ffd166', noFlip: true,
+    minFloor: 8, weight: 6, cost: 1.8, maxPerRoom: 2, tags: ['fly', 'ranged'],
+    themeOnly: ['latent'],
+    desc: 'Perfectly opposed to you, in every dimension that counts.',
+  };
+
+  // Heisenbug (Undefined Behavior): zielt man auf ihn, ist er nicht da. Tippen statt Dauerfeuer.
+  E.heisenbug = {
+    name: 'Heisenbug', hp: 12, r: 17, speed: 100, contactDamage: 1,
+    behavior: 'heisenbug', params: {
+      cone: 0.61,           // halber Blickkegel um die Feuerrichtung (rad, ~35 Grad)
+      calm: 2.5,            // so lange am Stueck unbeobachtet, dann Telegraph (s)
+      tell: 0.7,            // Telegraph vor dem Ring (s); Hinsehen bricht ihn ab
+      shots: 6,             // Schuesse im Ring
+      shotSpeed: 185,       // px/s (mit Tiefen-Skalierung max. ~213)
+      quipGap: 5,           // Mindestabstand zwischen zwei Spruechen (s)
+    },
+    sprite: 'enemy_heisenbug', color: '#4fe0d0', noFlip: true,
+    minFloor: 9, weight: 6, cost: 1.8, maxPerRoom: 2, tags: ['melee'],
+    themeOnly: ['undefined'],
+    desc: 'Stops misbehaving the moment you look at it.',
+  };
+
+  // Bit Bucket (/dev/null): schluckt jeden Schuss, der in seine Scheibe fliegt, und spuckt nach vieren einen Faecher aus.
+  E.bit_bucket = {
+    name: 'Bit Bucket', hp: 20, r: 18, speed: 32, contactDamage: 1, flying: true,
+    behavior: 'bit_bucket', params: {
+      discR: 110,           // Radius der Scheibe (px)
+      fillMax: 4,           // so viele Schuesse, dann leert er sich
+      tell: 0.8,            // Telegraph vor dem Faecher (s)
+      fan: 5, spread: 0.24, // Faecher: 5 Schuesse, ~14 Grad Abstand
+      shotSpeed: 185,       // px/s (mit Tiefen-Skalierung max. ~213)
+      rest: 0.6,            // danach still (s)
+      near: 50,             // naeher als das treibt er nicht mehr auf den Spieler zu (px)
+    },
+    sprite: 'enemy_bit_bucket', color: '#d0d0d8', noFlip: true,
+    minFloor: 10, weight: 6, cost: 1.8, maxPerRoom: 2, tags: ['ranged'],
+    themeOnly: ['devnull'],
+    desc: 'Everything you send it is gone. For a while.',
   };
 
   // ---------------------------------------------------------------------------

@@ -18,6 +18,7 @@
  *   BOTA.rerollPickup(pickup, game)  (fuer "Regenerate Response")
  *   BOTA.LOOSE_LOOT  (lose Pickups in Kampfraeumen und Tarnungen der Hallucination, siehe unten)
  *   BOTA.Pipe        (Rohr-Teleporter, siehe unten)
+ *   BOTA.TERMS, BOTA.rollTermsClause(rng), BOTA.TermsNotice  (Terms-of-Service-Raum, siehe Pedestal)
  *
  * Alle Objekte in room.pickups haben update(dt, game) und draw(ctx, game).
  */
@@ -291,16 +292,37 @@
     }
   }
 
+  /**
+   * Terms of Service (Raum: dungeon.js assignTerms). Das Item dort kostet keine Credits, sondern ein Herz und eine
+   * Klausel (B.TEXT.TERMS_CLAUSES).
+   *   cost       Preis in halben Herzen; bezahlt wird nur mit roter Gesundheit, nie mit Guardrails
+   *   readTime   so viele Sekunden muss der Spieler in Lesenaehe gewesen sein, bevor er unterschreiben kann
+   *   readRadius Lesenaehe in px; dort erscheint der Vertrag (TermsNotice)
+   *   realShare  Anteil der Klauseln mit echter Strafe, der Rest sind Witze ohne Wirkung
+   */
+  B.TERMS = { cost: 2, readTime: 1.0, readRadius: 150, realShare: 0.6 };
+
+  /** Klausel wuerfeln (rng: game.rng beim Fuellen des Raums). Zwei Stufen, damit realShare genau gilt. */
+  B.rollTermsClause = function (rng) {
+    const all = B.TEXT.TERMS_CLAUSES;
+    const real = rng.chance(B.TERMS.realShare);
+    return rng.pick(all.filter((c) => !!c.add === real));
+  };
+
   // ---------------------------------------------------------------------------
-  // Item-Podest (Schatzraum, Boss, Shop, verschlossene Truhen)
+  // Item-Podest (Schatzraum, Boss, Shop, verschlossene Truhen, Terms of Service)
   // ---------------------------------------------------------------------------
   class Pedestal extends B.Entity {
-    /** opts: { price } */
+    /**
+     * opts: { price, terms: { clause } }. Mit terms kostet das Item ein Herz und die Klausel (siehe updateTerms).
+     * terms.readT zaehlt die Lesezeit, terms.touching merkt sich den Kontakt des letzten Ticks.
+     */
     constructor(itemId, x, y, opts) {
       super(x, y, 24);
       const o = opts || {};
       this.itemId = itemId;
       this.price = o.price || 0;
+      this.terms = o.terms ? { clause: o.terms.clause, readT: 0, touching: false } : null;
       this.itemCharge = undefined; // Ladung eines hier abgelegten Aktiv-Items (undefined = voll)
       this.touchCooldown = 0.3;
       this.deniedCooldown = 0;
@@ -312,8 +334,11 @@
       if (this.touchCooldown > 0) this.touchCooldown -= dt;
       if (this.deniedCooldown > 0) this.deniedCooldown -= dt;
       const p = game.player;
-      if (!this.itemId || !p || p.dead || this.touchCooldown > 0) return;
-      if (!B.M.circlesOverlap(this, p)) return;
+      if (!this.itemId || !p || p.dead) return;
+      const touching = B.M.circlesOverlap(this, p);
+      const signed = this.terms ? this.terms.clause : null;
+      if (this.terms && !this.updateTerms(dt, game, p, touching)) return;
+      if (this.touchCooldown > 0 || !touching) return;
       if (this.price && p.credits < this.price) {
         if (this.deniedCooldown <= 0) { B.bus.emit('denied', { game, reason: 'credits' }); this.deniedCooldown = 1; }
         return;
@@ -334,6 +359,8 @@
       // Wurde hier frueher ein Aktiv-Item abgelegt, behaelt es seine damalige Ladung
       // (sonst koennte man durch Hin-und-her-Tauschen unendlich oft voll aufladen).
       if (storedCharge !== undefined && p.active && p.active.id === id) p.active.charge = storedCharge;
+      // giveItem hat sein Banner schon gesetzt; hier kommt die Klausel dazu, damit man sieht, was man unterschrieben hat
+      if (signed && game) game.banner(B.ITEMS[id].name, 'Signed: §' + signed.sec + ' (' + signed.fx + ')');
       if (dropped) {
         // Aktiv-Item-Tausch: altes Item bleibt (mit seiner Ladung) auf dem Podest liegen
         this.itemId = dropped;
@@ -341,6 +368,38 @@
         this.touchCooldown = 1.0;
       }
       if (!this.itemId && this.removeWhenEmpty) this.dead = true;
+    }
+
+    /**
+     * Terms of Service, ein Tick. Gibt true zurueck, wenn der Vertrag gerade unterschrieben wurde und das Item
+     * jetzt uebergeben werden darf. Unterschrieben wird nur beim *Betreten* des Podests (steigende Flanke, wie
+     * beim Rohr), und nur nach der Lesezeit: Wer aus der Tuer geradeaus ueber das Podest rennt, ist in unter
+     * einer Sekunde durch und unterschreibt nichts; wer darauf stehen bleibt, ebenso wenig.
+     * Bezahlt wird direkt von player.health statt ueber hurt(): Es ist kein Treffer, also keine Guardrails, keine
+     * Unverwundbarkeit, keine onHurt-Hooks, God Mode zahlt mit, und toedlich kann es ohnehin nie sein (Abweisung
+     * ab health <= cost), womit auch onLethal (Retry with Backoff) nie eingreift.
+     */
+    updateTerms(dt, game, p, touching) {
+      const t = this.terms;
+      if (B.M.dist(this.x, this.y, p.x, p.y) < B.TERMS.readRadius) t.readT = Math.min(B.TERMS.readTime, t.readT + dt);
+      const stepped = touching && !t.touching;
+      t.touching = touching;
+      if (!stepped || t.readT < B.TERMS.readTime || this.touchCooldown > 0) return false;
+      if (p.health <= B.TERMS.cost) {
+        if (this.deniedCooldown <= 0) {
+          this.deniedCooldown = 1;
+          B.bus.emit('denied', { game, reason: 'terms' });
+          game.banner('Application declined', 'Minimum collateral: more than one heart. Come back healthier.');
+        }
+        return false;
+      }
+      p.health -= B.TERMS.cost;
+      const add = t.clause.add;
+      if (add) for (const k of Object.keys(add)) p.bonus[k] = (p.bonus[k] || 0) + add[k];
+      p.recalcStats();
+      this.terms = null; // ein getauschtes Aktiv-Item bleibt danach kostenlos hier liegen
+      B.bus.emit('termsSigned', { game, x: this.x, y: this.y, clause: t.clause, item: this.itemId });
+      return true;
     }
 
     draw(ctx, game) {
@@ -357,6 +416,84 @@
         B.drawSprite(ctx, def ? def.sprite : '?', this.x, this.y - 28 + bob);
       }
       if (this.price && this.itemId) drawPrice(ctx, this.x, this.y + 36, this.price, game.player.credits >= this.price);
+      if (this.terms && this.itemId) {
+        // "Preisschild": ein Herz und das Kleingedruckte
+        B.text(ctx, '♥ + fine print', this.x, this.y + 38, { size: 14, bold: true, align: 'center', baseline: 'middle', color: '#ff8a9a' });
+      }
+    }
+  }
+
+  /** Bricht str so um, dass jede Zeile in maxW passt (Schrift muss in ctx.font gesetzt sein) */
+  function wrapText(ctx, str, maxW) {
+    const lines = [];
+    let line = '';
+    for (const word of str.split(' ')) {
+      const next = line ? line + ' ' + word : word;
+      if (line && ctx.measureText(next).width > maxW) { lines.push(line); line = word; } else line = next;
+    }
+    if (line) lines.push(line);
+    return lines;
+  }
+
+  /**
+   * Das Vertragsfenster eines Terms-Podests. Eigenes Objekt in room.pickups (wie LostZoneMark), damit es ueber
+   * allen Entities liegt: Das Podest selbst wird nach y sortiert, der Spieler wuerde das Kleingedruckte verdecken.
+   * Es liegt auf der Seite des Podests, auf der der Spieler nicht steht, und verschwindet mit der Unterschrift.
+   * Nur Anzeige; die Regeln stehen in Pedestal.updateTerms.
+   */
+  class TermsNotice extends B.Entity {
+    constructor(pedestal) {
+      super(pedestal.x, pedestal.y, 1);
+      this.pd = pedestal;
+      this.static = true;
+      this.noShadow = true;
+      this.drawLayer = 5;
+      this.fade = 0;
+    }
+
+    update(dt, game) {
+      this.t += dt;
+      const pd = this.pd, p = game.player;
+      if (pd.dead || !pd.terms || !pd.itemId) { this.dead = true; return; }
+      const near = p && B.M.dist(pd.x, pd.y, p.x, p.y) < B.TERMS.readRadius;
+      this.fade = B.M.clamp(this.fade + (near ? dt : -dt) * 6, 0, 1);
+      // Das Banner beim Betreten laege sonst genau ueber dem Vertrag, und die Lesezeit liefe dahinter ungelesen ab
+      if (near && game.bannerState && game.bannerState.title === 'Terms of Service') game.bannerState = null;
+    }
+
+    draw(ctx, game) {
+      const pd = this.pd, t = pd.terms, p = game.player;
+      if (!t || !pd.itemId || this.fade <= 0) return;
+      const def = B.ITEMS[pd.itemId];
+      const w = 420, pad = 14, line = 17;
+      ctx.font = '13px ' + B.FONT;
+      const lines = wrapText(ctx, t.clause.text, w - pad * 2);
+      const h = 80 + lines.length * line;
+      const x = pd.x - w / 2;
+      const y = p.y < pd.y ? pd.y + 58 : pd.y - 66 - h;
+      ctx.save();
+      ctx.globalAlpha = this.fade;
+      ctx.fillStyle = 'rgba(0,0,0,0.45)';
+      ctx.fillRect(x + 4, y + 4, w, h);
+      ctx.fillStyle = '#e9dfc8';
+      ctx.fillRect(x, y, w, h);
+      ctx.fillStyle = '#8a1c3a';
+      ctx.fillRect(x, y, w, 3);
+      const ink = '#2a1a1e', red = '#8a1c3a';
+      const opt = (o) => Object.assign({ shadow: false, baseline: 'top' }, o); // Alpha kommt aus ctx.globalAlpha
+      B.text(ctx, 'TERMS OF SERVICE  §' + t.clause.sec, x + pad, y + 10, opt({ size: 13, bold: true, color: red }));
+      B.text(ctx, def ? def.name : '?', x + w - pad, y + 10, opt({ size: 13, bold: true, color: ink, align: 'right', maxWidth: 190 }));
+      lines.forEach((s, i) => B.text(ctx, s, x + pad, y + 30 + i * line, opt({ size: 13, color: ink })));
+      const ry = y + 34 + lines.length * line;
+      B.text(ctx, 'Cost: one heart.  Effect: ' + t.clause.fx, x + pad, ry, opt({ size: 13, bold: true, color: red }));
+      let prompt = 'Reading the fine print...';
+      if (p.health <= B.TERMS.cost) prompt = 'You need more than one heart to sign.';
+      else if (t.readT >= B.TERMS.readTime) prompt = t.touching ? 'Step off and back on to sign.' : 'Step onto the pedestal to sign.';
+      B.text(ctx, prompt, pd.x, ry + 20, opt({ size: 13, bold: true, color: ink, align: 'center' }));
+      // Lesefortschritt als duenner Balken an der Unterkante
+      ctx.fillStyle = red;
+      ctx.fillRect(x, y + h - 3, w * (t.readT / B.TERMS.readTime), 3);
+      ctx.restore();
     }
   }
 
@@ -447,6 +584,7 @@
 
   B.Pickup = Pickup;
   B.Pedestal = Pedestal;
+  B.TermsNotice = TermsNotice;
   B.Trapdoor = Trapdoor;
   B.Pipe = Pipe;
 })(window.BOTA);
