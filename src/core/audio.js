@@ -399,6 +399,27 @@
   });
   Object.assign(RATE, { malloc: 0.2, reserve: 0.12, freeMem: 0.1 });
 
+  // Ransomware (entities/boss-ransomware.js): Schloss rastet ein, Fenster ploppt auf, Sektoren werden geloescht
+  Object.assign(SOUNDS, {
+    // Verschluesselt: zwei harte Klicks eines Schlosses, dann ein tiefer Ton
+    encrypt() {
+      noise({ dur: 0.03, vol: 0.08, filter: 'bandpass', f: 2400, q: 3 });
+      noise({ dur: 0.03, vol: 0.08, filter: 'bandpass', f: 1600, q: 3, delay: 0.08 });
+      voice({ f: 150, f2: 110, dur: 0.22, type: 'sawtooth', vol: 0.05, delay: 0.1 });
+    },
+    // Fenster: der freundliche, viel zu helle Doppelton einer Benachrichtigung
+    popup() {
+      voice({ f: 880, dur: 0.07, type: 'triangle', vol: 0.06 });
+      voice({ f: 1320, dur: 0.1, type: 'triangle', vol: 0.06, delay: 0.07 });
+    },
+    // Loeschen: fallender Rausch-Stoss mit tiefem Schlag
+    wipe() {
+      noise({ dur: 0.35, vol: 0.12, filter: 'lowpass', f: 1800 });
+      voice({ f: 220, f2: 40, dur: 0.4, type: 'square', vol: 0.08 });
+    },
+  });
+  Object.assign(RATE, { encrypt: 0.15, popup: 0.1, wipe: 0.2 });
+
   // Spaete Bosse (entities/bosses-late.js): Megalith (Suche/Ersetzen) und Shareholder (Geld)
   Object.assign(SOUNDS, {
     // Ctrl+F: zwei schnelle Tastenanschlaege, dann ein heller "Treffer gefunden"-Ton
@@ -798,6 +819,10 @@
   on('ambientThunder', () => p('thunder'));    // ... und fernes Wetterleuchten
   on('bossAlloc', () => p('malloc'));         // Memory Hog: malloc()
   on('bossReserve', () => p('reserve'));      // Memory Hog: Kacheln klappen um
+  on('bossEncrypt', () => p('encrypt'));     // Ransomware: etwas wurde verschluesselt
+  on('bossDecrypt', () => p('freeMem'));     // Ransomware: freigegeben, oder ein Schloss abgeschossen
+  on('bossPopup', () => p('popup'));         // Ransomware: ein falsches Fenster geht auf
+  on('bossWipe', (e) => p(e.kind === 'hit' ? 'wipe' : 'denied'));   // Ransomware: Warnung, dann Loeschen
   on('bossFree', () => p('freeMem'));         // Memory Hog: Bombe gibt Speicher frei
   on('bossGc', (e) => {                       // Memory Hog: Warnung, Stop-the-World
     if (e.kind === 'warn') p('denied');

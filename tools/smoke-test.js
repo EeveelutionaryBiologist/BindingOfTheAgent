@@ -82,6 +82,12 @@
  *   - Agent Swarm (/xhigh): loest den Rogue Agent Swarm ab Etage 7 ab (Zwischenboss bleibt der alte); Laser mit voller
  *     Vorwarnung, Treffer nur im Strahl und nur auf der Linie, Formation schweigt waehrend Lock und Strahl; Subagents
  *     mit Zielring, Tiefe 2 kleiner, nie tiefer, Deckel haelt; Solo mit Laser; ein Boss-Tod, keine Reste, kein Score
+ *   - Ransomware: ab Etage 8, Heimat /dev/null; Schloesser sperren Aktiv-Item, Pushes und Feuerrate, Fragment gibt das
+ *     aelteste frei, Terminal alles (nur mit Geld, danach teurer); fliegendes Schloss ohne Schaden, abschiessbar; Fenster
+ *     halten Abstand, verdecken nichts, schieben, schlucken Schuesse, X und Zeit schliessen sie; Countdown verlaengert
+ *     bei genug Schaden, sonst Wipe mit erreichbaren sicheren Spalten; Phase 2; keine Reste, Schloesser enden
+ *   - Trojan: ab Etage 5 als Bonus, getarnt wie ein Objekt der Etage; Naehe, Schuss und Explosion enttarnen; Telegraph
+ *     vor Ring und Kontakt; Luke vor dem Faecher; sperrt keinen geraeumten Raum
  *   - Verschaerfte Grundgegner: gleiche Werte wie Bug und Null Pointer ausser 2 Kontaktschaden, nie vor Etage 8, auf
  *     den Etagen 8–22 je 2.5–9 % der Gegner; ein Treffer kostet ein volles Herz
  *   - Team-Items: Pools; Von Neumann: Werte; Sharp Left Turn: Kurve einmal, 90 Grad links in jeder Richtung, Strecke
@@ -966,6 +972,315 @@ const URL = 'file://' + path.join(ROOT, 'index.html').replace(/\\/g, '/') + '?se
     return out;
   });
   problems.push(...xhighProblems);
+
+  // --- Ransomware: Schloesser, Schluessel, Terminal, falsche Fenster, Countdown und Wipe ---
+  const ransomProblems = await page.evaluate(() => {
+    const out = [], g = BOTA.game, DT = 1 / 60, BH = BOTA.BossHelpers, RW = BH.ransom.RW, BO = BOTA.BOSSES, INNER = BOTA.C.INNER, TILE = BOTA.C.TILE;
+    for (let d = 1; d <= 22; d++) {
+      const ok = BOTA.bossEligible(BO.ransomware, d, BOTA.themeKeyAt(d));
+      if (ok !== d >= 8) out.push('Ransomware: Etage ' + d + ' ' + ok);
+    }
+    if (BOTA.bossWeightAt(BO.ransomware, 'devnull', 10) !== 9 || BOTA.bossWeightAt(BO.ransomware, 'latent', 8) !== 3) out.push('Ransomware: Gewichte falsch');
+    const d0 = g.depth, p0 = g.player, rng0 = g.rng;
+    let deaths = 0, used = 0, denied = 0;
+    const offs = [BOTA.bus.on('enemyDeath', (e) => { if (e.boss) deaths++; }), BOTA.bus.on('activeUsed', () => used++),
+      BOTA.bus.on('denied', (e) => { if (e.reason === 'encrypted' || e.reason === 'credits') denied++; })];
+    const arena = () => {
+      g.enterFloor(10); g.setState('play');
+      BOTA.debug.gotoRoom('boss');
+      for (let i = 0; i < 4; i++) BOTA.debug.killAll();
+      g.room.enemies.length = 0; g.room.projectiles.length = 0; g.room.pickups.length = 0;
+      g.room.stampLayout(BOTA.LAYOUTS.find((l) => l.id === 'empty'));
+      const pl = new BOTA.Player(200, 450); pl.recalcStats(); g.player = pl;
+      pl.hits = []; pl.hurt = function (amount) { pl.hits.push(amount); return false; };
+      const R = BOTA.debug.spawnBoss('ransomware', 600, 220); R.spawnDelay = 0;
+      return { pl, R, S: R.state };
+    };
+    const step = (n) => { for (let i = 0; i < n; i++) { g.state = 'play'; g.update(DT); } };
+    const live = (id) => g.room.enemies.filter((e) => e.id === id && !e.dead);
+    const over = (f) => g.room.pickups.filter((o) => o[f] && !o.dead);
+    try {
+      g.rng = new BOTA.RNG(777);
+      // Schloesser: alle drei wirken, Fragment gibt das aelteste frei, Terminal alles
+      let { pl, R, S } = arena();
+      pl.giveItem('rm_rf', g); pl.active.charge = 99; pl.pushes = 3;
+      const fd = pl.stats.fireDelay;
+      for (let i = 0; i < 3; i++) BH.ransom.encrypt(R, g);
+      if (!pl.encrypted.active || !pl.encrypted.pushes || !pl.encrypted.fire) out.push('Ransomware: nicht alles verschluesselt: ' + JSON.stringify(pl.encrypted));
+      BH.ransom.encrypt(R, g);
+      if (S.locks.length !== 3) out.push('Ransomware: ' + S.locks.length + ' Schloesser');
+      if (Math.abs(pl.stats.fireDelay - fd * 1.35) > 1e-6) out.push('Ransomware: Feuerrate ' + pl.stats.fireDelay);
+      used = 0; denied = 0;
+      pl.useActive(g); pl.placeBomb(g);
+      if (used || pl.active.charge !== 99 || pl.pushes !== 3 || denied !== 2) out.push('Ransomware: Sperren wirken nicht (' + used + ', ' + pl.pushes + ', ' + denied + ')');
+      if (live('ransom_key').length !== 3 || over('ransomTerminal').length !== 1) out.push('Ransomware: ' + live('ransom_key').length + ' Fragmente, ' + over('ransomTerminal').length + ' Terminals');
+      const first = S.locks[0];
+      live('ransom_key')[0].hurt(99999, g, null);
+      step(2);
+      if (pl.encrypted[first] || S.locks.length !== 2) out.push('Ransomware: Fragment gibt nicht das aelteste Schloss frei');
+      const T = over('ransomTerminal')[0], price = S.price;
+      S.mode = 'idle'; S.t = 99;
+      pl.credits = price - 1; denied = 0;
+      pl.x = T.x; pl.y = T.y; step(2);
+      if (!denied || S.locks.length !== 2 || pl.credits !== price - 1) out.push('Ransomware: zahlt ohne Geld');
+      pl.credits = price; pl.x = 200; pl.y = 450; step(2);
+      pl.x = T.x; pl.y = T.y; step(2);
+      if (S.locks.length || pl.credits !== 0 || Object.values(pl.encrypted).some(Boolean)) out.push('Ransomware: Zahlen gibt nicht alles frei');
+      if (S.price <= price || over('ransomTerminal').length || live('ransom_key').length) out.push('Ransomware: nach dem Zahlen Reste oder gleicher Preis');
+      if (Math.abs(pl.stats.fireDelay - fd) > 1e-6) out.push('Ransomware: Feuerrate nicht zurueck');
+
+      // Ohne Aktiv-Item und ohne Pushes bleibt nur die Feuerrate
+      ({ pl, R, S } = arena());
+      pl.pushes = 0;
+      BH.ransom.encrypt(R, g); BH.ransom.encrypt(R, g);
+      if (!pl.encrypted.fire || pl.encrypted.active || pl.encrypted.pushes || S.locks.length !== 1) out.push('Ransomware: sperrt, was der Spieler nicht hat');
+
+      // Fliegendes Schloss: kein Schaden, Treffer sperrt, abschiessbar
+      ({ pl, R, S } = arena());
+      S.mode = 'lockTell'; S.t = 0.01; pl.pushes = 2;
+      step(2);
+      let L = over('lockShot')[0];
+      if (!L) out.push('Ransomware: kein fliegendes Schloss');
+      else {
+        S.mode = 'idle'; S.t = 99;
+        L.x = 300; L.y = 300; pl.x = 300; pl.y = 300; step(2);   // weg vom Boss: sein Kontakt zaehlt hier nicht
+        if (!S.locks.length || pl.hits.length) out.push('Ransomware: Schloss-Treffer falsch (' + S.locks.length + ', ' + pl.hits.length + ')');
+      }
+      ({ pl, R, S } = arena());
+      S.mode = 'lockTell'; S.t = 0.01; step(2);
+      L = over('lockShot')[0]; S.mode = 'idle'; S.t = 99;
+      if (L) {
+        L.x = 300; L.y = 300;   // ein frisches Schloss steckt noch im Boss, der den Schuss sonst abfaengt
+        g.spawnProjectile({ x: L.x - 8, y: L.y, vx: 0, vy: 0, team: 'player', damage: 1, range: 300 });
+        step(3);
+        if (!L.dead || S.locks.length) out.push('Ransomware: Schloss nicht abschiessbar');
+      }
+
+      // Fenster: immer Abstand zu Waenden, anderen Fenstern, Terminal und Fragmenten
+      ({ pl, R, S } = arena());
+      S.mode = 'idle'; S.t = 999; S.clock = 999;
+      pl.pushes = 1;
+      BH.ransom.encrypt(R, g);
+      const keep = over('ransomTerminal').concat(live('ransom_key'));
+      for (let i = 0; i < 300; i++) {
+        const r = BH.ransom.windowSpot(R, g);
+        if (!r) continue;
+        if (r.x - INNER.x0 < RW.popGap || INNER.x1 - r.x - r.w < RW.popGap || r.y - INNER.y0 < RW.popGap || INNER.y1 - r.y - r.h < RW.popGap) out.push('Ransomware: Fenster zu nah an der Wand');
+        if (keep.some((o) => o.x > r.x - 40 && o.x < r.x + r.w + 40 && o.y > r.y - 40 && o.y < r.y + r.h + 40)) { out.push('Ransomware: Fenster verdeckt Terminal oder Fragment'); break; }
+      }
+      // Fenster: Telegraph, schiebt, schluckt Schuesse, das X schliesst es, die Zeit auch
+      ({ pl, R, S } = arena());
+      S.turn = 3; S.mode = 'idle'; S.t = 0; S.clock = 999;
+      step(2);
+      let W = over('popupWindow')[0];
+      if (!W) out.push('Ransomware: kein Fenster');
+      else {
+        let tell = 0;
+        for (let i = 0; i < 120 && W.mode === 'tell'; i++) { tell += DT; S.t = 99; S.mode = 'idle'; step(1); }
+        if (tell < RW.popTell - 0.05) out.push('Ransomware: Fenster ohne Telegraph (' + tell.toFixed(2) + ')');
+        if (!live('popup_close').length) out.push('Ransomware: Fenster ohne X');
+        pl.x = W.x + W.w / 2; pl.y = W.y + W.h / 2; step(2);
+        if (pl.x > W.x && pl.x < W.x + W.w && pl.y > W.y && pl.y < W.y + W.h) out.push('Ransomware: Spieler steht im Fenster');
+        pl.x = 200; pl.y = 500;
+        g.spawnProjectile({ x: W.x + 20, y: W.y + W.h - 20, vx: 0, vy: 0, team: 'player', damage: 1, range: 300 });
+        step(2);
+        if (g.room.projectiles.some((x) => x.team === 'player' && !x.dead)) out.push('Ransomware: Fenster schluckt keine Schuesse');
+        if (W.dead) out.push('Ransomware: Koerpertreffer schliesst das Fenster');
+        g.spawnProjectile({ x: W.x + 20, y: W.y + W.h - 20, vx: 0, vy: 0, team: 'player', damage: 1, range: 300, flags: { spectral: true } });
+        step(2);
+        if (!g.room.projectiles.some((x) => x.team === 'player' && !x.dead)) out.push('Ransomware: Fenster schluckt Geisterschuesse');
+        g.room.projectiles.length = 0;
+        const X = W.close;
+        if (X.hp !== 1) out.push('Ransomware: X hat ' + X.hp + ' HP');
+        g.spawnProjectile({ x: X.x, y: X.y - 40, vx: 0, vy: 480, team: 'player', damage: 1, range: 300 });
+        step(12);
+        if (!W.dead || !X.dead) out.push('Ransomware: X schliesst das Fenster nicht');
+        const W2 = over('popupWindow')[0];
+        if (W2) {
+          for (let i = 0; i < 60 * (RW.popLife + 1); i++) { S.t = 99; S.mode = 'idle'; step(1); }
+          if (!W2.dead) out.push('Ransomware: Fenster laeuft nicht ab');
+        }
+        if (live('popup_close').length) out.push('Ransomware: X bleibt zurueck');
+      }
+
+      // Countdown: genug Schaden verlaengert ohne Angriff, sonst Wipe; sichere Spalten erreichbar und wirklich sicher
+      ({ pl, R, S } = arena());
+      S.mode = 'idle'; S.t = 99; S.clock = 0.05;
+      R.hp -= R.maxHp * (RW.clockDmg + 0.01);
+      step(6);
+      if (S.wipe || S.clock < RW.clock[0] - 1) out.push('Ransomware: Deadline nicht verlaengert');
+      ({ pl, R, S } = arena());
+      for (const run of ['safe', 'danger']) {
+        S.mode = 'idle'; S.t = 99; S.clock = 0.05; S.dmg = 0; S.wipe = null;
+        step(4);
+        if (S.mode !== 'wipeTell') { out.push('Ransomware: kein Wipe (' + S.mode + ')'); break; }
+        const cols = [...S.wipe.safe];
+        for (let c = 1; c <= 13; c++) {
+          const d = Math.min(...cols.map((k) => Math.abs(k - c)));
+          if (d * TILE > 240 * 0.6 * RW.wipeTell[0]) out.push('Ransomware: sichere Spalte zu weit weg');
+        }
+        const col = run === 'safe' ? cols[0] : [1, 2, 3, 4, 5].find((c) => !S.wipe.safe.has(c));
+        pl.x = col * TILE + TILE / 2; pl.y = 480;
+        pl.hits.length = 0;
+        let tell = 0;
+        while (S.mode === 'wipeTell' && tell < 3) { tell += DT; step(1); pl.x = col * TILE + TILE / 2; pl.y = 480; if (pl.hits.length) break; }
+        if (pl.hits.length) out.push('Ransomware: Wipe trifft vor der Zeit');
+        if (tell < RW.wipeTell[0] - 0.1) out.push('Ransomware: Wipe-Telegraph ' + tell.toFixed(2));
+        step(Math.ceil(RW.wipeHit * 60));
+        if (run === 'safe' && pl.hits.length) out.push('Ransomware: sichere Spalte trifft');
+        if (run === 'danger' && !pl.hits.includes(2)) out.push('Ransomware: Wipe trifft nicht');
+        step(50);
+      }
+
+      // Phase 2: einmal, Preis verdoppelt, zweiter Durchgang mit anderen Spalten
+      ({ pl, R, S } = arena());
+      let phases = 0; const offP = BOTA.bus.on('bossPhase', () => phases++);
+      const price1 = S.price;
+      R.hp = R.maxHp * 0.49; S.lastHp = R.hp; S.dmg = 0;
+      step(3);
+      offP();
+      if (S.phase !== 2 || phases !== 1 || S.price !== price1 * 2) out.push('Ransomware: Phase 2 falsch (' + S.phase + ', ' + phases + ', ' + S.price + ')');
+      S.mode = 'idle'; S.t = 99; S.clock = 0.02; S.dmg = 0;
+      step(3);
+      const a = S.wipe ? [...S.wipe.safe].join() : '';
+      let b = '';
+      for (let i = 0; i < 200 && !b; i++) { step(1); if (S.wipe && S.wipe.pass === 2) b = [...S.wipe.safe].join(); }
+      if (!b || a === b) out.push('Ransomware: zweiter Wipe-Durchgang fehlt oder ist gleich (' + a + ' / ' + b + ')');
+
+      // Laengerer Lauf: Schuesse fair, Boss im Raum, nie Sprung auf den Spieler. Dann Tod ohne Reste
+      ({ pl, R, S } = arena());
+      g.rng = new BOTA.RNG(31337);
+      pl.giveItem('rm_rf', g); pl.pushes = 2;
+      const seen = new Set();
+      let jumps = 0, close = 0;
+      for (let i = 0; i < 60 * 70; i++) {
+        pl.x = 480 + 330 * Math.cos(i / 66); pl.y = 288 + 165 * Math.sin(i / 66);
+        const was = S.mode;
+        const to = S.to;
+        step(1);
+        if (was === 'jumpTell' && S.mode !== 'jumpTell' && to) { jumps++; if (Math.hypot(R.x - pl.x, R.y - pl.y) < 100) close++; }
+        if (i === 60 * 35) { R.hp = R.maxHp * 0.45; S.lastHp = R.hp; }
+        if (R.x < INNER.x0 || R.x > INNER.x1 || R.y < INNER.y0 || R.y > INNER.y1) out.push('Ransomware: ausserhalb des Raums');
+        for (const pr of g.room.projectiles) {
+          if (pr.team !== 'enemy' || seen.has(pr)) continue;
+          seen.add(pr);
+          const v = Math.hypot(pr.vx, pr.vy);
+          if (v < 165 || v > 260) out.push('Ransomware: Schuss mit ' + v.toFixed(0) + ' px/s');
+        }
+      }
+      if (jumps < 5) out.push('Ransomware: nur ' + jumps + ' Spruenge');
+      if (close) out.push('Ransomware: ' + close + ' Spruenge direkt neben den Spieler');
+      if (!seen.size) out.push('Ransomware: keine Schuesse');
+      BH.ransom.encrypt(R, g);
+      const lockedBefore = Object.values(pl.encrypted).some(Boolean);
+      deaths = 0;
+      R.hurt(99999, g, null);
+      step(30);
+      if (deaths !== 1) out.push('Ransomware: ' + deaths + ' Boss-Tode');
+      if (lockedBefore && Object.values(pl.encrypted).some(Boolean)) out.push('Ransomware: Schloesser ueberleben ihn');
+      if (live('ransom_key').length || live('popup_close').length) out.push('Ransomware: Minions ueberleben ihn');
+      if (g.room.pickups.some((o) => (o.popupWindow || o.lockShot || o.ransomTerminal) && !o.dead)) out.push('Ransomware: Reste im Raum');
+      if (g.room.hasLivingEnemies()) out.push('Ransomware: Raum nicht geraeumt');
+      pl.encrypted = { fire: true }; pl.recalcStats();
+      g.enterFloor(11);
+      if (Object.keys(pl.encrypted).length) out.push('Ransomware: Schloss ueberlebt den Etagenwechsel');
+    } finally {
+      offs.forEach((o) => o());
+      g.player = p0; g.rng = rng0;
+      for (let i = 0; i < 4; i++) BOTA.debug.killAll();
+      g.room.projectiles.length = 0;
+      g.enterFloor(d0); g.setState('play');
+    }
+    return out;
+  });
+  problems.push(...ransomProblems);
+
+  // --- Trojan: getarnt wie ein Objekt, Telegraph, Ring, Luke; unabhaengig von Ransomware ---
+  const trojanProblems = await page.evaluate(() => {
+    const out = [], g = BOTA.game, DT = 1 / 60, E = BOTA.ENEMIES, TR = BOTA.BEHAVIORS.trojan.TROJAN;
+    for (let d = 1; d <= 12; d++) {
+      let rooms = 0, with1 = 0, peak = 0;
+      for (let i = 0; i < 800; i++) {
+        const l = BOTA.rollRoomEnemies(new BOTA.RNG(BOTA.hashString('troj' + d + ':' + i)), d);
+        const n = l.filter((id) => id === 'trojan').length;
+        rooms++; if (n) with1++; peak = Math.max(peak, n);
+      }
+      if (d < 5 && with1) out.push('Trojan schon auf Etage ' + d);
+      if (d >= 5 && (with1 / rooms < 0.06 || with1 / rooms > 0.25)) out.push('Trojan: Anteil ' + (with1 / rooms).toFixed(3) + ' auf Etage ' + d);
+      if (peak > 1) out.push('Trojan: ' + peak + ' in einem Raum');
+    }
+    const d0 = g.depth, p0 = g.player, rng0 = g.rng;
+    try {
+      g.enterFloor(6); g.setState('play'); g.rng = new BOTA.RNG(555);
+      BOTA.debug.gotoRoom('boss');
+      for (let i = 0; i < 4; i++) BOTA.debug.killAll();
+      g.room.enemies.length = 0; g.room.projectiles.length = 0;
+      g.room.stampLayout(BOTA.LAYOUTS.find((l) => l.id === 'empty'));
+      const pl = new BOTA.Player(150, 500); pl.recalcStats(); g.player = pl;
+      const hits = []; pl.hurt = function (a) { hits.push(a); return false; };
+      const step = (n) => { for (let i = 0; i < n; i++) { g.state = 'play'; g.update(DT); } };
+      const shots = () => g.room.projectiles.filter((x) => x.team === 'enemy' && !x.dead);
+      const fresh = (cleared) => {
+        g.room.enemies.length = 0; g.room.projectiles.length = 0; g.room.cleared = !!cleared;
+        pl.x = 150; pl.y = 500;
+        // Ein zweiter, echter Gegner haelt den Raum offen: der getarnte Trojan allein zaehlt nicht, sonst gilt er als geraeumt
+        const guard = BOTA.debug.spawn('bug', 820, 120); guard.speed = 0;
+        return BOTA.debug.spawn('trojan', 610, 250);
+      };
+      // Getarnt: Kachelmitte, Objekt der Etage, unauffaellig
+      let T = fresh();
+      const kinds = BOTA.themeFor(6).props.kinds;
+      if (!kinds.includes(T.state.kind)) out.push('Trojan: Tarnung ' + T.state.kind + ' gibt es hier nicht');
+      if ((T.x - 32) % 64 !== 0 || (T.y - 32) % 64 !== 0) out.push('Trojan: nicht auf der Kachelmitte (' + T.x + ', ' + T.y + ')');
+      if (!T.intangible || !T.ignoreForClear || !T.noHpBar || T.contactDamage !== 0) out.push('Trojan: Tarnung verraet sich');
+      step(30);
+      if (T.state.mode !== 'disguised') out.push('Trojan: enttarnt sich ohne Grund');
+      // Naehe: Telegraph, erst dann Ring und Kontakt
+      pl.x = T.x - TR.near + 10; pl.y = T.y;
+      let tell = 0, touched = 0;
+      step(1);
+      if (T.state.mode !== 'reveal') out.push('Trojan: Naehe enttarnt nicht');
+      while (T.state.mode === 'reveal' && tell < 2) { if (T.contactDamage) touched++; if (shots().length) out.push('Trojan: Schuss vor dem Telegraph'); tell += DT; step(1); }
+      if (tell < TR.tell - 0.05 || touched) out.push('Trojan: Telegraph ' + tell.toFixed(2));
+      const ring = shots();
+      if (ring.length !== TR.ring) out.push('Trojan: Ring aus ' + ring.length + ' Schuessen');
+      if (ring.some((x) => { const v = Math.hypot(x.vx, x.vy); return v < 165 || v > 260; })) out.push('Trojan: Ring-Tempo');
+      if (T.intangible || T.ignoreForClear || T.contactDamage !== E.trojan.contactDamage) out.push('Trojan: nach dem Aufplatzen kein echter Gegner');
+      // Luke: Telegraph, dann 3er-Faecher
+      g.room.projectiles.length = 0; pl.x = 150; pl.y = 500;
+      T.state.cd = 0.02;
+      let hatch = 0;
+      for (let i = 0; i < 120 && !shots().length; i++) { if (T.state.tell > 0) hatch += DT; step(1); }
+      if (hatch < TR.hatch - 0.05 || shots().length !== 3) out.push('Trojan: Luke ' + hatch.toFixed(2) + ' s, ' + shots().length + ' Schuesse');
+      // Schuss: wird wie an einem Objekt geschluckt und enttarnt ihn
+      T = fresh();
+      g.spawnProjectile({ x: T.x - 60, y: T.y, vx: 480, vy: 0, team: 'player', damage: 1, range: 300 });
+      step(12);
+      if (T.state.mode === 'disguised' || g.room.projectiles.some((x) => x.team === 'player' && !x.dead)) out.push('Trojan: Schuss geht durch oder enttarnt nicht');
+      // Explosion
+      T = fresh();
+      g.explode(T.x + 50, T.y, 110, 30, null);
+      if (T.state.mode === 'disguised') out.push('Trojan: Explosion enttarnt nicht');
+      // Geraeumter Raum: die Tueren bleiben offen
+      T = fresh(true);
+      pl.x = T.x - 80; pl.y = T.y; step(2);
+      if (!T.ignoreForClear) out.push('Trojan: sperrt einen geraeumten Raum');
+      g.room.cleared = false;
+      // Stirbt sauber
+      T = fresh();
+      pl.x = T.x - 80; pl.y = T.y; step(Math.ceil(TR.tell * 60) + 3);
+      const kills = g.score.kills;
+      T.hurt(99999, g, null); step(3);
+      if (!T.dead || g.score.kills !== kills + 1) out.push('Trojan: Tod oder Kill falsch');
+    } finally {
+      g.player = p0; g.rng = rng0;
+      for (let i = 0; i < 4; i++) BOTA.debug.killAll();
+      g.room.projectiles.length = 0;
+      g.enterFloor(d0); g.setState('play');
+    }
+    return out;
+  });
+  problems.push(...trojanProblems);
 
   // --- Stale Branch: nur Forgotten Branches, altert gruen->gelb->braun->kahl, wird schneller, Zaehler steigt,
   //     kahl: Warnung (enemyWindup) -> Sprung mit vollem Herz -> zurueck auf 1; Laub-Effekte und -Sounds ---

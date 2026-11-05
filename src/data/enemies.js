@@ -113,6 +113,15 @@
     desc: 'Gets bigger the longer you ignore it.',
   };
 
+  // Malware fuer zwischendurch (entities/enemy-trojan.js): getarnt als zerstoerbares Objekt, kein home, ausserhalb des
+  // Budgets wie die Hallucination. Der RNG-Zug fuer die Bonus-Chance aendert bestehende Seeds ab Etage 5.
+  E.trojan = {
+    name: 'Trojan', hp: 20, r: 18, speed: 115, contactDamage: 1,
+    behavior: 'trojan', sprite: 'enemy_trojan', color: '#e040c0',
+    minFloor: 5, weight: 0, bonusChance: 0.09, cost: 0, maxPerRoom: 1, tags: ['melee'],
+    desc: 'Free crate! No strings attached. Some payloads attached.',
+  };
+
   E.flaky_test = {
     name: 'Flaky Test', hp: 10, r: 16, speed: 0, contactDamage: 1, flying: true,
     behavior: 'blink', params: { shotSpeed: 230, minD: 170, maxD: 400, shownMin: 1.4, shownMax: 2.0 },
@@ -719,6 +728,21 @@
     behavior: 'chase', sprite: 'enemy_microservice', color: '#9aa0a8',
     spawn: false, cost: 0.8,
     desc: 'One of 47. Nobody knows which one is failing.',
+  };
+
+  // Minions von Ransomware (entities/boss-ransomware.js): Schluessel-Fragment und das X eines falschen Fensters
+  E.ransom_key = {
+    name: 'Key Fragment', hp: 10, r: 14, speed: 0, contactDamage: 0, flying: true,
+    behavior: 'ransom_key', sprite: 'enemy_ransom_key', color: '#f2c14e',
+    spawn: false, cost: 0,
+    desc: 'One of many keys. Shoot it to get something back.',
+  };
+
+  E.popup_close = {
+    name: 'Close Button', hp: 1, r: 12, speed: 0, contactDamage: 0, flying: true,
+    behavior: 'popup_close', sprite: 'enemy_popup_close', color: '#ff4d4d',
+    spawn: false, cost: 0,
+    desc: 'The smallest target in the game.',
   };
 
   // Minion des Agent Swarm (entities/boss-agent-swarm.js): umkreist den Spieler, schiesst gezielt, startet einmal

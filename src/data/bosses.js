@@ -163,6 +163,16 @@
     desc: 'A huge steel-blue hog bristling with 1-bits. Everything is reserved. Nothing is returned.',
   };
 
+  // Spaeter Malware-Boss, Heimat /dev/null (dorthin gehen die Dateien). Verhalten in entities/boss-ransomware.js.
+  B.BOSSES.ransomware = {
+    name: 'Ransomware',
+    subtitle: 'Your run has been encrypted. To decrypt it, pay up.',
+    hp: 460, r: 40, speed: 0, contactDamage: 2, flying: true,
+    behavior: 'ransomware', sprite: 'boss_ransomware', color: '#e040c0',
+    minFloor: 8, weight: 3, themes: { devnull: 3 },
+    desc: 'A corrupted window with a padlock on it. It does not want your hearts. It wants your tools.',
+  };
+
   /**
    * Waehlt einen Boss fuer die Etage (deterministisch ueber den Etagen-RNG).
    * Auf Etage 1 nur die beiden "zugaenglicheren" Bosse (Monolith 60 %, Stakeholder 40 %);
@@ -171,7 +181,8 @@
    * (Gewichte 3, Stakeholder 2 — er ist etwas seltener, weil man ihn auf Etage 1 schon oft gesehen hat).
    * Etage 2: je 27 %, Stakeholder 18 %; Etage 3 (Forgotten Branches): Octopus Merge 52 %, sonst je 13 %, Stakeholder 9 %;
    * Etage 4 (Dependency Hell): Memory Hog 26 %, sonst je 13 %, Stakeholder 9 %; Etage 5–7: je 15 %, Stakeholder 10 %;
-   * ab Etage 10 ohne ihn je 18 %, Stakeholder 12 % (Etage 14, 25, ...: Octopus Merge 41 %, sonst je 10 %, Stakeholder 7 %).
+   * ab Etage 8 kommt Ransomware dazu (je 13 %; Etage 10, /dev/null: Ransomware 33 %, sonst je 11 %);
+   * Etage 14, 25, ...: Octopus Merge 38 %, sonst je 9 %, The Shareholder 6 %.
    */
   /**
    * Boss-Abwechslung ueber einen Run (game.assignFloorBoss ruft das beim Betreten jeder Etage auf):

@@ -139,6 +139,7 @@
     bomb: ['No force pushes left', 'Protected branch', 'Permission denied'],
     charge: ['Not charged', 'Still thinking...', 'Rate limited', 'Cooldown'],
     locked: ['403 Forbidden', 'Needs approval'],
+    encrypted: ['Encrypted', 'Decryption key required', 'Pay to unlock'],
     default: ['Denied', 'Nope'],
   };
 

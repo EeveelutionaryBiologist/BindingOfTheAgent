@@ -117,6 +117,105 @@
     frames: POINTER_FRAMES,
   });
 
+  // Ransomware — ein verseuchtes Fenster: Titelleiste, grosses Vorhaengeschloss, Fortschrittsbalken.
+  // Frame 2 "reisst" wie der Graphics Glitch (Zeilenversatz).
+  const RANSOM_ROWS = [
+    'kkkkkkkkkkkkkkkkkkkkkkkk',
+    'ktTTTTttttttttttttrwrwrk',
+    'ktttttttttttttttttrrwrrk',
+    'ktttttttttttttttttrwrwrk',
+    'kkkkkkkkkkkkkkkkkkkkkkkk',
+    'kbbbbbbbbbyyyybbbbbbbbbk',
+    'kbgggbbbbyYbbyybbbgggbbk',
+    'kbbbbbbbbyybbyybbbbbbbbk',
+    'kbcccgbbbyybbyybbbgcccbk',
+    'kbbbbbbyyyyyyyyyybbbbbbk',
+    'kbgggbbyYYYYYYYYybbgggbk',
+    'kbbbbbbyyyykkyyyybbbbbbk',
+    'kbccgbbyyyykkyyyybbgccbk',
+    'kbbbbbbyyyyykyyyybbbbbbk',
+    'kbgggbboooooooooobbgggbk',
+    'kbbbbbbbbbbbbbbbbbbbbbbk',
+    'kbddddddddddddddddddddbk',
+    'kbdttttttttttttdddddddbk',
+    'kbddddddddddddddddddddbk',
+    'kkkkkkkkkkkkkkkkkkkkkkkk',
+  ];
+  const ransomTorn = RANSOM_ROWS.map((r, i) => {
+    const n = i >= 6 && i <= 9 ? 2 : i >= 12 && i <= 14 ? -2 : i === 1 || i === 17 ? 1 : 0;
+    return B.spriteTools.shiftRow(r, n);
+  });
+  B.defineSprite('boss_ransomware', {
+    palette: { k: '#0e0a14', t: '#e040c0', T: '#ff8ae6', r: '#d62f3a', w: W, b: '#1c1826', d: '#2f2840',
+      y: '#f2c14e', Y: '#ffe9a0', o: '#a87a20', g: '#5fe05f', c: '#40d8e0' },
+    scale: 4,
+    frames: [RANSOM_ROWS, ransomTorn],
+  });
+
+  // Fliegendes Schloss, Zahl-Terminal, Schluessel-Fragment und X-Knopf (alles Ransomware)
+  B.defineSprite('shot_ransom_lock', {
+    palette: { k: '#0e0a14', y: '#f2c14e', Y: '#ffe9a0', o: '#a87a20' },
+    scale: 3,
+    rows: [
+      '..kkkkk..',
+      '.kyyyyyk.',
+      '.ky...yk.',
+      '.ky...yk.',
+      'kkkkkkkkk',
+      'kYYYYYYYk',
+      'kyyykyyyk',
+      'kyyykyyyk',
+      'koooooook',
+      'kkkkkkkkk',
+    ],
+  });
+  B.defineSprite('ransom_terminal', {
+    palette: { k: '#0e0a14', s: '#6a6478', S: '#9a94a8', b: '#1c1826', g: '#5fe05f', y: '#f2c14e', d: '#3a3548' },
+    scale: 4,
+    frames: [
+      [
+        '.kkkkkkkkkk.', 'kSSSSSSSSSSk', 'ksbbbbbbbbsk', 'ksbyyyybbbsk', 'ksbbbbbbbbsk', 'ksbgggggbbsk', 'ksbbbbbbbbsk', 'kssssssssssk',
+        'ksdsdsdsdssk', 'ksdsdsdsdssk', 'kssssssssssk', '.kkkkkkkkkk.',
+      ],
+      [
+        '.kkkkkkkkkk.', 'kSSSSSSSSSSk', 'ksbbbbbbbbsk', 'ksbbbyyyybsk', 'ksbbbbbbbbsk', 'ksbbgggggbsk', 'ksbbbbbbbbsk', 'kssssssssssk',
+        'ksdsdsdsdssk', 'ksdsdsdsdssk', 'kssssssssssk', '.kkkkkkkkkk.',
+      ],
+    ],
+  });
+  B.defineSprite('enemy_ransom_key', {
+    palette: { k: '#0e0a14', y: '#f2c14e', Y: '#ffe9a0', o: '#a87a20' },
+    scale: 3,
+    frames: [
+      ['.kkk.......', 'kYYYk......', 'kY.Ykkkkkkk', 'kY.YyyyyyYk', 'kYYYkkkykyk', '.kkk...k.k.'],
+      ['.kkk.......', 'kyyyk......', 'ky.ykkkkkkk', 'ky.yYYYYYYk', 'kyyykkkYkYk', '.kkk...k.k.'],
+    ],
+  });
+  B.defineSprite('enemy_popup_close', {
+    palette: { k: '#0e0a14', r: '#d62f3a', w: W },
+    scale: 3,
+    rows: ['kkkkkkkkk', 'krrrrrrrk', 'krwrrrwrk', 'krrwrwrrk', 'krrrwrrrk', 'krrwrwrrk', 'krwrrrwrk', 'krrrrrrrk', 'kkkkkkkkk'],
+  });
+
+  // Trojan — Holzpferd auf Raedern mit Luke in der Seite; Frame 2: Luke offen (Gluehen vor dem Schuss)
+  const TROJAN_PAL = { k: '#1a1208', l: '#b07a3e', b: '#8a5a2c', d: '#5a3a1c', m: '#e040c0', w: '#3a2a1a' };
+  const trojanRows = (hatch) => [
+    '..kkk.........',
+    '.kllbk........',
+    'kmlbbk........',
+    'kbbbbkkkkkkk..',
+    '.kkbbbllllbbk.',
+    '...kbbbbbbbbk.',
+    '...kb' + hatch + 'bbbk.',
+    '...kb' + hatch + 'bbbk.',
+    '...kbbbbbbbbk.',
+    '...kkkkkkkkkk.',
+    '...k.k....k.k.',
+    '..kwwk...kwwk.',
+    '..kwwk...kwwk.',
+  ];
+  B.defineSprite('enemy_trojan', { palette: TROJAN_PAL, scale: 4, frames: [trojanRows('dddd'), trojanRows('mmmm')] });
+
   // Memory Leak — tropfender lila Blob mit Augen; Tropfen laufen nach unten
   B.defineSprite('enemy_memory_leak', {
     palette: { k: K, m: '#8e5bd6', d: '#5d3a99', l: '#c39bf0', w: W },

@@ -76,8 +76,8 @@ would put you.
 
 ## Gaps
 
-Floor 1 (The Backlog) and floors 8–11 (Latent Space, Undefined, /dev/null, The Context Limit) have no themed enemies of
-their own yet. Floor 1 is deliberately plain; the others rely on the cacophony from floor 8 (every family appears
+Floor 1 (The Backlog) and floors 8–10 (Latent Space, Undefined, /dev/null) have no themed enemies of their own yet
+(/dev/null has Ransomware as its boss). Floor 1 is deliberately plain; the others rely on the cacophony from floor 8 (every family appears
 everywhere) but could still get a member or two each later.
 
 ## Boss leftovers

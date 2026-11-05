@@ -99,6 +99,7 @@
       this.floor = new B.Floor(depth, B.hashString(this.seed + ':floor:' + depth));
       this.assignFloorBoss();
       const p = this.player;
+      if (Object.keys(p.encrypted).length) { p.encrypted = {}; p.recalcStats(); }   // Ransomware gilt nur im Kampf
       p.x = ROOM_W / 2;
       p.y = ROOM_H / 2 + TILE;
       p.vx = p.vy = p.kbx = p.kby = 0;

@@ -78,6 +78,17 @@ Live state is under `BOTA.game` (`.player`, `.room`, `.floor`, `.depth`, `.state
 - a Graphics Glitch touching you scrambles the HUD (a new hit restarts the timer), every glitch area renders, and its
   jumps never land inside obstacles;
 - the Antagonistic Reviewer's laser and stamps hit exactly where drawn, and every nitpick row has one gap;
+- **Ransomware** only rolls from floor 8 (×3 on /dev/null). Its locks really stop the active item, force pushes and fire
+  rate, never lock what the player doesn't have, and end with the fight or the floor; a key fragment frees the oldest lock,
+  the terminal frees everything but only for credits and then costs more; flying padlocks deal no damage and can be
+  shot down; windows keep their gap, never cover the terminal or fragments, push the player out, swallow shots
+  (not spectral ones) and close through their 1-HP X or their timer; enough damage extends the deadline, otherwise the wipe
+  waits for its telegraph, its safe columns are reachable and safe, phase 2 runs a second pass on other columns; shots
+  stay at 165–260 px/s, he never jumps next to the player, and he leaves nothing behind;
+- the **Trojan** rolls as a bonus spawn from floor 5 (at most 1 per room), disguises itself as one of the floor's prop kinds
+  on a tile centre, and gives nothing away; being close, a shot (absorbed like on a real prop) or an explosion reveals
+  it, the ring of 6 and its contact damage wait for the telegraph, its fan waits for the hatch, it never locks a cleared
+  room, and it dies as a normal kill;
 - the **Agent Swarm (/xhigh)** replaces the Rogue Agent Swarm from floor 7 (which stays a side quest); its laser waits for the
   full aim and lock, only hits in the beam and on the line, and the formation holds fire during lock and beam; subagents
   come after a target ring, depth 2 is smaller and never goes deeper, the cap of 4 holds, the last agent still lasers;
@@ -252,7 +263,7 @@ core/namespace → core/rng → core/math → core/input → core/sprites → co
 data/palette → data/text → data/sprites-core → data/sprites-enemies → data/sprites-items
 data/layouts → data/enemies → data/bosses → data/items
 world/room → world/dungeon
-entities/entity → projectile → player → enemy → boss → bosses-late → boss-memory-hog → boss-agent-swarm → pickup → familiar → effects
+entities/entity → projectile → player → enemy → boss → bosses-late → boss-memory-hog → boss-agent-swarm → boss-ransomware → enemy-trojan → pickup → familiar → effects
 render/renderer → render/hud → render/screens
 game → main
 ```
@@ -551,10 +562,11 @@ Payloads usually include `game, x, y` and often `color`.
 | `bossSearch`, `bossReplace`, `bossAbsorb` | Megalith (Ctrl+F starts, a match is replaced, a module merges back in) | audio (`search`, `replace`, `merge`), effects (yellow flash, "+1 import") |
 | `bossMoney` (`kind`: coin/expire/buyback/beat/missed) | Shareholder | audio (`coinDrop`, `cash`, `denied`), effects (gold sparkles, "vested elsewhere") |
 | `bossAlloc`, `bossReserve`, `bossFree`, `bossGc` (`kind`: warn/start/end) | Memory Hog (malloc starts, tiles flip to ones, a bomb frees memory, Stop-the-World) | audio (`malloc`, `reserve`, `freeMem`, `denied`, `gcSweep`), effects ("free()", green ring) |
+| `bossEncrypt` (`text`), `bossDecrypt` (`text`), `bossPopup`, `bossWipe` (`kind`: warn/hit) | Ransomware | audio (`encrypt`, `freeMem`, `popup`, `denied`, `wipe`), effects (lock text, sparkles) |
 | `bossExit` (`kind`: segfault/parachute/oom) | Megalith, Shareholder, Memory Hog (`onDeath`) | effects ("SEGMENTATION FAULT", golden parachute, "KILLED (out of memory)") |
 | `playerHurt`, `playerDeath` | player, game | audio, effects, HUD |
 | `pickup` (`type`), `itemGet` (`id, def`), `purchase`, `chestOpen` | pickup, player | audio, effects, HUD |
-| `denied` (`reason`: credits/locked/bomb/charge) | various | audio, effects |
+| `denied` (`reason`: credits/locked/bomb/charge/encrypted) | various | audio, effects |
 | `roomEnter` (`first`), `roomClear`, `doorsOpen`, `doorsClose`, `unlock`, `secretFound`, `rockBreak` (`kind`: rock/cactus) | game, room | audio, effects |
 | `cactusPrick` | game (`checkCactus`) | audio (`prick`), effects (spines) |
 | `enemyOverflow` (`r`) | Overflow Buffer (bursts) | audio (`overflowBurst`), effects (splash, glass shards) |
@@ -569,7 +581,7 @@ Rule: audio and effects **only listen**. Game logic never calls them directly, e
 are game state.
 
 ### 3.12 Audio (`core/audio.js`) and effects (`entities/effects.js`)
-- **Audio:** 82 synthesized SFX in total, plus a looping rain bed (two filtered noise layers) that `music.start` switches
+- **Audio:** 85 synthesized SFX in total, plus a looping rain bed (two filtered noise layers) that `music.start` switches
   on for themes with `ambient: 'rain'` and `music.stop` switches off. Every sound has a name; `audio.names()` lists them.
   - Bus routing: voices → sfx/music bus → master → compressor.
   - Per-name rate limits (`RATE`) and a 40-voice cap keep it from getting noisy.
@@ -642,6 +654,7 @@ Item conventions:
 | zombie_process | revive | 2 (was 3 until 2026-11-03) | 14 |
 | scope_creep | grow | 4 | 10 |
 | rogue_agent | rogue_agent | 7 | 16 |
+| trojan | trojan | 5 | 20 (bonus spawn) |
 | game_breaking_bug | wander | 8 | 8 |
 | dangling_pointer | fly_chase | 8 | 5 |
 | stale_branch | stale | 3, Forgotten Branches only | 12 |
@@ -660,6 +673,12 @@ Item conventions:
 | overflow_buffer | overflow_buffer (+ `overflow_puddle`) | 8, The Context Limit only | 18 (max 2 per room) |
 | summarizer | summarizer | 8, The Context Limit only | 16 (max 1 per room) |
 | lost_in_the_middle | lost_in_the_middle | 8, The Context Limit only | 14 (max 2 per room) |
+
+The **Trojan** (2026-11-05, `entities/enemy-trojan.js`) is a bonus spawn like the Hallucination (`bonusChance` 0.09, no `home`),
+and follows the same rule: **it must stay indistinguishable from what it imitates**. It draws the floor's `prop_<kind>`
+with `drawProps`' shadow on a tile centre and stays `intangible` and `ignoreForClear`, so homing shots, followers, Code Review
+and the Calculator can't give it away; for the same reason it checks player shots itself. Change `drawProps` and you must
+change its `draw`. A real prop is solid and the disguise isn't, but the player reveals it at 100 px, before touching it.
 
 The **Game-breaking Bug** and **Dangling Pointer** (2026-11-04) are recoloured Bug and Null Pointer for floors 8+: same
 stats and behaviour (they share `BUG_FRAMES` / `POINTER_FRAMES`), but contact damage 2 and cost 1.5. They have no `home`
@@ -779,7 +798,7 @@ shared palette `B.CONTEXT_COLORS`); because the rain is light blue, **danger is 
   when none are left.
 
 Minions (`spawn: false`): `leaklet`, `microservice`, `megalith_module` (Megalith phase 2; crawls back and heals it), `loop_segment`, `nested_loop_part`, `detached_head_tag` (Detached HEAD's head),
-`subagent` (Agent Swarm's small agents), `octo_arm` (Octopus Merge arm segment), `spinlock_segment` (Spinlock body; invulnerable, shields the head),
+`subagent` (Agent Swarm's small agents), `ransom_key` and `popup_close` (Ransomware's key fragments and window buttons), `octo_arm` (Octopus Merge arm segment), `spinlock_segment` (Spinlock body; invulnerable, shields the head),
 `port_scanner_port` (Port Scanner's port; intangible floor socket, doesn't count for clearing), `overflow_puddle` (Overflow
 Buffer's slowing puddle; static, intangible, harmless, doesn't count for clearing).
 
@@ -835,7 +854,7 @@ families (screenshots 2026-11-03); cacti stay a Sandbox Borders floor feature.
 
 **Bosses** (base HP): `monolith` 360 (floors 1–6), `stakeholder` 250 (floors 1–6), `friday_deploy` 240 (floor 4+),
 `infinite_loop` 300 (floors 2–7), `memory_hog` 300 (floors 4–9, ×2 on Dependency Hell), `megalith` 460 (floor 7+, replaces the Monolith), `shareholder` 380 (floor 7+,
-replaces the Stakeholder), `nested_loop` 450 (floor 8+, replaces the Infinite Loop), `rogue_swarm` 4 × 80 (floors 2–6), `agent_swarm` 4 × 115 (floor 7+, replaces the Rogue Agent Swarm), `reviewer`
+replaces the Stakeholder), `nested_loop` 450 (floor 8+, replaces the Infinite Loop), `rogue_swarm` 4 × 80 (floors 2–6), `agent_swarm` 4 × 115 (floor 7+, replaces the Rogue Agent Swarm), `ransomware` 460 (floor 8+, ×3 on /dev/null), `reviewer`
 340 (floor 4+), `octopus_merge` 300 (330 until 2026-11-03; Forgotten Branches only, weight 12: about 52 % on
 floor 3, about 41 % on floors 14, 25, …). Each replacement has its predecessor's weight and a `replaces` field, so
 a floor never has the predecessor as a side quest (the side quests keep the retired bosses alive past their `maxFloor`). Friday Deploy and the Reviewer moved from floors 2 and 3 to floor 4 on
@@ -872,6 +891,14 @@ a floor never has the predecessor as a side quest (the side quests keep the reti
     vanishes on arrival via its `range`). **Quarterly earnings** run all fight: every 12 s, between attacks, he is
     stunned for 1.5 s with `damageTakenMult` 1.25 if the player took ≥ 8 % of his max HP that quarter, otherwise he
     fires a telegraphed 10-shot ring and gets 8 % faster (at most 3 times). The HUD line shows the quarter clock.
+- **Ransomware** (2026-11-05) lives in `entities/boss-ransomware.js`; the header there lists everything, all numbers are in
+  `RW`. It is the only boss that attacks the player's tools: `player.encrypted` (`{active, pushes, fire}`, read in `useActive`,
+  `placeBomb` and `recalcStats`, stamped on the HUD by `drawEncrypted`). Locks must never outlive the fight, so `onDeath` and
+  `game.enterFloor` both clear them. Only one attack runs at a time. Overlays in `room.pickups`: `PopupWindow`, `LockShot`,
+  `RansomTerminal`, `WipeMark`. Windows are not tiles: they push the player out each tick, so `windowSpot` must keep
+  `popGap` to walls, solids and other windows (a corridor stays free around each one) and must not cover the terminal or a
+  fragment, or those become unreachable. **All new window placement must go through it.** The danger colour is magenta
+  (`#e040c0`), after the Graphics Glitch. He isn't a side quest.
 - **Agent Swarm (/xhigh)** (2026-11-05) lives in `entities/boss-agent-swarm.js` and runs on the Rogue Agent Swarm's code in
   `boss.js`: the behaviour is the same object with its own `cfg` (`XHIGH` instead of `SWARM`), and `boss.js` offers the hooks
   `extra`, `holdFire`, `onFinish` and `drawExtra`. A new swarm variant needs only a new `cfg`. Its colour is a deep crimson on

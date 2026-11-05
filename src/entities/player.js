@@ -17,6 +17,7 @@
     shotSize: 1.0,    // Multiplikator auf 9 px Radius
     luck: 0,
   };
+  const ENCRYPTED_FIRE = 1.35;   // Ransomware: verschluesselte Feuerrate (Faktor auf fireDelay)
   const LIMITS = {
     speed: [0.4, 2.0], damage: [0.5, 99], fireDelay: [0.08, 3], shotSpeed: [0.4, 3],
     range: [120, 1400], shotSize: [0.4, 4], luck: [-10, 20],
@@ -28,6 +29,7 @@
     constructor(x, y) {
       super(x, y, 20);
       this.isPlayer = true;
+      this.encrypted = {};   // Ransomware: { active, pushes, fire } gesperrt, nur fuer die Dauer des Kampfes
 
       // Gesundheit (halbe Herzen)
       this.maxHealth = 6;
@@ -100,6 +102,7 @@
         }
       }
       for (const k in mult) if (k in s) s[k] *= mult[k];
+      if (this.encrypted && this.encrypted.fire) s.fireDelay *= ENCRYPTED_FIRE;   // Ransomware (boss-ransomware.js)
       for (const k in LIMITS) s[k] = B.M.clamp(s[k], LIMITS[k][0], LIMITS[k][1]);
 
       this.stats = s;
@@ -235,6 +238,7 @@
       if (!this.active) return;
       const def = B.ITEMS[this.active.id];
       if (!def || typeof def.use !== 'function') return;
+      if (this.encrypted.active) { B.bus.emit('denied', { game, reason: 'encrypted' }); return; }
       if (this.active.charge < (def.maxCharge || 0)) { B.bus.emit('denied', { game, reason: 'charge' }); return; }
       let used = true;
       try { used = def.use(this, game) !== false; } catch (e) { console.error('[item]', this.active.id, 'use failed:', e); used = false; }
@@ -256,6 +260,7 @@
     }
 
     placeBomb(game) {
+      if (this.encrypted.pushes) { B.bus.emit('denied', { game, reason: 'encrypted' }); return; }
       if (this.pushes <= 0) { B.bus.emit('denied', { game, reason: 'bomb' }); return; }
       this.pushes--;
       game.room.projectiles.push(new B.Bomb(this.x, this.y + 4));

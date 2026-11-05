@@ -307,6 +307,18 @@
     B.pixelText(ctx, String(value).padStart(2, '0'), x + 22, y + 1 - k * 3, { scale: 2, color: col, shadow: 'rgba(0,0,0,0.7)' });
   }
 
+  /** Ransomware: gesperrte Bereiche sichtbar machen (Aktiv-Item, Force Pushes, Feuerrate) */
+  function drawEncrypted(ctx, p) {
+    const stamp = (x, y, w, h, text) => {
+      ctx.fillStyle = 'rgba(224,64,192,0.45)';
+      ctx.fillRect(x, y, w, h);
+      B.pixelText(ctx, text, x + w / 2, y + h / 2, { scale: 1, align: 'center', baseline: 'middle', color: '#ffffff', outline: true });
+    };
+    if (p.encrypted.active) stamp(8, 6, 52, 52, 'LOCKED');
+    if (p.encrypted.pushes) stamp(218, 23, 52, 17, 'LOCKED');
+    if (p.encrypted.fire) stamp(296, 24, 90, 16, 'ENCRYPTED');
+  }
+
   function drawActive(ctx, p, x, y) {
     const t = now();
     const size = 52;
@@ -725,6 +737,7 @@
       drawCounter(ctx, 222, 23, 'pushes', ['pickup_push', 'hud_push'], '#c9c9c9', p.pushes);
       drawCounter(ctx, 222, 42, 'approvals', ['pickup_approval', 'hud_approval'], B.COLORS.approval, p.approvals);
       drawStats(ctx, p, 300, 7, !!glitchFor(game, 'stats'));
+      drawEncrypted(ctx, p);
       drawFloorLabel(ctx, game);
 
       drawMinimap(ctx, game, !!glitchFor(game, 'minimap'));

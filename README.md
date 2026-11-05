@@ -29,14 +29,14 @@ Score and a choice: start over, or keep going with everything you have. There is
 ### What's inside
 - **55 items** (50 passive, 5 active). Examples: Blockchain (*"Does absolutely nothing. Market cap: $4B."*),
   Few-Shot Examples, Chain of Thought, Rubber Duck, Technical Debt, Regenerate Response, `rm -rf node_modules`.
-- **32 enemies** plus minions: Flaky Test, Merge Conflict, Graphics Glitch, Hallucination (it looks like loot), Zombie Process, Rogue Agent…
+- **33 enemies** plus minions: Flaky Test, Merge Conflict, Graphics Glitch, Hallucination (it looks like loot), Zombie Process, Rogue Agent…
   Forgotten Branches has its own family (Stale Branch, Detached HEAD, Cherry-Pick, Orphan Commit), and so do Sandbox
   Borders (Spinlock, Rootkit, Dust Daemon), Legacy Codebase (Stack Trace), Dependency Hell (Honeypot, Rolling Release),
   Production (Rate Limiter, Port Scanner), The Training Data (Dry Run) and The Context Limit (Overflow Buffer,
   Summarizer, Lost in the Middle).
-- **12 bosses** with distinct phases: The Monolith, The Stakeholder, Friday Deploy, The Infinite Loop, the Rogue Agent
+- **13 bosses** with distinct phases: The Monolith, The Stakeholder, Friday Deploy, The Infinite Loop, the Rogue Agent
   Swarm, The Antagonistic Reviewer, The Memory Hog (floors 4–9) and the Octopus Merge (only on Forgotten Branches). Deeper down, four of them are
-  replaced by bigger versions: The Megalith, The Shareholder and the Agent Swarm (/xhigh) from floor 7, the Nested Infinite Loop from floor 8.
+  replaced by bigger versions: The Megalith, The Shareholder and the Agent Swarm (/xhigh) from floor 7, the Nested Infinite Loop from floor 8. Ransomware joins from floor 8 and is most at home on /dev/null.
 - **11 themed floors** that cycle forever, from *The Backlog* through *Forgotten Branches* and the cactus-lined *Sandbox Borders* down to *The Context Limit*. **30 room layouts.**
 - All art is ASCII pixel maps in code and all sound is synthesized with Web Audio. There are no asset files.
 

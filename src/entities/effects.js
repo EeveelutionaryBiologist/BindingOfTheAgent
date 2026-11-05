@@ -739,6 +739,14 @@
     FX.text(e.game, e.x, e.y - 30, 'free()', '#d9ffc9');
     FX.sparkles(e.game, e.x, e.y, 10, 60, e.color || '#7fe3ff');
   });
+  on('bossEncrypt', (e) => {
+    FX.text(e.game, e.x, e.y - 50, e.text, '#ff8ae6', { scale: 2, life: 1.6 });
+    FX.ring(e.game, e.x, e.y, 70, '#e040c0', 0.4, 5);
+  });
+  on('bossDecrypt', (e) => {
+    FX.text(e.game, e.x, e.y - 30, e.text, '#ffe9a0');
+    FX.sparkles(e.game, e.x, e.y, 10, 60, '#f2c14e');
+  });
   on('bossGc', (e) => {
     if (e.kind === 'start') FX.ring(e.game, e.x, e.y, 120, '#9be07a', 0.5, 6);
   });
