@@ -19,6 +19,8 @@ Controls are basically ripped straight from Binding Of Isaac.
 | Use active item | `Space` |
 | Pause / item list (browse with arrows) | `Esc` / `P` |
 | Restart run | `R` on the death screen, hold `R` in-game |
+| Retry the same seed | `T` on the death screen or score card |
+| Enter a seed / daily run | `S` / `D` on the title screen |
 | Mute (sound + music) | `M` |
 
 Clear a room to open its doors. Find the treasure room (gold door), the shop (green), the boss (red, with teeth),
@@ -44,8 +46,13 @@ Score and a choice: start over, or keep going with everything you have. There is
 
 **For a documentation of all Enemies and items, see the documents/ folder!**
 
+### Seeds
+Press `S` on the title screen to type or paste a seed, so the whole team can compare deaths on the same dungeon. `D` starts
+the **daily run**: the same seed for everyone today, and your best score for the day is kept on this machine. When you die,
+your last few events are listed on the post-mortem.
+
 ### URL options
-- `index.html?seed=ABCD-1234` plays a fixed seed, so the whole team can compare deaths on the same dungeon.
+- `index.html?seed=ABCD-1234` plays a fixed seed.
 - `index.html?debug` turns on the debug overlay (or press `F2` in-game). Keys: `G` god mode, `I` random item,
   `K` kill all, `N` next floor, `V` reveal map, `B` boss room, `T` treasure room, `H` resources.
   It's also scriptable via `BOTA.debug.*` in the browser console.

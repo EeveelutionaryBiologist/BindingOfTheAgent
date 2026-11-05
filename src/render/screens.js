@@ -1,5 +1,5 @@
 /*
- * screens.js — Vollbild-/Overlay-Screens: Titel, Etagenkarte, Boss-Intro (VS-Karte), Pause, Tod.
+ * screens.js — Vollbild-/Overlay-Screens: Titel mit Seed-Dialog, Etagenkarte, Boss-Intro (VS-Karte), Pause, Tod.
  *
  * Reine Darstellung: Zustandswechsel macht game.js. Einzige "Eingabe" hier ist die Item-Auswahl im
  * Pause-Menue (Pfeiltasten), die ueber Flanken von BOTA.input.down() erkannt wird und nur die Anzeige
@@ -145,6 +145,19 @@
     const blink = 0.55 + 0.45 * Math.sin(t * 4);
     B.pixelText(ctx, 'PRESS ENTER', W / 2, 462, { scale: 3, align: 'center', color: '#ffcf4d', shadow: '#5a3a00', alpha: blink });
 
+    // Weitere Startarten: eigener Seed und Daily Run (mit dem heutigen Bestwert, falls es einen gibt)
+    const best = B.storage.dailyBestFor(B.dailyKey());
+    const daily = 'daily run' + (best ? '  (best today ' + fmtScore(best) + ')' : '');
+    ctx.save(); ctx.font = '14px ' + B.FONT;
+    const seedW = ctx.measureText('enter a seed').width, dailyW = ctx.measureText(daily).width;
+    ctx.restore();
+    let hx = W / 2 - (26 + 6 + seedW + 30 + 26 + 6 + dailyW) / 2;
+    keycap(ctx, hx + 13, 504, 'S', 26);
+    B.text(ctx, 'enter a seed', hx + 32, 494, { size: 14, color: B.COLORS.textDim, shadow: false });
+    hx += 26 + 6 + seedW + 30;
+    keycap(ctx, hx + 13, 504, 'D', 26);
+    B.text(ctx, daily, hx + 32, 494, { size: 14, color: best ? '#ffcf4d' : B.COLORS.textDim, shadow: false });
+
     // Steuerung als Tastenkappen
     const row = [
       [['W', 'A', 'S', 'D'], 'move'], [['↑', '←', '↓', '→'], 'shoot'], [['E'], 'force push'],
@@ -168,6 +181,39 @@
     if (B.params.seed) B.text(ctx, 'seed ' + B.params.seed, W / 2, 598, { size: 13, align: 'center', color: '#e8845f', shadow: false });
     B.text(ctx, B.audio && B.audio.muted ? 'sound: off (M)' : 'sound: on (M)', 16, H - 24, { size: 12, color: B.COLORS.textFaint, shadow: false });
     B.text(ctx, 'v1 · a team distraction · zero dependencies', W - 16, H - 24, { size: 12, align: 'right', color: B.COLORS.textFaint, shadow: false });
+
+    // Der Seed-Dialog liegt ueber dem Titel. Der Renderer landet hier, weil es vor dem ersten Run noch keinen Raum gibt
+    if (game.state === 'seedEntry') drawSeedEntry(ctx, game);
+  }
+
+  /** Seed-Dialog (Zustand 'seedEntry'). Nur Anzeige; Tastatur und Einfuegen wertet game.updateSeedEntry aus. */
+  function drawSeedEntry(ctx, game) {
+    dim(ctx, 0.72);
+    const pw = 600, ph = 214, px = W / 2 - pw / 2, py = 200;
+    ctx.fillStyle = '#1c1613';
+    B.HUD.roundRect(ctx, px, py, pw, ph, 8); ctx.fill();
+    ctx.strokeStyle = '#e8845f'; ctx.lineWidth = 2;
+    B.HUD.roundRect(ctx, px, py, pw, ph, 8); ctx.stroke();
+    B.pixelText(ctx, 'ENTER A SEED', W / 2, py + 26, { scale: 3, align: 'center', color: '#e8845f', shadow: '#5a2717' });
+    B.text(ctx, 'Same seed, same floors. Share it, then blame the map.', W / 2, py + 62, { size: 14, align: 'center', color: B.COLORS.textDim, bold: false, shadow: false });
+
+    // Eingabefeld: 32 Zeichen passen ohne Stauchen hinein
+    const bx = px + 36, bw = pw - 72, by = py + 92, bh = 44;
+    ctx.fillStyle = '#0b0908';
+    B.HUD.roundRect(ctx, bx, by, bw, bh, 5); ctx.fill();
+    const size = 22;
+    B.text(ctx, game.seedInput, bx + 12, by + bh / 2, { size, baseline: 'middle', color: '#f3ece6', shadow: false });
+    ctx.save(); ctx.font = 'bold ' + size + 'px ' + B.FONT;
+    const cx = bx + 13 + ctx.measureText(game.seedInput).width;
+    ctx.restore();
+    if (Math.floor(now() * 2.4) % 2 === 0 && game.seedInput.length < 32) {
+      ctx.fillStyle = '#ffcf4d';
+      ctx.fillRect(cx, by + 10, 3, bh - 20);
+    }
+    B.text(ctx, game.seedInput.length + '/32', bx + bw, by + bh + 8, { size: 12, align: 'right', color: B.COLORS.textFaint, shadow: false, bold: false });
+
+    B.text(ctx, 'letters, digits, hyphen   ·   ctrl+V pastes', bx, by + bh + 8, { size: 12, color: B.COLORS.textFaint, shadow: false, bold: false });
+    B.text(ctx, game.seedInput ? 'ENTER start   ·   ESC back' : 'ESC back', W / 2, py + ph - 30, { size: 14, align: 'center', color: game.seedInput ? '#ffcf4d' : B.COLORS.textDim, shadow: false });
   }
 
   // ===========================================================================
@@ -474,7 +520,7 @@
       ['Uptime', fmtTime(d.time), ink],
       ['Final title', rank, ink],
       ['Cycles done', String(d.cycles || 0), ink],
-      ['Final score', fmtScore(d.score || 0), '#a8261a'],
+      ['Final score', fmtScore(d.score || 0) + (d.newDailyBest ? '  ·  new daily best!' : ''), '#a8261a'],
     ];
     fields.forEach(([k, v, col], i) => {
       const y = py + 164 + i * 21;
@@ -499,7 +545,7 @@
     B.text(ctx, 'seed ' + game.seed, px + 86, py + ph - 34, { size: 13, color: '#7a6a5c', shadow: false, bold: false });
     if (age > 0.8) {
       const blink = 0.6 + 0.4 * Math.sin(age * 5);
-      B.pixelText(ctx, 'PRESS R TO RETRY', px + pw - 24, py + ph - 38, { scale: 2, align: 'right', color: '#8a2a1e', shadow: false, alpha: blink });
+      B.pixelText(ctx, 'R: NEW RUN  T: SAME SEED', px + pw - 24, py + ph - 34, { scale: 2, align: 'right', color: '#8a2a1e', shadow: false, alpha: blink });
     }
 
     // Stempel "BLAMELESS" mit Wumms
@@ -555,12 +601,13 @@
     B.pixelText(ctx, fmtScore(total), px + pw, ly + 14, { scale: 4, align: 'right', color: '#ffcf4d', shadow: '#000' });
     B.text(ctx, 'Cycles completed: ' + game.cycles + '   ·   ' + fmtTime(game.runStats.time) + '   ·   seed ' + game.seed,
       W / 2, ly + 66, { size: 14, align: 'center', color: B.COLORS.textDim, bold: false, shadow: false });
+    if (game.newDailyBest) B.text(ctx, 'New daily best!', W / 2, ly + 84, { size: 14, align: 'center', color: '#ffcf4d', shadow: false });
 
     if (age > 0.8) {
       const blink = 0.85 + 0.15 * Math.sin(age * 4);
       const next = B.floorInfo(game.depth + 1).name.toUpperCase();
       B.pixelText(ctx, 'ENTER: KEEP GOING TO ' + next, W / 2, ly + 104, { scale: 2, align: 'center', color: accent, shadow: '#000', alpha: blink });
-      B.pixelText(ctx, 'R: START OVER', W / 2, ly + 132, { scale: 2, align: 'center', color: B.COLORS.textDim, shadow: '#000' });
+      B.pixelText(ctx, 'R: START OVER  T: SAME SEED', W / 2, ly + 132, { scale: 2, align: 'center', color: B.COLORS.textDim, shadow: '#000' });
     }
   }
 

@@ -4,7 +4,8 @@
  * Zustaende: title -> floorCard -> play <-> pause
  *                                  play -> roomTransition -> play (ggf. -> bossIntro -> play)
  *                                  play -> floorTransition -> floorCard
- *                                  play -> dead -> floorCard (neuer Run)
+ *                                  play -> dead -> floorCard (neuer Run, zufaellig oder derselbe Seed)
+ *            title -> seedEntry -> floorCard (Seed eintippen; Esc zurueck zum Titel)
  *
  * Welt-API (fuer Verhalten, Items, Effekte):
  *   game.player, game.room, game.floor, game.depth, game.rng, game.followers
@@ -65,6 +66,8 @@
       this.runStats = { kills: 0, rooms: 0, time: 0 };
       this.score = freshScore(); // Ereignis-Zaehler fuer den Final Score (siehe B.SCORE_VALUES)
       this.cycles = 0;           // abgeschlossene Durchgaenge durch alle Etagen (siehe showScoreCard)
+      this.seedInput = '';       // Text im Seed-Dialog (Zustand 'seedEntry')
+      this.newDailyBest = false; // Score-Karte: dieser Run hat gerade den Tagesbestwert verbessert
       this.lockDeniedT = 0;
       this.fps = 60;
       this.titleTagline = B.TEXT.TAGLINES ? B.TEXT.TAGLINES[Math.floor(Math.random() * B.TEXT.TAGLINES.length)] : '';
@@ -83,6 +86,7 @@
       this.runStats = { kills: 0, rooms: 0, time: 0 };
       this.score = freshScore();
       this.cycles = 0;
+      this.newDailyBest = false;
       this.death = null;
       this.bannerState = null;
       this.hudGlitch = null;
@@ -121,6 +125,7 @@
     setState(s, t) {
       this.state = s;
       this.stateT = t || 0;
+      B.input.textMode = s === 'seedEntry';
     }
 
     /** Score-Ereignis zaehlen (kind: Schluessel aus B.SCORE_VALUES); unbekannte Arten werden ignoriert */
@@ -146,8 +151,19 @@
      */
     showScoreCard() {
       this.cycles++;
+      this.newDailyBest = this.recordDaily();
       this.setState('scoreCard', 0);
       B.bus.emit('cycleComplete', { game: this, cycles: this.cycles, score: this.scoreTotal() });
+    }
+
+    /**
+     * Endstand eines Runs auf dem heutigen Daily-Seed eintragen (Tod oder Score-Karte). Andere Seeds und Daily-Seeds
+     * von gestern zaehlen nicht. Zieht nichts aus game.rng.
+     * @returns {boolean} true bei einem neuen Tagesbestwert
+     */
+    recordDaily() {
+      if (this.seed !== B.dailySeed()) return false;
+      return B.storage.recordDaily(B.dailyKey(), this.scoreTotal());
     }
 
     onPlayerDeath(killer) {
@@ -160,6 +176,7 @@
         time: this.runStats.time,
         score: this.scoreTotal(),
         cycles: this.cycles,
+        newDailyBest: this.recordDaily(),
       };
       B.storage.data.deaths++;
       B.storage.save();
@@ -688,14 +705,26 @@
 
     update(dt) {
       const inp = B.input;
-      if (inp.pressed('KeyM')) B.audio.toggleMute();
-      if (inp.pressed('F2')) B.debug.enabled = !B.debug.enabled;
+      // Im Seed-Dialog sind Tasten Text: M und F2 duerfen dort nicht nebenbei schalten
+      if (this.state !== 'seedEntry') {
+        if (inp.pressed('KeyM')) B.audio.toggleMute();
+        if (inp.pressed('F2')) B.debug.enabled = !B.debug.enabled;
+      }
       if (this.shakeT > 0) { this.shakeT -= dt; if (this.shakeT <= 0) this.shakeI = 0; }
       if (this.bannerState) { this.bannerState.t -= dt; if (this.bannerState.t <= 0) this.bannerState = null; }
 
       switch (this.state) {
         case 'title':
           if (inp.pressed('Enter') || inp.pressed('Space') || inp.pressed('NumpadEnter')) this.newRun(B.params.seed || B.randomSeed());
+          else if (inp.pressed('KeyD')) this.newRun(B.dailySeed());
+          else if (inp.pressed('KeyS')) {
+            this.seedInput = B.params.seed || '';   // ein Seed aus der URL steht zum Aendern schon im Feld
+            this.setState('seedEntry');
+          }
+          break;
+
+        case 'seedEntry':
+          this.updateSeedEntry(inp);
           break;
 
         case 'floorCard':
@@ -734,6 +763,7 @@
           if (this.stateT > 0.8) {
             if (inp.pressed('Enter') || inp.pressed('NumpadEnter')) this.enterFloor(this.depth + 1);
             else if (inp.pressed('KeyR')) this.newRun(B.randomSeed());
+            else if (inp.pressed('KeyT')) this.newRun(this.seed);
           }
           break;
 
@@ -747,13 +777,27 @@
           // Effekte (Partikel) weiterlaufen lassen
           for (const fx of this.room.effects) fx.update(dt, this);
           this.room.effects = this.room.effects.filter((fx) => !fx.dead);
-          if (this.stateT > 0.8 && (inp.pressed('KeyR') || inp.pressed('Enter'))) this.newRun(B.randomSeed());
+          // T statt S fuer "derselbe Seed": S ist eine Bewegungstaste, und wer gerade stirbt, haemmert noch darauf
+          if (this.stateT > 0.8) {
+            if (inp.pressed('KeyR') || inp.pressed('Enter')) this.newRun(B.randomSeed());
+            else if (inp.pressed('KeyT')) this.newRun(this.seed);
+          }
           break;
 
         case 'play':
           this.updatePlay(dt);
           break;
       }
+    }
+
+    /** Seed-Dialog: Zeichen filtern (B.cleanSeed), Backspace loescht, Enter startet (nicht leer), Esc zurueck zum Titel */
+    updateSeedEntry(inp) {
+      if (inp.pressed('Escape')) { this.setState('title'); return; }
+      for (const entry of inp.typed()) {
+        if (entry === inp.BACKSPACE) this.seedInput = this.seedInput.slice(0, -1);
+        else this.seedInput = B.cleanSeed(this.seedInput + entry);
+      }
+      if ((inp.pressed('Enter') || inp.pressed('NumpadEnter')) && this.seedInput) this.newRun(this.seedInput);
     }
 
     /** R gedrueckt halten (1 s) startet einen neuen Run */

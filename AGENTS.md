@@ -55,6 +55,13 @@ safeguard). No server is needed. If you want one anyway, any static server works
 - `?seed=XXXX-XXXX` sets a deterministic run seed (normalised to upper case).
 - `?debug` shows the debug overlay. `F2` toggles it in-game.
 
+### Title and end-of-run keys
+- **Title:** `Enter` random run (or the `?seed=` seed), `S` enter a seed, `D` daily run.
+- **Seed dialog:** letters, digits and hyphen, at most 32, upper-cased. `Backspace` deletes, `Ctrl+V` pastes, `Enter`
+  starts, `Esc` goes back. A `?seed=` value is pre-filled.
+- **Post-mortem:** `R` / `Enter` new random run, `T` same seed. **Score card:** `Enter` keep going, `R` start over, `T` same
+  seed. It's `T` and not `S` on purpose: `S` is a movement key, and players are still pressing it when they die.
+
 ### Debug keys (only while debug is enabled, during play)
 `G` god mode · `I` random item · `K` kill all · `N` next floor · `V` reveal map · `B` teleport to boss room ·
 `T` teleport to treasure room · `H` 10 of each resource and full heal.
@@ -251,6 +258,13 @@ Live state is under `BOTA.game` (`.player`, `.room`, `.floor`, `.depth`, `.state
   3 halves leaves 1; running through or standing still doesn't sign; god mode pays and Retry with Backoff doesn't
   interfere; a reroll keeps the clause; a swapped active item is free and doesn't score again; the entry banner gives
   way to the contract, other banners don't; signing by keyboard works in the real loop and shows on the timeline;
+- the seed dialog only accepts `[A-Z0-9-]` up to 32 and upper-cases; Backspace, Esc and Enter on empty work; paste is read
+  only in the dialog and is filtered; characters come from `e.key` (a QWERTZ `y` stays `Y`); M and F2 do nothing there,
+  and a held S types nothing more; the seed gives the same floor as `newRun` with it, and a URL seed is pre-filled;
+- the daily seed is `DAILY-YYYYMMDD` and `D` starts it; storage drops tampered `dailyDate`/`dailyBest`; a new day resets the
+  best; only today's daily seed counts, at death and on the score card, and `game.rng` stays untouched;
+- same seed: `T` only after the lockout, on the post-mortem and the score card, with the same floor and a fresh score; `S`
+  does nothing there and `R` changes the seed;
 - the door transition, special rooms, pause screen and death screen work.
 
 Screenshots go to `tools/out/` (scratch; don't commit or ship). One-time setup without admin rights:
@@ -309,11 +323,12 @@ depend on load order.
 |---|---|---|
 | `C`, `DIRS`, `OPPOSITE`, `TILES` | namespace | constants, directions, tile enum (FLOOR, WALL, ROCK, BLOCK, PIT, SPIKES, DOOR, PROP, CACTUS) |
 | `bus` | namespace | event bus `on/off/emit`; listener exceptions are caught and logged |
-| `storage`, `params` | namespace | validated localStorage (`muted, bestFloor, runs, deaths`); validated URL params |
+| `storage`, `params` | namespace | validated localStorage (`muted, bestFloor, runs, deaths, dailyDate, dailyBest`; `dailyBestFor(key)`, `recordDaily(key, score)`); validated URL params |
+| `cleanSeed, dailyKey, dailySeed, hpScale` | namespace | the only path for seed input (whitelist, 32 characters), local `YYYYMMDD`, `DAILY-YYYYMMDD`, enemy HP factor per depth (flat-damage items use it too) |
 | `ITEMS, ENEMIES, BOSSES, BEHAVIORS, BOSS_BEHAVIORS, PICKUP_TYPES, LAYOUTS, TEXT` | namespace (filled by data/entities) | content registries |
 | `RNG`, `hashString`, `randomSeed` | rng | mulberry32 PRNG (`next/float/int/chance/pick/weighted/shuffle/angle`), FNV-1a hash |
 | `M` | math | `clamp, lerp, approach, dist, norm, angleDiff, circlesOverlap, circleRectPush, …` |
-| `input` | input | `down(code)`, `pressed(code)` (edge since the last sim step), `moveVector()`, `shootDir()`, `_simulate()` |
+| `input` | input | `down(code)`, `pressed(code)` (edge since the last sim step), `moveVector()`, `shootDir()`, `_simulate()`; text input: `textMode` (set only by `game.setState` for `seedEntry`), `typed()`, `BACKSPACE`. Controls use `e.code`, typed text uses `e.key` (German keyboards) |
 | `defineSprite, drawSprite, hasSprite, spriteSize, spriteFrameCount` | sprites | ASCII sprite registry; unknown names draw a magenta placeholder |
 | `audio` | audio | `unlock, play(name), toggleMute, tone, names(), music.start/stop` |
 | `FONT, COLORS, FLOOR_THEMES, themeFor(depth)` | palette | colours and 11 floor themes (`gen`, `props`, `cacti` are read by the map generator; `tiles` swaps tile sprites; `ambient` / `wallDecor` add per-frame or baked atmosphere, e.g. `rain`) |
@@ -344,8 +359,11 @@ title ─Enter─▶ floorCard ─(2.2 s or key)─▶ play ◀──Esc/P──
                    └──── newRun(seed) ◀──R────┴─ hp 0 ─▶ dead
 ```
 On the last floor of a cycle (`isCycleEnd()`: depth divisible by the number of themes) `floorTransition` leads to
-`scoreCard` instead of `enterFloor`: after 0.8 s Enter continues with `enterFloor(depth + 1)` and R calls `newRun`.
-Global keys handled in every state: `M` (mute) and `F2` (debug). Holding `R` for 1 s in play or pause restarts the run
+`scoreCard` instead of `enterFloor`: after 0.8 s Enter continues with `enterFloor(depth + 1)`, R calls `newRun` and T
+calls `newRun(game.seed)`, as on the death screen. On the title, `D` starts the daily run and `S` opens `seedEntry`
+(Enter: `newRun(seedInput)`, Esc: back to `title`); `Screens.title` draws that dialog over the title, because no room
+exists before the first run.
+Global keys handled in every state except `seedEntry`: `M` (mute) and `F2` (debug). Holding `R` for 1 s in play or pause restarts the run
 (`game.restartHold` drives the HUD ring).
 
 ### 3.5 World API (`game` is passed to every behaviour and hook)
@@ -565,7 +583,8 @@ The previous floor's boss is excluded, and bosses already met count `weight · t
 - **Screens (`screens.js`):** title, floor card, boss intro VS card, pause (item grid browsed with the arrow keys),
   the death "POST-MORTEM" (with final score and cycles), and the end-of-cycle score card.
   - Note: the pause screen registers its **own `window` keydown listener** for arrow-key browsing. It's display only,
-    and it's the one input listener outside `input.js`.
+    and it's the one keyboard listener outside `input.js`. `input.js` also has a `paste` listener on window that
+    ignores everything outside `textMode`.
 
 ### 3.10 Sprites
 - **Format:** `defineSprite(name, {palette: {ch: '#hex'}, rows: [...] | frames: [[...], ...], scale: 4})`. `.` and
@@ -1010,7 +1029,9 @@ telegraphed attacks; enemy bullets travel at 165–260 px/s.
 **Final Score** (2026-11-04): `game.score` counts events, `game.scoreTotal()` multiplies them by `B.SCORE_VALUES` (top of
 `game.js`): coins 1 (a Credit Stack is 5 coins), kills 2, Approvals used 6, items taken 25, floor bosses 80, side quests
 40, rooms cleared 4. It's shown on the post-mortem and the score card, and it survives "keep going"; there's no
-live HUD display and nothing is stored between runs. Only credits from pickups count. Kills skip anything in
+live HUD display. The only stored score is the best of today's daily run (`dailyDate`/`dailyBest`): it unlocks nothing,
+expires with the date and is shown on the title, post-mortem and score card. Only the seed for today's date counts,
+checked when the run ends, so a run crossing midnight doesn't. Only credits from pickups count. Kills skip anything in
 `B.BOSSES`, `proxy` or `ignoreForClear` parts and minions with `state.owner` (boss-refilled, so they can't be farmed);
 keep that in mind when a new enemy respawns things. Bosses and rooms count in `onRoomClear`, so the Swarm's four
 entities score once. `game.cycles` counts finished cycles and resets with the run.
@@ -1141,9 +1162,7 @@ work again, the same file-ownership split works well.
 
 ## 9. Backlog
 - Gamepad support (`navigator.getGamepads()` polled in `input.js`).
-- Seed entry on the title screen.
-- Curse rooms ("Terms of Service": pay half a heart for an item).
-- A daily seed with a local leaderboard.
+- A local leaderboard for the daily run (the daily seed and today's best exist since 2026-11-05).
 - A separate music toggle (extend the `storage` schema with validation).
 - Scale item damage with depth.
 - Better item-pool exhaustion handling (e.g. hand out `blockchain` forever).

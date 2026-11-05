@@ -128,6 +128,12 @@
  *     nach der letzten Etage die Score-Karte (nicht nach anderen Etagen), Tasten erst nach der Sperre, Enter fuehrt
  *     zu The Backlog II mit Score und Zyklen, R startet bei null; Karte zieht nichts aus game.rng; Tod zeigt Score
  *   - Terms-of-Service-Raeume: Erzeugung, Klauseln, der Handel und seine Sonderfaelle
+ *   - Seed-Dialog: nur [A-Z0-9-], hoechstens 32, Grossschreibung, Backspace, Enter leer wirkungslos, Esc, Einfuegen
+ *     nur im Dialog und gefiltert, Zeichen aus e.key (QWERTZ), M/F2 wirkungslos, gehaltenes S tippt nichts nach; der
+ *     Seed ergibt dieselbe Etage wie newRun mit ihm; URL-Seed steht schon im Feld
+ *   - Daily Run: D startet DAILY-YYYYMMDD; Storage verwirft manipulierte Werte; neuer Tag setzt den Bestwert zurueck;
+ *     nur der heutige Daily-Seed zaehlt (Tod und Score-Karte); game.rng bleibt unberuehrt
+ *   - Derselbe Seed: T nach der Sperre im Post-Mortem und auf der Score-Karte, S und zu fruehes T wirken nicht
  *   - Spezialraeume, Pause- und Todesbildschirm rendern
  * Screenshots landen in tools/out/ (nicht einchecken).
  *
@@ -5631,6 +5637,204 @@ const URL = 'file://' + path.join(ROOT, 'index.html').replace(/\\/g, '/') + '?se
     BOTA.debug.god(false);
     return out;
   }));
+  // --- Seed-Dialog, Daily Run, derselbe Seed, Zeitleiste, Wackelphase, Item-Schaden -------------------------------
+  // Eigene Seite ohne ?seed und mit eigenem Speicher: Der Titel kommt nur einmal, und der Daily-Bestwert startet leer.
+  {
+    const rp = await browser.newPage({ viewport: { width: 960, height: 640 } });
+    rp.on('console', (m) => { if (m.type() === 'error' || m.type() === 'warning') errors.push(m.type() + ': ' + m.text()); });
+    rp.on('pageerror', (e) => errors.push('pageerror: ' + e.message));
+    const rshot = (name) => rp.screenshot({ path: path.join(OUT, name + '.png') });
+    const rtap = async (key) => { await rp.keyboard.down(key); await rp.waitForTimeout(50); await rp.keyboard.up(key); await rp.waitForTimeout(50); };
+    const rtype = async (text) => { await rp.keyboard.type(text); await rp.waitForTimeout(80); };
+    const sim = async (code, key) => {
+      await rp.evaluate(([c, k]) => BOTA.input._simulate(c, true, k), [code, key]);
+      await rp.waitForTimeout(60);
+      await rp.evaluate((c) => BOTA.input._simulate(c, false), code);
+    };
+    const paste = async (text) => {
+      await rp.evaluate((t) => {
+        const data = new DataTransfer();
+        data.setData('text', t);
+        window.dispatchEvent(new ClipboardEvent('paste', { clipboardData: data, cancelable: true }));
+      }, text);
+      await rp.waitForTimeout(80);
+    };
+    const seedText = () => rp.evaluate(() => BOTA.game.seedInput);
+    const stateOf = () => rp.evaluate(() => BOTA.game.state);
+    const expectText = async (want, label) => { const got = await seedText(); if (got !== want) problems.push('Seed-Dialog, ' + label + ': "' + got + '" statt "' + want + '"'); };
+    // Fingerabdruck der Etage: Zellen, Typen, geplante Gegner
+    const fingerprint = () => rp.evaluate(() => [...BOTA.game.floor.cells.values()]
+      .map((c) => [c.x, c.y, c.type, c.room.plannedEnemies.join('+')].join(':')).sort().join('|'));
+    // Stirbt ohne Items und ohne Rettung; geht auch aus der Etagenkarte
+    const dieNow = (killer) => rp.evaluate((who) => {
+      const g = BOTA.game, p = g.player;
+      g.setState('play');
+      p.god = false; p.invuln = 0; p.guardrails = 0; p.health = 1;
+      p.hurt(2, who, g);
+      return g.state;
+    }, killer || 'a test fixture');
+
+    // URL-Seed steht schon im Feld
+    await rp.goto(URL.split('?')[0] + '?seed=ab-12');
+    await rp.waitForTimeout(300);
+    await rtap('KeyS');
+    await expectText('AB-12', 'URL-Seed');
+
+    await rp.goto(URL.split('?')[0]);
+    await rp.waitForTimeout(300);
+    await rshot('17-title-hints');
+
+    // Einfuegen ausserhalb des Dialogs wird nicht gelesen
+    await paste('OUTSIDE');
+    await rtype('q');
+    await rtap('KeyS');
+    if (await stateOf() !== 'seedEntry') problems.push('S auf dem Titel oeffnet den Seed-Dialog nicht: ' + await stateOf());
+    await expectText('', 'S selbst oder Einfuegen ausserhalb darf nichts eintragen');
+    await rtap('Enter');
+    if (await stateOf() !== 'seedEntry') problems.push('Enter bei leerem Seed startet einen Run');
+    // Gehaltenes S: Auto-Repeat tippt nichts nach
+    await rp.keyboard.down('s'); await rp.keyboard.down('s'); await rp.keyboard.down('s'); await rp.keyboard.up('s');
+    await rp.waitForTimeout(80);
+    await expectText('S', 'Auto-Repeat');
+    await rtap('Backspace');
+    // Filter, Grossschreibung, Backspace
+    await rtype('ab!c d_e.f-1');
+    await expectText('ABCDEF-1', 'Filter');
+    await rtap('Backspace');
+    await expectText('ABCDEF-', 'Backspace');
+    // Strg-Kuerzel tippen nichts
+    await rp.keyboard.down('Control'); await rp.keyboard.press('a'); await rp.keyboard.up('Control');
+    await rp.waitForTimeout(80);
+    await expectText('ABCDEF-', 'Strg+A');
+    // M und F2 sind hier Text bzw. wirkungslos
+    const before = await rp.evaluate(() => ({ muted: BOTA.audio.muted, debug: BOTA.debug.enabled }));
+    await rtype('m');
+    await rtap('F2');
+    await expectText('ABCDEF-M', 'M tippt ein M');
+    const after = await rp.evaluate(() => ({ muted: BOTA.audio.muted, debug: BOTA.debug.enabled }));
+    if (before.muted !== after.muted || before.debug !== after.debug) problems.push('M oder F2 schalten im Seed-Dialog: ' + JSON.stringify([before, after]));
+    // Zeichen kommen aus e.key: QWERTZ meldet die Y-Taste als KeyZ und umgekehrt
+    await sim('KeyZ', 'y');
+    await sim('KeyY', 'z');
+    await rp.waitForTimeout(80);
+    await expectText('ABCDEF-MYZ', 'QWERTZ');
+    // Laengenlimit, auch beim Einfuegen
+    await rtype('X'.repeat(40));
+    if ((await seedText()).length !== 32) problems.push('Seed-Dialog: Limit 32 verletzt: ' + await seedText());
+    await rshot('18-seed-entry');
+    // Esc zurueck, danach ist die Eingabe aus
+    await rtap('Escape');
+    const esc = await rp.evaluate(() => ({ s: BOTA.game.state, t: BOTA.input.textMode }));
+    if (esc.s !== 'title' || esc.t) problems.push('Esc im Seed-Dialog: ' + JSON.stringify(esc));
+    await rtap('KeyS');
+    await expectText('', 'neu geoeffnet');
+    await paste('  ab c-1!é\n');
+    await expectText('ABC-1', 'Einfuegen filtert');
+    await paste('Z'.repeat(5000));
+    if ((await seedText()).length !== 32) problems.push('Einfuegen ueberschreitet 32: ' + (await seedText()).length);
+    for (let i = 0; i < 32; i++) await rp.keyboard.press('Backspace');
+    await rp.waitForTimeout(80);
+    await expectText('', 'Backspace bis leer');
+    await rtype('share-me-42');
+    await rtap('Enter');
+    const started = await rp.evaluate(() => ({ s: BOTA.game.state, seed: BOTA.game.seed, t: BOTA.input.textMode }));
+    if (started.s !== 'floorCard' || started.seed !== 'SHARE-ME-42' || started.t) problems.push('Start aus dem Seed-Dialog: ' + JSON.stringify(started));
+    const typedFloor = await fingerprint();
+    await rp.evaluate(() => BOTA.game.newRun('SHARE-ME-42'));
+    if (await fingerprint() !== typedFloor) problems.push('Eingetippter Seed ergibt eine andere Etage als newRun mit demselben Seed');
+
+    // Daily Run: Format, Taste D, ungueltige Speicherwerte, Tageswechsel
+    problems.push(...await rp.evaluate(() => {
+      const B = BOTA, out = [];
+      if (B.dailySeed(new Date(2026, 0, 5)) !== 'DAILY-20260105') out.push('Daily-Seed: ' + B.dailySeed(new Date(2026, 0, 5)));
+      if (!/^DAILY-\d{8}$/.test(B.dailySeed()) || B.cleanSeed(B.dailySeed()) !== B.dailySeed()) out.push('Daily-Seed passt nicht zur Whitelist: ' + B.dailySeed());
+      const load = (raw) => {
+        localStorage.setItem('bota.v1', raw);
+        Object.assign(B.storage.data, { dailyDate: '', dailyBest: 0 });
+        B.storage.load();
+        return B.storage.data.dailyDate + '/' + B.storage.data.dailyBest;
+      };
+      const j = (d, b) => JSON.stringify({ dailyDate: d, dailyBest: b });
+      const cases = [
+        [j('20261105', 77), '20261105/77'], [j('2026', 5), '/0'], [j(20261105, 5), '/0'], [j('20261105\n', 5), '/0'],
+        [j('2026110x', 5), '/0'], [j('20261105', -1), '20261105/0'], [j('20261105', 1.5), '20261105/0'],
+        [j('20261105', 1e9), '20261105/0'], [j('20261105', '12'), '20261105/0'], ['{broken', '/0'],
+        [JSON.stringify({ dailyBest: 9 }), '/0'],
+      ];
+      for (const [raw, want] of cases) { const got = load(raw); if (got !== want) out.push('Storage ' + raw + ': ' + got + ' statt ' + want); }
+      Object.assign(B.storage.data, { dailyDate: '', dailyBest: 0 });
+      const s = B.storage, steps = [
+        [s.recordDaily('20261105', 100), true], [s.recordDaily('20261105', 50), false], [s.dailyBestFor('20261105'), 100],
+        [s.recordDaily('20261106', 10), true], [s.dailyBestFor('20261105'), 0], [s.dailyBestFor('20261106'), 10],
+        [s.recordDaily('20261107', 0), false], [s.data.dailyDate, '20261107'], [s.data.dailyBest, 0],
+        [s.recordDaily('nope', 5), false], [s.recordDaily('20261107', 1.5), false], [s.recordDaily('20261107', -1), false],
+        [s.data.dailyBest, 0],
+      ];
+      steps.forEach(([got, want], i) => { if (got !== want) out.push('Daily-Bestwert, Schritt ' + i + ': ' + got); });
+      Object.assign(s.data, { dailyDate: '', dailyBest: 0 });
+      return out;
+    }));
+
+    // Nur der heutige Daily-Seed zaehlt, und das Eintragen zieht nichts aus game.rng
+    await rp.evaluate(() => { const g = BOTA.game; g.newRun('NOT-DAILY'); g.score.kills = 50; });
+    await dieNow();
+    problems.push(...await rp.evaluate(() => {
+      const d = BOTA.storage.data, g = BOTA.game;
+      return !d.dailyDate && d.dailyBest === 0 && !g.death.newDailyBest ? [] : ['Fremder Seed zaehlt als Daily: ' + JSON.stringify(d)];
+    }));
+    await rp.evaluate(() => { const g = BOTA.game; g.newRun(BOTA.dailySeed(new Date(2020, 0, 1))); g.score.kills = 50; });
+    await dieNow();
+    problems.push(...await rp.evaluate(() => (BOTA.storage.data.dailyBest === 0 ? [] : ['Alter Daily-Seed zaehlt'])));
+    await rp.evaluate(() => BOTA.game.setState('title'));
+    await rp.waitForTimeout(60);
+    await rtap('KeyD');
+    problems.push(...await rp.evaluate(() => {
+      const g = BOTA.game, out = [];
+      if (g.seed !== BOTA.dailySeed() || g.state !== 'floorCard') out.push('D auf dem Titel: ' + g.seed + ', ' + g.state);
+      g.score.kills = 100;
+      const rng = g.rng.state;
+      if (g.recordDaily() !== true || BOTA.storage.dailyBestFor(BOTA.dailyKey()) !== 200) out.push('Daily-Bestwert nicht eingetragen: ' + JSON.stringify(BOTA.storage.data));
+      if (g.recordDaily() !== false) out.push('Gleicher Score zaehlt erneut als Bestwert');
+      if (g.rng.state !== rng) out.push('Daily-Bestwert zieht aus game.rng');
+      g.score.kills = 150;
+      return out;
+    }));
+    await dieNow();
+    problems.push(...await rp.evaluate(() => {
+      const g = BOTA.game;
+      return g.death.newDailyBest && BOTA.storage.data.dailyBest === 300 ? [] : ['Tod traegt den Daily-Bestwert nicht ein: ' + JSON.stringify(BOTA.storage.data)];
+    }));
+    await rp.waitForTimeout(1000);
+    await rshot('19-post-mortem-short');
+
+    // Derselbe Seed: nur T, nur nach der Sperre; S bleibt wirkungslos (Bewegungstaste)
+    await rp.evaluate(() => BOTA.game.newRun('RETRY-1'));
+    const retryFloor = await fingerprint();
+    await rp.evaluate(() => { BOTA.game.score.kills = 3; });
+    await dieNow();
+    await rtap('KeyT');
+    if (await stateOf() !== 'dead') problems.push('T wirkt waehrend der Sperre im Post-Mortem');
+    await rp.waitForTimeout(900);
+    await rtap('KeyS');
+    if (await stateOf() !== 'dead') problems.push('S beendet das Post-Mortem');
+    await rtap('KeyT');
+    const retry = await rp.evaluate(() => { const g = BOTA.game; return { seed: g.seed, s: g.state, score: g.scoreTotal(), depth: g.depth }; });
+    if (retry.seed !== 'RETRY-1' || retry.s !== 'floorCard' || retry.score !== 0 || retry.depth !== 1) problems.push('Derselbe Seed: ' + JSON.stringify(retry));
+    if (await fingerprint() !== retryFloor) problems.push('Derselbe Seed ergibt eine andere Etage');
+    await dieNow();
+    await rp.waitForTimeout(900);
+    await rtap('KeyR');
+    if (await rp.evaluate(() => BOTA.game.seed === 'RETRY-1')) problems.push('R im Post-Mortem behaelt den Seed');
+    await rp.evaluate(() => { const g = BOTA.game; g.newRun('RETRY-2'); g.setState('play'); g.showScoreCard(); });
+    await rtap('KeyT');
+    if (await stateOf() !== 'scoreCard') problems.push('T wirkt waehrend der Sperre der Score-Karte');
+    await rp.waitForTimeout(900);
+    await rtap('KeyT');
+    problems.push(...await rp.evaluate(() => { const g = BOTA.game; return g.seed === 'RETRY-2' && g.state === 'floorCard' && g.cycles === 0 ? [] : ['T auf der Score-Karte: ' + g.seed + ', ' + g.state]; }));
+
+    await rp.close();
+  }
+
   await browser.close();
 
   // --- Ergebnis ---------------------------------------------------------------

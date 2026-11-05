@@ -101,7 +101,10 @@ window.BOTA = window.BOTA || {};
   // gegen ein Schema geprueft; manipulierte/kaputte Eintraege fallen auf Defaults zurueck.
   // ---------------------------------------------------------------------------
   const STORAGE_KEY = 'bota.v1';
-  const DEFAULTS = { muted: false, bestFloor: 0, runs: 0, deaths: 0 };
+  const DAILY_DATE = /^\d{8}$/;   // Tag eines Daily Runs: YYYYMMDD
+  // dailyDate/dailyBest: bester Final Score des Daily Runs von genau einem Tag. Das ist der einzige Punktestand, der
+  // einen Run ueberlebt, und bewusst keine Meta-Progression: Er aendert nichts am Spiel und verfaellt mit dem Datum.
+  const DEFAULTS = { muted: false, bestFloor: 0, runs: 0, deaths: 0, dailyDate: '', dailyBest: 0 };
 
   B.storage = {
     data: Object.assign({}, DEFAULTS),
@@ -113,10 +116,13 @@ window.BOTA = window.BOTA || {};
         if (parsed && typeof parsed === 'object') {
           // Nur bekannte Schluessel mit passendem Typ uebernehmen
           if (typeof parsed.muted === 'boolean') this.data.muted = parsed.muted;
-          for (const k of ['bestFloor', 'runs', 'deaths']) {
+          for (const k of ['bestFloor', 'runs', 'deaths', 'dailyBest']) {
             const v = parsed[k];
             if (Number.isInteger(v) && v >= 0 && v < 1e9) this.data[k] = v;
           }
+          if (typeof parsed.dailyDate === 'string' && DAILY_DATE.test(parsed.dailyDate)) this.data.dailyDate = parsed.dailyDate;
+          // Ein Bestwert ohne gueltiges Datum gehoert zu keinem Tag und wird verworfen
+          if (!this.data.dailyDate) this.data.dailyBest = 0;
         }
       } catch (e) {
         // localStorage kann gesperrt sein (z. B. privater Modus) -> Defaults behalten
@@ -126,7 +132,45 @@ window.BOTA = window.BOTA || {};
     save() {
       try { window.localStorage.setItem(STORAGE_KEY, JSON.stringify(this.data)); } catch (e) { /* ignorieren */ }
     },
+    /** Bestwert des Daily Runs fuer den Tag `key` (YYYYMMDD); ein Wert von einem anderen Tag zaehlt als 0 */
+    dailyBestFor(key) {
+      return this.data.dailyDate === key ? this.data.dailyBest : 0;
+    },
+    /**
+     * Ergebnis eines Daily Runs eintragen. Ein neuer Tag setzt den alten Bestwert zurueck.
+     * @returns {boolean} true, wenn score den Bestwert dieses Tages verbessert hat
+     */
+    recordDaily(key, score) {
+      if (typeof key !== 'string' || !DAILY_DATE.test(key)) return false;
+      if (!Number.isInteger(score) || score < 0 || score >= 1e9) return false;
+      const newDay = this.data.dailyDate !== key;
+      if (newDay) { this.data.dailyDate = key; this.data.dailyBest = 0; }
+      const better = score > this.data.dailyBest;
+      if (better) this.data.dailyBest = score;
+      if (better || newDay) this.save();
+      return better;
+    },
   };
+
+  // ---------------------------------------------------------------------------
+  // Seeds
+  // SICHERHEIT: Jede Seed-Eingabe (Tastatur, Einfuegen) laeuft durch cleanSeed, das Ergebnis passt also immer zur
+  // Whitelist [A-Z0-9-]{0,32}. Lange Eingaben werden vor dem Filtern gekappt, damit eine riesige Zwischenablage
+  // nichts kostet.
+  // ---------------------------------------------------------------------------
+  B.cleanSeed = function (text) {
+    return String(text === undefined || text === null ? '' : text).slice(0, 256)
+      .replace(/[^A-Za-z0-9-]/g, '').toUpperCase().slice(0, 32);
+  };
+
+  /** Tag als YYYYMMDD in Ortszeit (ein Daily Run wechselt um Mitternacht des Spielers, nicht um Mitternacht UTC) */
+  B.dailyKey = function (date) {
+    const d = date || new Date();
+    return String(d.getFullYear()).padStart(4, '0') + String(d.getMonth() + 1).padStart(2, '0') + String(d.getDate()).padStart(2, '0');
+  };
+
+  /** Seed des Daily Runs: gleicher Tag, gleicher Seed, also gleiche Karten fuer das ganze Team */
+  B.dailySeed = function (date) { return 'DAILY-' + B.dailyKey(date); };
 
   // ---------------------------------------------------------------------------
   // URL-Parameter (?seed=abc&debug)
