@@ -206,7 +206,8 @@ Live state is under `BOTA.game` (`.player`, `.room`, `.floor`, `.depth`, `.state
   floor 8, on a first visit); it has 8 arms of
   5 segments that pass 60 % of their damage to the knot and stay inside the room; every sweep, slam, tip shot and
   stream has its telegraph first; an arm merges every 12 % of HP (at least one stays), phase 2 starts once at 50 %
-  with opposing streams; arms hurt on contact along their whole length; the death is a single boss death and no
+  with opposing streams that take turns with the arms (never a stream and an arm attack together, never two arms);
+  arms hurt on contact along their whole length; the death is a single boss death and no
   segments survive it;
 - the Final Score: the values match `B.SCORE_VALUES`; coins count by value (not hearts or Seed Funding), kills leave
   out bosses, boss segments and boss minions, Approvals count at doors and locked chests, an item counts once (taking a
@@ -837,7 +838,9 @@ a floor never has the predecessor as a side quest (the side quests keep the reti
 2026-11-02, which gives floor 3 to the Octopus Merge and floor 2 to Monolith, Stakeholder, Loop and Swarm.
 - **Octopus Merge** works like the Infinite Loop: the knot is the boss, its 8 arms are 5 `octo_arm` segments each
   (`proxy`, 60 %). The knot positions them every tick and draws the arms itself; only the tip (a commit dot) draws
-  as a sprite. Arm contact is checked along the drawn line, not per segment. Speed-ups from merges (`state.sm`)
+  as a sprite. Arm contact is checked along the drawn line, not per segment. Phase 2 runs in turns (2026-11-05, after playtesters
+  found it overtuned): a stream, then `P2_ARMS` single arm attacks, each waiting until the last arm is back at rest, then
+  the next stream; tip shots only in the pauses. Before that, streams and arms overlapped 40–45 % of the time. Speed-ups from merges (`state.sm`)
   shorten pauses and swings, never telegraphs.
 - **Side quests** (floor 8+, §3.6 step 10): Monolith, Rogue Agent Swarm, Infinite Loop (also after its `maxFloor`)
   and Stakeholder can appear as a combat-room encounter at `B.ENCOUNTER_HP` (0.5) × the floor boss HP of that depth,

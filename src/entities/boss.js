@@ -1807,6 +1807,10 @@
   // Rest 10 % schneller (s.sm wirkt auf Bewegung und alle Takte).
   // Phase 2 (50 %): "CONFLICT" — Konfliktmarker an den Waenden, der Knoten spuckt periodisch zwei
   // gegenlaeufige Schussstroeme (rotierend; Telegraph: Knoten glueht, zwei Strahlen zeigen die Startrichtungen).
+  // Phase 2 laeuft in Zuegen, damit sich die Trefferflaechen nicht stapeln: ein Strom, dann OCTO.P2_ARMS einzelne
+  // Arm-Angriffe (immer nur einer, der naechste erst, wenn der Arm wieder ruht), dann der naechste Strom.
+  // Spitzen-Schuesse kommen nur in den Pausen dazwischen. Vorher lief alles gleichzeitig (Playtest 2026-11-05:
+  // Strom und Arme ueberlappten 40–45 % der Zeit, im Schnitt 16 Schuesse im Raum).
   // Kontaktschaden der Arme: der Knoten prueft den Abstand des Spielers zur Armlinie (1 halbes Herz), der Knoten
   // selbst hat den normalen Boss-Kontaktschaden (2).
   // Fairness: Schuesse 170–200 px/s, jeder Schwung/Schlag/Schuss/Strom hat einen Telegraph von >= 0.45 s.
@@ -1820,8 +1824,9 @@
     SLAM_TELL: 0.7, SLAM_PULL: 80, SLAM_TIME: 0.16, SLAM_HOLD: 0.4, SLAM_REACH: 400,
     RETRACT: 0.5, MERGE_STEP: 0.12, MERGE_SPEED: 340,
     TIP_TELL: 0.45, TIP_EVERY: [1.25, 1.0],
-    ATK_EVERY: [2.1, 1.6],
-    STREAM_IDLE: 3.2, STREAM_TELL: 0.7, STREAM_TIME: 2.6, STREAM_GAP: 0.13, STREAM_SPIN: 0.75,
+    ATK_EVERY: [2.1, 1.0],    // Phase 1: Takt; Phase 2: Pause, nachdem der vorige Arm wieder ruht
+    P2_ARMS: 3, P2_GAP: 0.6,  // Phase 2: Arm-Angriffe je Zug, Pause beim Wechsel zwischen Strom und Armen
+    STREAM_TELL: 0.7, STREAM_TIME: 2.6, STREAM_GAP: 0.13, STREAM_SPIN: 0.75,
     GRACE: 1.5,               // Schonfrist nach dem Intro: Arme entrollen sich, keine Angriffe
   };
   const OCTO_TIP_SHOT = { color: '#ffcf4d' };
@@ -1844,6 +1849,8 @@
   }
 
   const octoActive = (s) => s.arms.filter((a) => a.mode !== 'gone' && a.mode !== 'merge');
+  /** Greift gerade ein Arm an (inkl. Telegraph und Rueckzug)? */
+  const octoArmBusy = (s) => s.arms.some((a) => a.mode !== 'idle' && a.mode !== 'gone' && a.mode !== 'merge');
   const octoTip = (arm) => arm.segs[arm.segs.length - 1];
 
   /** Arm-Plaetze: gleichmaessig um den Knoten, in Armreihenfolge, langsam rotierend */
@@ -1918,6 +1925,7 @@
       s.streamAng = 0;
       s.streamDir = 1;
       s.streamGap = 0;
+      s.armTurns = 0;                   // Phase 2: offene Arm-Angriffe bis zum naechsten Strom
       s.markerT = 0;
       e.aoeDedupe = true;               // eine Explosion ueber viele Armsegmente zaehlt nur einmal
       e.drawLayer = -1;                 // Knoten und Arme liegen wie Wurzeln unter allem anderen
@@ -1986,11 +1994,13 @@
 
       // ---- Schussstroeme (Phase 2) ----
       const streaming = s.stream === 'tell' || s.stream === 'fire';
+      const armBusy = octoArmBusy(s);
       if (s.stream !== 'off') {
-        // Nur die Pause zwischen zwei Stroemen wird mit den Merges kuerzer; Telegraph und Strom selbst nicht
-        // (sonst schrumpfte die Warnung unter die Fairness-Grenze)
-        s.streamT -= s.stream === 'idle' ? dt * sm : dt;
-        if (s.stream === 'idle' && s.streamT <= 0) {
+        // Der naechste Strom wartet, bis die Arme ihren Zug beendet haben. Nur diese Pause wird mit den Merges
+        // kuerzer; Telegraph und Strom selbst nicht (sonst schrumpfte die Warnung unter die Fairness-Grenze)
+        if (s.stream !== 'idle') s.streamT -= dt;
+        else if (s.armTurns <= 0 && !armBusy) s.streamT -= dt * sm;
+        if (s.stream === 'idle' && s.streamT <= 0 && s.armTurns <= 0 && !armBusy) {
           s.stream = 'tell';
           s.streamT = OCTO.STREAM_TELL;
           s.streamAng = AI.angleTo(e, p) + Math.PI / 2;   // startet quer zum Spieler (nicht direkt auf ihn)
@@ -2009,22 +2019,33 @@
           }
           if (s.streamT <= 0) {
             s.stream = 'idle';
-            s.streamT = OCTO.STREAM_IDLE;
+            s.streamT = OCTO.P2_GAP;
             s.streamDir = -s.streamDir;
+            s.armTurns = OCTO.P2_ARMS;
+            s.atkT = OCTO.P2_GAP;
           }
         }
       }
 
       // ---- Angriffe der Arme (Schwung / Schlag) ----
       if (s.grace <= 0) {
-        s.atkT -= dt * sm * (streaming ? 0.5 : 1);
-        if (s.atkT <= 0) {
-          const busy = s.arms.filter((a) => a.mode !== 'idle' && a.mode !== 'gone' && a.mode !== 'merge').length;
-          if (busy < (p2 ? 2 : 1)) octoStartAttack(e, game);
-          s.atkT = AI.cooldown(game, OCTO.ATK_EVERY[p2 ? 1 : 0]) * game.rng.float(0.85, 1.15);
+        if (!p2) {
+          s.atkT -= dt * sm;
+          if (s.atkT <= 0) {
+            if (!armBusy) octoStartAttack(e, game);
+            s.atkT = AI.cooldown(game, OCTO.ATK_EVERY[0]) * game.rng.float(0.85, 1.15);
+          }
+        } else if (!streaming && s.armTurns > 0 && !armBusy) {
+          // Phase 2: die Pause zaehlt erst, wenn der vorige Arm wieder ruht (siehe Kopfkommentar)
+          s.atkT -= dt * sm;
+          if (s.atkT <= 0) {
+            octoStartAttack(e, game);
+            s.armTurns--;
+            s.atkT = AI.cooldown(game, OCTO.ATK_EVERY[1]) * game.rng.float(0.85, 1.15);
+          }
         }
-        // Spitzen-Schuesse (pausieren waehrend der Stroeme)
-        if (!streaming) {
+        // Spitzen-Schuesse (pausieren waehrend der Stroeme, in Phase 2 auch waehrend der Arm-Angriffe)
+        if (!streaming && !(p2 && armBusy)) {
           s.tipT -= dt * sm;
           if (s.tipT <= 0) {
             const idle = s.arms.filter((a) => a.mode === 'idle' && a.tipTell <= 0 && a.len > 60);

@@ -42,7 +42,8 @@
  *     Beute und ohne Kill
  *   - Octopus Merge: nur auf Forgotten Branches; 8 Arme a 5 Segmente (proxy 60 %), bleiben im Raum; jeder Schwung,
  *     Schlag, Spitzen-Schuss und Strom mit Telegraph; Merges je 12 % HP (mind. ein Arm), Phase 2 bei 50 % mit
- *     gegenlaeufigen Stroemen; Kontakt entlang des Arms; genau ein Boss-Tod, danach keine Segmente mehr
+ *     gegenlaeufigen Stroemen, die in Zuegen laufen (nie Strom und Arm zugleich, nie zwei Arme); Kontakt entlang des
+ *     Arms; genau ein Boss-Tod, danach keine Segmente mehr
  *   - Sandbox Borders (Etage 6): Kakteen nur dort, nur aus Felsen, nie vor Tueren, Anteil wie theme.cacti; Kaktus
  *     sticht einmal (dann Unverwundbarkeit) mit Rueckstoss, ist solide, Explosionen sprengen ihn; Sprites vorhanden
  *   - Sandbox-Borders-Gegner: Deprecation Warning x2.5 und Hallucination x2 dort; Spinlock (Glieder schirmen ab, Ring,
@@ -1285,13 +1286,23 @@ const URL = 'file://' + path.join(ROOT, 'index.html').replace(/\\/g, '/') + '?se
       // 7) Phase 2 bei 50 %: genau ein bossPhase, 4 Arme uebrig; Stroeme mit Telegraph, immer paarweise gegenlaeufig
       O.hp = O.maxHp * 0.49;
       shots.length = 0;
-      let tellT = 0, sawFireAfterTell = false;
-      stepAll(420, () => {
+      let tellT = 0, sawFireAfterTell = false, clash = 0, twoArms = 0, armStarts = 0, lastArm = false;
+      const ATTACK = ['sweepTell', 'sweep', 'slamTell', 'slam', 'hold', 'retract'];
+      stepAll(1200, () => {
         inRoom();
         if (S.stream === 'tell') tellT += DT;
         if (S.stream === 'fire' && tellT >= 0.6) sawFireAfterTell = true;
         if (S.stream === 'idle') tellT = 0;
+        // Phase 2 laeuft in Zuegen: nie Strom und Arm zugleich, nie zwei Arme
+        const n = S.arms.filter((a) => ATTACK.includes(a.mode)).length;
+        if (n && S.stream !== 'idle') clash++;
+        if (n > 1) twoArms++;
+        if (n && !lastArm) armStarts++;
+        lastArm = n > 0;
       });
+      if (clash) out.push('Octopus Merge: Strom und Arm-Angriff ' + clash + ' Ticks gleichzeitig');
+      if (twoArms) out.push('Octopus Merge: zwei Arm-Angriffe ' + twoArms + ' Ticks gleichzeitig');
+      if (armStarts < 3) out.push('Octopus Merge: nur ' + armStarts + ' Arm-Angriffe in Phase 2');
       if (S.phase !== 2 || ev.filter((x) => x === 'bossPhase').length !== 1) out.push('Octopus Merge: Phase 2 nicht (genau einmal) erreicht');
       if (active() !== 4) out.push('Octopus Merge: ' + active() + ' statt 4 Arme bei 49 %');
       const stream = shots.filter((x) => x.id === 'octopus_merge');
