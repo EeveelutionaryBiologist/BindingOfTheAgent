@@ -326,6 +326,12 @@
     // Kauf: "Ka-tsching"
     purchase() { noise({ dur: 0.06, vol: 0.08, filter: 'highpass', f: 4000 }); voice({ f: 1319, dur: 0.06, type: 'square', vol: 0.06, delay: 0.04 }); voice({ f: 1760, dur: 0.3, type: 'square', vol: 0.06, delay: 0.1 }); },
     // Abgelehnt: Fehler-Brummen (zwei Pulse)
+    // Unterschrift: zwei Federstriche, dann ein dumpfer Stempel (Terms of Service)
+    sign() {
+      noise({ dur: 0.09, vol: 0.05, filter: 'bandpass', f: 3200 });
+      noise({ dur: 0.12, vol: 0.05, filter: 'bandpass', f: 2400, delay: 0.1 });
+      voice({ f: 98, f2: 62, dur: 0.26, type: 'triangle', vol: 0.16, delay: 0.25 });
+    },
     denied() { voice({ f: 116, dur: 0.1, type: 'sawtooth', vol: 0.07 }); voice({ f: 110, dur: 0.14, type: 'sawtooth', vol: 0.07, delay: 0.12 }); },
     // Aufgeschlossen: Klick + steigende Toene
     unlock() { noise({ dur: 0.03, vol: 0.1, filter: 'highpass', f: 3000 }); arp([79, 86], 0.07, 'triangle', 0.12, 0.2); },
@@ -804,6 +810,7 @@
   on('playerDeath', () => { p('playerDeath'); music.stop(0.6); });
   on('pickup', (e) => p(PICKUP_SOUND[e.type] || 'pickup'));
   on('itemGet', () => p('itemGet'));
+  on('termsSigned', () => p('sign'));          // Terms of Service unterschrieben
   on('doorsOpen', (e) => { if (isCurrentRoom(e.room)) p('doorOpen'); });
   on('doorsClose', (e) => { if (isCurrentRoom(e.room)) p('doorClose'); });
   on('explosion', () => p('explosion'));

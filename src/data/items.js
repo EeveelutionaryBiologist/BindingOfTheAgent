@@ -793,7 +793,7 @@
   // ===========================================================================
 
   /** Welcher Item-Pool passt zum Raumtyp (fuer Regenerate Response) */
-  const POOL_BY_ROOM = { treasure: 'treasure', shop: 'shop', boss: 'boss', secret: 'secret' };
+  const POOL_BY_ROOM = { treasure: 'treasure', shop: 'shop', boss: 'boss', secret: 'secret', terms: 'treasure' };
 
   I.regenerate_response = {
     name: 'Regenerate Response', tagline: 'Reroll items',
@@ -806,7 +806,8 @@
       const room = g.room;
       const pool = POOL_BY_ROOM[room.type] || 'treasure';
 
-      // 1) Item-Podeste mit Item neu wuerfeln (Shop-Preise passend zum neuen Item)
+      // 1) Item-Podeste mit Item neu wuerfeln (Shop-Preise passend zum neuen Item; ein Terms-Podest behaelt
+      //    seine Klausel und seinen Preis in Herzen, denn pd.terms bleibt unberuehrt)
       const peds = room.pickups.filter((pk) => B.Pedestal && pk instanceof B.Pedestal && pk.itemId && !pk.dead);
       if (peds.length) {
         for (const pd of peds) {

@@ -61,7 +61,7 @@ safeguard). No server is needed. If you want one anyway, any static server works
 
 ### Scriptable debug API (works with or without the overlay)
 `BOTA.debug.god(on?)`, `.giveItem(id?)`, `.spawn(enemyId, x?, y?)`, `.spawnBoss(bossId, x?, y?)`, `.killAll()`,
-`.nextFloor()`, `.reveal()`, `.gotoRoom('start'|'treasure'|'shop'|'boss'|'secret'|'encounter')`, `.resources(n)`
+`.nextFloor()`, `.reveal()`, `.gotoRoom('start'|'treasure'|'shop'|'boss'|'secret'|'terms'|'encounter')`, `.resources(n)`
 (`'encounter'` = the floor's first side-quest room, floor 8+).
 Live state is under `BOTA.game` (`.player`, `.room`, `.floor`, `.depth`, `.state`, `.rng`, `.followers`).
 
@@ -244,6 +244,13 @@ Live state is under `BOTA.game` (`.player`, `.room`, `.floor`, `.depth`, `.state
   explosions, and flushes 5 shots in the locked direction after the full telegraph, then empties. All shots stay at
   165–260 px/s, Cosine Similarity and Bit Bucket draw nothing from `game.rng`, `killAll` leaves nothing, and bus listener
   counts don't change;
+- Terms of Service rooms: none on floor 1, 30–65 % of floors otherwise; one per floor at most, dead ends only, never the
+  key, README, encounter, boss, secret or start room; a `special` layout with a free centre and no enemies, props, cacti,
+  loot or pipe; every other room identical to the same floor without it, deterministic per seed. The deal takes exactly 2
+  halves and the clause once, guardrails don't pay, no hit event, the item is scored once, refused at 2 and 1 halves,
+  3 halves leaves 1; running through or standing still doesn't sign; god mode pays and Retry with Backoff doesn't
+  interfere; a reroll keeps the clause; a swapped active item is free and doesn't score again; the entry banner gives
+  way to the contract, other banners don't; signing by keyboard works in the real loop and shows on the timeline;
 - the door transition, special rooms, pause screen and death screen work.
 
 Screenshots go to `tools/out/` (scratch; don't commit or ship). One-time setup without admin rights:
@@ -314,6 +321,7 @@ depend on load order.
 | `Room`, `Floor` | world | room model and floor generator |
 | `Entity, Projectile, Bomb, Player, Enemy, Boss, AI, BossHelpers` | entities | gameplay classes and AI helpers |
 | `Pickup, Pedestal, Trapdoor, rollRandomPickup, openChest, rerollPickup, drawSpriteIfExists` | pickup | economy objects |
+| `TERMS, rollTermsClause, TermsNotice` | pickup | Terms of Service deal: numbers, clause roll, contract overlay (§3.8) |
 | `syncFollowers, Duck, UnitTest` | familiar | followers (Rubber Duck, Unit Tests orbitals) |
 | `FX, Particle, Leaf` | effects | visual effects API (`Leaf` = falling leaf, used by the branches family) |
 | `itemPrice, itemFx` | items | price helper, pop-up text fallback |
@@ -403,6 +411,14 @@ game.score · game.cycles`
    `cacti` share (Sandbox Borders: 0.5), never in the 3 × 3 area in front of a door. Cacti are as solid as rocks, so
    walkability is unchanged. `game.checkCactus` (from `updatePlay`, not while flying) pricks the player for half a
    heart with knockback when their circle touches a cactus tile; `explode` breaks cacti like rocks.
+
+13. `assignTerms` (from floor 2, own stream `':terms'`, always the same number of draws, runs **last**) turns one dead-end
+   `normal` room into a **Terms of Service** room on 50 % of floors (`TERMS_CHANCE`; about 43 % on floor 2, where a free
+   dead end is sometimes missing). Candidates have exactly one visible door, of kind `normal`, and aren't the key room,
+   README room or an encounter; a hidden secret door may stay. It sets `cell.type` and `room.type` to `'terms'`, re-stamps a
+   `special` layout, empties enemies, loose loot, pipe and props, and sets the visible edge's kind to `'terms'` (unlocked).
+   `floor.termsRoom` holds the cell. It must stay last: the `':props'` and `':cacti'` streams span all rooms and draw per
+   layout, so converting earlier would shift other rooms.
 
 **Boss choice:** each room build still pre-rolls `bossId` with `B.rollBoss` (so the floor RNG is unchanged), but
 `game.enterFloor` then calls `assignFloorBoss`, which replaces it with `B.rollBossVaried(rng, depth, game.bossHistory)`.
@@ -508,6 +524,14 @@ The previous floor's boss is excluded, and bosses already met count `weight · t
     and all share `e.bossGroup` (one array), which the HUD sums into a single health bar. Non-final members set
     `isBoss = false` in `onDeath`, so only the last death plays the boss explosion and fanfare.
 - **`Pickup / Pedestal / Trapdoor`** (`entities/pickup.js`):
+  - **Terms of Service:** `B.Pedestal` takes `opts.terms = {clause}`; `pd.terms` keeps `clause, readT, touching`.
+    `Pedestal.updateTerms` needs `B.TERMS.readTime` (1 s) within `readRadius` (150 px), and signing happens only on stepping
+    onto the pedestal (rising edge), so running through doesn't sign. The cost `B.TERMS.cost` (2 halves) comes straight off
+    `player.health`, not through `hurt()`: no guardrails, i-frames, `onHurt` or `playerHurt`, and god mode pays too. At
+    health ≤ 2 it's refused (`denied`, reason `terms`), so it's never lethal and `onLethal` never runs. Clause `add` values go
+    into `player.bonus`. Signing sets `pd.terms = null`, so a swapped active item stays free; Regenerate Response keeps the
+    clause. `B.TermsNotice` (overlay in `room.pickups`, `drawLayer` 5) draws the contract on the side away from the player
+    and clears the room's entry banner, which would cover it.
   - A pickup type is `{name, sprite, color, r, weight, price?, heavy?, keepShell?, collect(player, game, pickup) → bool}`.
     Returning false means it isn't picked up (e.g. full HP), and the pickup is nudged away.
   - A `price` turns a pickup or pedestal into a shop item.
@@ -550,7 +574,7 @@ The previous floor's boss is excluded, and bosses already met count `weight · t
 - **Naming:**
   - `player_{down,up,left,right}` (4 walk frames), `player_hurt`, `player_itemget`, `player_dead`
   - `tile_{rock(3 frames),block,pit,spikes}`, `tile_cactus` and `tile_sandstone` (3 frames each), `tile_border`
-    (3 frames: barrier, fence across, fence down), `hud_*`, `map_{boss,treasure,shop,secret}`, `pipe` (2 frames, generated),
+    (3 frames: barrier, fence across, fence down), `hud_*`, `map_{boss,treasure,shop,secret,terms}`, `pipe` (2 frames, generated),
     `tile_mem_zero` and `tile_mem_one` (2 frames; the Memory Hog's reserved floor, a drawn overlay, not real tiles),
     `prop_{crate,bush,package,carton}` (frame 1 = damaged)
   - `item_<id>`, `pickup_<type>`, `pedestal`, `trapdoor`, `bomb`, `familiar_duck`, `orbital_test`
@@ -582,12 +606,13 @@ Payloads usually include `game, x, y` and often `color`.
 | `bossExit` (`kind`: segfault/parachute/oom) | Megalith, Shareholder, Memory Hog (`onDeath`) | effects ("SEGMENTATION FAULT", golden parachute, "KILLED (out of memory)") |
 | `playerHurt`, `playerDeath` | player, game | audio, effects, HUD |
 | `pickup` (`type`), `itemGet` (`id, def`), `purchase`, `chestOpen` | pickup, player | audio, effects, HUD |
-| `denied` (`reason`: credits/locked/bomb/charge/encrypted) | various | audio, effects |
+| `denied` (`reason`: credits/locked/bomb/charge/encrypted/terms) | various | audio, effects |
 | `roomEnter` (`first`), `roomClear`, `doorsOpen`, `doorsClose`, `unlock`, `secretFound`, `rockBreak` (`kind`: rock/cactus) | game, room | audio, effects |
 | `cactusPrick` | game (`checkCactus`) | audio (`prick`), effects (spines) |
 | `enemyOverflow` (`r`) | Overflow Buffer (bursts) | audio (`overflowBurst`), effects (splash, glass shards) |
 | `enemyChomp` (`r, ate`), `enemyBounce`, `enemyUnpack` | Honeypot, Rolling Release | audio (`chomp`, `bump`, `unbox`), effects (cyan ring, dust, packing peanuts) |
 | `enemySwallow` (`fill, color`), `enemyFlush` (`r, color`) | Bit Bucket | audio (`swallow`, `flush`), effects (small burst and ring; ring and burst) |
+| `termsSigned` (`x, y, clause, item`) | Terms pedestal | audio (`sign`), effects (`-♥♥`, ring, sparkles), `game.runLog` |
 | `explosion` (`radius`), `bombPlaced`, `projectileEnd` (`team, impact`) | game, projectile, player | audio, effects |
 | `shotTurn` | projectile (Sharp Left Turn) | effects (small spark) |
 | `activeUsed`, `activeCharged` | player | audio, HUD |
@@ -598,7 +623,7 @@ Rule: audio and effects **only listen**. Game logic never calls them directly, e
 are game state.
 
 ### 3.12 Audio (`core/audio.js`) and effects (`entities/effects.js`)
-- **Audio:** 85 synthesized SFX in total, plus a looping rain bed (two filtered noise layers) that `music.start` switches
+- **Audio:** 89 synthesized SFX in total, plus a looping rain bed (two filtered noise layers) that `music.start` switches
   on for themes with `ambient: 'rain'` and `music.stop` switches off. Every sound has a name; `audio.names()` lists them.
   - Bus routing: voices → sfx/music bus → master → compressor.
   - Per-name rate limits (`RATE`) and a 40-voice cap keep it from getting noisy.
@@ -1002,7 +1027,7 @@ a random drop; see §3.6 step 8).
 checks the format and that all 4 door tiles are clear and mutually reachable. `{strict: true}` adds three house rules:
 every floor tile must be reachable, there must be no spikes next to doors, and special rooms need a clear centre.
 
-**Text** (`B.TEXT`): `FLOORS` (11), `EPITAPHS` (25), `TAGLINES`, `SHOP_LINES`, `ENCOUNTER_LINES` (side-quest banner), `CLEAR_QUIPS`, `DENIED`, `PICKUP`, `EVENTS`, `RANKS`,
+**Text** (`B.TEXT`): `FLOORS` (11), `EPITAPHS` (25), `TAGLINES`, `SHOP_LINES`, `ENCOUNTER_LINES` (side-quest banner), `TERMS_LINES` (entry banner), `TERMS_CLAUSES` (6 real clauses with `add`, 6 jokes; each has `sec`, `text`, `fx`; `B.rollTermsClause` picks a real one 60 % of the time), `CLEAR_QUIPS`, `DENIED`, `PICKUP`, `EVENTS`, `RANKS`,
 plus per-floor extras `THEME_QUIPS` / `THEME_EPITAPHS` keyed by theme `key` (currently `branches`, `sandbox` and `context`),
 and `CONTEXT_WHISPERS` (The Context Limit's floor fragments and whispers).
 
@@ -1035,6 +1060,9 @@ for a second HUD line under the boss bar. `boss.js` is long; new bosses can go i
 
 **Add a layout:** use `L(id, ['normal'], weight, [7 rows × 13 chars], bias?)` in `layouts.js`. The characters are
 `. r b p s e` (`e` marks a preferred spawn point). It must pass `validateLayout(l, {strict: true})`.
+
+**Add a Terms of Service clause:** add an entry to `B.TEXT.TERMS_CLAUSES` with a unique `sec` and an honest `fx`, because the
+contract states the effect in plain words. A real clause's `add` must be a penalty (the smoke test enforces this).
 
 **Add a sound:** add an entry to `SOUNDS` in `audio.js` built from `voice({...})` / `noise({...})` / `arp(...)`, then
 hook it with `on('event', () => p('name'))`. Rate-limit it in `RATE` if it can fire every frame.

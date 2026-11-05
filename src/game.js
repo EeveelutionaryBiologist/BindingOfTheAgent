@@ -213,6 +213,7 @@
       B.bus.emit('roomEnter', { game: this, room, first });
       if (first && room.type === 'boss' && room.enemies.some((e) => e.isBoss)) this.pendingBossIntro = true;
       if (first && room.type === 'shop' && B.TEXT.SHOP_LINES) this.banner('Shop', this.rng.pick(B.TEXT.SHOP_LINES));
+      if (first && room.type === 'terms') this.banner('Terms of Service', B.TEXT.pick(B.TEXT.TERMS_LINES)); // nur Text: kein game.rng
     }
 
     /** Raumwechsel mit Slide-Animation durch die Tuer in Richtung dir */
@@ -306,6 +307,13 @@
             const w = wares[i % wares.length];
             this.spawnPickup(w[0], room.tileCenter(col, 4).x, center.y, { price: w[1] }, room);
           });
+          room.cleared = true;
+          break;
+        }
+        case 'terms': {
+          // Ein Item, das ein Herz und eine Klausel kostet (Podest in pickup.js, Raum: dungeon.js assignTerms)
+          const pd = this.spawnPedestal(this.rollItem('treasure'), center.x, center.y, { terms: { clause: B.rollTermsClause(rng) } }, room);
+          room.pickups.push(new B.TermsNotice(pd));
           room.cleared = true;
           break;
         }

@@ -127,6 +127,7 @@
  *     Approvals an Tuer und Truhe, Items nur einmal (kein Tausch-Farmen), Etagen-Boss und Zwischenboss genau einmal;
  *     nach der letzten Etage die Score-Karte (nicht nach anderen Etagen), Tasten erst nach der Sperre, Enter fuehrt
  *     zu The Backlog II mit Score und Zyklen, R startet bei null; Karte zieht nichts aus game.rng; Tod zeigt Score
+ *   - Terms-of-Service-Raeume: Erzeugung, Klauseln, der Handel und seine Sonderfaelle
  *   - Spezialraeume, Pause- und Todesbildschirm rendern
  * Screenshots landen in tools/out/ (nicht einchecken).
  *
@@ -5350,6 +5351,286 @@ const URL = 'file://' + path.join(ROOT, 'index.html').replace(/\\/g, '/') + '?se
   await page.waitForTimeout(700);
   await shot('17-deep-enemies');
   for (let i = 0; i < 3; i++) await page.evaluate(() => BOTA.debug.killAll());
+  // --- Terms of Service: Erzeugung ---------------------------------------------
+  problems.push(...await page.evaluate(() => {
+    const B = BOTA, out = [], T = B.TILES;
+    const proto = B.Floor.prototype, real = proto.assignTerms;
+    const seedOf = (d, i) => B.hashString('TERMS' + d + ':' + i);
+    const snap = (c) => ({
+      type: c.type, dist: c.dist, layout: c.room.layout && c.room.layout.id, tiles: Array.from(c.room.tiles).join(''),
+      enemies: c.room.plannedEnemies.join(), loot: c.room.looseLoot.join(), pipe: c.room.hasPipe, key: c.room.guaranteedKey,
+      readme: c.room.hasReadme, boss: c.room.encounterBoss, bossId: c.room.bossId,
+      props: JSON.stringify([...c.room.props.entries()]),
+      doors: Object.keys(c.room.doors).sort().map((k) => { const e = c.room.doors[k].edge; return k + ':' + e.kind + ':' + e.locked + ':' + e.hidden; }).join(),
+    });
+    // Ohne den Raum: dieselbe Etage mit abgeschaltetem assignTerms
+    const without = (d, seed) => {
+      proto.assignTerms = function () { this.termsRoom = null; };
+      try { return new B.Floor(d, seed); } finally { proto.assignTerms = real; }
+    };
+    for (const d of [1, 2, 3, 4, 5, 6, 7, 8, 10, 11, 14, 20]) {
+      const N = 200;
+      let hits = 0;
+      for (let i = 0; i < N; i++) {
+        const seed = seedOf(d, i), f = new B.Floor(d, seed), cell = f.termsRoom;
+        const types = [...f.cells.values()].map((c) => c.type);
+        if (types.filter((t) => t === 'terms').length !== (cell ? 1 : 0)) out.push('Terms: Raumzahl falsch auf Etage ' + d);
+        for (const t of ['start', 'boss', 'treasure', 'shop']) if (!types.includes(t)) out.push('Terms: ' + t + ' fehlt auf Etage ' + d);
+        if (d >= 2 && !f.keyRoom) out.push('Terms: Schluessel-Raum fehlt auf Etage ' + d);
+        if (d >= 2 && f.keyRoom.type !== 'normal') out.push('Terms: Schluessel-Raum umgebaut');
+        if (f.readmeRoom && f.readmeRoom.type !== 'normal') out.push('Terms: README-Raum umgebaut');
+        if (f.encounterRooms.some((c) => c.type !== 'normal' || !c.room.encounterBoss)) out.push('Terms: Begegnung umgebaut');
+        // Alles ausserhalb des Raums bleibt exakt wie ohne ihn (nur die Kante zum Raum heisst anders)
+        const base = without(d, seed);
+        for (const c of f.cells.values()) {
+          const o = base.get(c.x, c.y), a = snap(c), b = snap(o);
+          if (c === cell) {
+            if (o.type !== 'normal') out.push('Terms: Raum war kein normaler Raum, sondern ' + o.type);
+            continue;
+          }
+          a.doors = a.doors.replace(/:terms:/g, ':normal:');
+          for (const k of Object.keys(a)) if (a[k] !== b[k]) out.push('Terms aendert ' + k + ' eines anderen Raums auf Etage ' + d);
+        }
+        const again = new B.Floor(d, seed);
+        const same = cell ? again.termsRoom && again.termsRoom.x === cell.x && again.termsRoom.y === cell.y && snap(again.termsRoom).tiles === snap(cell).tiles : !again.termsRoom;
+        if (!same) out.push('Terms nicht deterministisch auf Etage ' + d);
+        if (!cell) continue;
+        hits++;
+        const room = cell.room;
+        if (room.type !== 'terms') out.push('Terms: room.type ' + room.type);
+        const open = Object.values(room.doors).filter((x) => !x.edge.hidden);
+        if (open.length !== 1) out.push('Terms: keine Sackgasse, ' + open.length + ' Tueren');
+        if (open.some((x) => x.edge.kind !== 'terms' || x.edge.locked)) out.push('Terms: Tuer falsch ' + JSON.stringify(open[0].edge));
+        if (open.some((x) => !['normal', 'start'].includes(x.target.type))) out.push('Terms: Nachbar ist ' + open[0].target.type);
+        if (room.plannedEnemies.length || room.looseLoot.length || room.hasPipe || room.guaranteedKey || room.hasReadme || room.encounterBoss) out.push('Terms: Raum hat Kampf- oder Sonderinhalt');
+        if (room.props.size) out.push('Terms: Raum hat Objekte');
+        if (Array.from(room.tiles).some((t) => t === T.PROP || t === T.CACTUS)) out.push('Terms: Objekt- oder Kaktuskachel');
+        if (!room.layout || !room.layout.tags.includes('special')) out.push('Terms: kein special-Layout');
+        if (room.tileAt(7, 4) !== T.FLOOR) out.push('Terms: Mitte nicht frei');
+      }
+      const share = hits / N;
+      if (d === 1 ? hits !== 0 : share < 0.3 || share > 0.65) out.push('Terms-Anteil Etage ' + d + ': ' + share);
+    }
+    return out;
+  }));
+
+  // --- Terms of Service: Klauseln ------------------------------------------------
+  problems.push(...await page.evaluate(() => {
+    const B = BOTA, out = [], list = B.TEXT.TERMS_CLAUSES;
+    const bad = { speed: -1, damage: -1, shotSpeed: -1, luck: -1, range: -1, fireDelay: 1 };
+    for (const c of list) {
+      if (!c.sec || !c.text || !c.fx) out.push('Klausel unvollstaendig: ' + c.sec);
+      for (const k of Object.keys(c.add || {})) if (!bad[k] || Math.sign(c.add[k]) !== bad[k]) out.push('Klausel ' + c.sec + ' ist keine Strafe: ' + k);
+    }
+    if (new Set(list.map((c) => c.sec)).size !== list.length) out.push('Klauseln: doppelte Paragrafen');
+    const rng = new B.RNG(4711), seen = new Set(), N = 20000;
+    let real = 0;
+    for (let i = 0; i < N; i++) { const c = B.rollTermsClause(rng); seen.add(c); if (c.add) real++; }
+    if (seen.size !== list.length) out.push('Klauseln: nur ' + seen.size + ' von ' + list.length + ' gewuerfelt');
+    if (real / N < 0.57 || real / N > 0.63) out.push('Klauseln: Anteil echter Strafen ' + real / N);
+    const a = new B.RNG(9), b = new B.RNG(9);
+    for (let i = 0; i < 50; i++) if (B.rollTermsClause(a) !== B.rollTermsClause(b)) out.push('Klauseln nicht deterministisch');
+    if (!B.hasSprite('map_terms')) out.push('Sprite map_terms fehlt');
+    if (!B.audio.names().includes('sign')) out.push('Sound sign fehlt');
+    return out;
+  }));
+
+  // --- Terms of Service: der Handel -----------------------------------------------
+  problems.push(...await page.evaluate(() => {
+    const B = BOTA, g = B.game, out = [], dt = 1 / 60;
+    g.newRun('TERMS-DEAL');
+    let d = 2;
+    g.enterFloor(d);
+    while (!g.floor.termsRoom && d < 30) g.enterFloor(++d);
+    const cell = g.floor.termsRoom;
+    if (!cell) return ['Terms: kein Raum bis Etage ' + d];
+    g.setState('play');
+    const p = g.player, room = cell.room;
+    p.god = false; p.invuln = 0;
+
+    // Echter Zugang durch die Tuer: nicht aus Versehen auf dem Podest, Raum ist sofort frei
+    const door = Object.values(room.doors).find((x) => !x.edge.hidden);
+    const opp = B.OPPOSITE[door.dir];
+    g.teleport(door.target.room);
+    g.room.enemies.length = 0; g.room.combatClosed = false;
+    g.changeRoom(opp);
+    g.setState('play'); g.transition = null;
+    if (g.room !== room) out.push('Terms: Tuer fuehrt nicht in den Raum');
+    if (!g.bannerState || g.bannerState.title !== 'Terms of Service' || !B.TEXT.TERMS_LINES.includes(g.bannerState.sub)) out.push('Terms: kein Banner beim Betreten');
+    const peds = room.pickups.filter((x) => x instanceof B.Pedestal);
+    const notes = room.pickups.filter((x) => x instanceof B.TermsNotice);
+    if (peds.length !== 1 || notes.length !== 1) out.push('Terms: ' + peds.length + ' Podeste, ' + notes.length + ' Vertraege');
+    if (room.enemies.length || !room.cleared || room.combatClosed) out.push('Terms: Raum nicht frei');
+    const ped = peds[0];
+    if (!ped.terms || !ped.terms.clause || ped.price) out.push('Terms: Podest ohne Vertrag oder mit Preis');
+    if (!(B.ITEMS[ped.itemId].pools || []).includes('treasure')) out.push('Terms: Item nicht aus dem Schatz-Pool: ' + ped.itemId);
+    if (B.M.circlesOverlap(ped, p)) out.push('Terms: Spieler steht nach der Tuer auf dem Podest');
+    for (const populated of [false, true]) {
+      const r2 = room;
+      r2.populated = populated;
+      if (populated) { g.teleport(r2); if (B.M.circlesOverlap(ped, p)) out.push('Terms: Teleport landet auf dem Podest'); }
+      r2.populated = true;
+    }
+
+    const clauseOf = (key) => B.TEXT.TERMS_CLAUSES.find((c) => (key ? c.add && c.add[key] !== undefined : !c.add));
+    const fresh = (item, key) => new B.Pedestal(item, 480, 288, { terms: { clause: clauseOf(key) } });
+    const ticks = (pd, x, y, secs) => { p.x = x; p.y = y; for (let i = 0; i < Math.round(secs * 60); i++) pd.update(dt, g); };
+    const reset = () => { p.health = p.maxHealth = 6; p.guardrails = 0; p.bonus = {}; p.items = []; p.active = null; p.god = false; p.invuln = 0; p.dead = false; p.recalcStats(); };
+    const readThenStep = (pd) => { ticks(pd, 480, 288 + 100, 1.1); ticks(pd, 480, 288, 0.1); };
+    let hurtEvents = 0, denied = 0, signedEvents = 0;
+    const offs = [B.bus.on('playerHurt', () => hurtEvents++), B.bus.on('denied', (e) => { if (e.reason === 'terms') denied++; }), B.bus.on('termsSigned', () => signedEvents++)];
+
+    // Unterschrift: genau 2 halbe Herzen, Klausel genau einmal, Guardrails zahlen nicht, ein Treffer ist es nicht
+    reset();
+    p.guardrails = 4;
+    const score0 = g.score.items;
+    let pd = fresh('cold_brew', 'speed');
+    readThenStep(pd);
+    if (p.health !== 4 || p.guardrails !== 4) out.push('Terms: Preis falsch: ' + p.health + ' / ' + p.guardrails);
+    if (Math.abs((p.bonus.speed || 0) + 0.1) > 1e-9) out.push('Terms: Klausel nicht angewendet: ' + p.bonus.speed);
+    const withClause = p.stats.speed;
+    p.bonus = {}; p.recalcStats();
+    if (Math.abs(p.stats.speed - withClause - 0.1) > 1e-9) out.push('Terms: Klausel erreicht die Stats nicht');
+    p.bonus = { speed: -0.1 }; p.recalcStats();
+    if (!p.items.includes('cold_brew') || pd.itemId || pd.terms) out.push('Terms: Item nicht uebergeben');
+    if (g.score.items !== score0 + 1) out.push('Terms: Score zaehlt ' + (g.score.items - score0));
+    if (p.invuln !== 0 || hurtEvents) out.push('Terms: Unterschrift zaehlt als Treffer');
+    if (signedEvents !== 1) out.push('Terms: termsSigned ' + signedEvents + 'x');
+    if (!g.bannerState || !g.bannerState.sub.includes('§' + clauseOf('speed').sec)) out.push('Terms: Banner nennt die Klausel nicht: ' + JSON.stringify(g.bannerState));
+    ticks(pd, 480, 400, 0.2); ticks(pd, 480, 288, 0.2);
+    if (p.health !== 4 || Math.abs(p.bonus.speed + 0.1) > 1e-9) out.push('Terms: Zweite Abbuchung');
+
+    // Witz-Klausel: Herz weg, sonst keine Wirkung
+    reset();
+    pd = fresh('cold_brew', null);
+    readThenStep(pd);
+    if (p.health !== 4 || Object.keys(p.bonus).length) out.push('Terms: Witz-Klausel wirkt: ' + JSON.stringify(p.bonus));
+
+    // Nicht aus Versehen: Durchrennen in beiden Tempi, und Stehenbleiben unterschreibt auch nicht
+    for (const speed of [240, 480]) {
+      reset();
+      pd = fresh('cold_brew', 'damage');
+      for (let y = 90; y < 486; y += speed * dt) ticks(pd, 480, y, 1 / 60);
+      if (p.health !== 6 || !pd.terms) out.push('Terms: Durchrennen mit ' + speed + ' px/s unterschreibt');
+    }
+    reset();
+    pd = fresh('cold_brew', 'damage');
+    ticks(pd, 480, 288, 3);
+    if (p.health !== 6 || !pd.terms) out.push('Terms: Stehenbleiben unterschreibt');
+    if (pd.terms.readT < B.TERMS.readTime) out.push('Terms: Lesezeit laeuft auf dem Podest nicht');
+    ticks(pd, 480, 400, 0.1); ticks(pd, 480, 288, 0.1);
+    if (p.health !== 4 || pd.terms) out.push('Terms: Herunter- und Heraufsteigen unterschreibt nicht');
+
+    // Abweisung: nie toedlich, Guardrails helfen nicht, keine Klausel
+    for (const hp of [2, 1]) {
+      reset();
+      p.health = hp; p.guardrails = 6;
+      denied = 0;
+      pd = fresh('cold_brew', 'damage');
+      readThenStep(pd);
+      if (p.health !== hp || p.guardrails !== 6 || !pd.terms || pd.itemId !== 'cold_brew' || p.items.length || Object.keys(p.bonus).length) out.push('Terms: Bei ' + hp + ' halben Herzen nicht abgewiesen');
+      if (denied !== 1) out.push('Terms: denied ' + denied + 'x bei ' + hp);
+    }
+    reset();
+    p.health = 3;
+    pd = fresh('cold_brew', null);
+    readThenStep(pd);
+    if (p.health !== 1 || p.dead || g.state !== 'play') out.push('Terms: 3 halbe Herzen: ' + p.health + ', ' + g.state);
+
+    // God Mode zahlt, Retry with Backoff greift nicht ein
+    reset();
+    p.god = true;
+    pd = fresh('cold_brew', null);
+    readThenStep(pd);
+    if (p.health !== 4) out.push('Terms: God Mode zahlt nicht');
+    reset();
+    p.giveItem('retry_backoff', g);
+    p.health = 3;
+    const lethal = JSON.stringify(p.itemState.retry_backoff);
+    pd = fresh('cold_brew', null);
+    readThenStep(pd);
+    if (p.health !== 1 || JSON.stringify(p.itemState.retry_backoff) !== lethal) out.push('Terms: Retry with Backoff greift ein');
+
+    // Regenerate Response: Vertrag bleibt, das neue Item kostet genauso
+    reset();
+    p.giveItem('regenerate_response', g);
+    p.active.charge = B.ITEMS.regenerate_response.maxCharge;
+    p.x = 480; p.y = 450;
+    const clause = ped.terms.clause, before = ped.itemId;
+    if (!B.ITEMS.regenerate_response.use(p, g)) out.push('Terms: Reroll abgelehnt');
+    if (ped.terms === null || ped.terms.clause !== clause) out.push('Terms: Reroll verliert die Klausel');
+    if (ped.price) out.push('Terms: Reroll setzt einen Preis');
+    if (ped.itemId === before) out.push('Terms: Reroll aendert das Item nicht');
+
+    // Aktiv-Tausch: das alte Item liegt danach kostenlos da, Zuruecktauschen kostet nichts und zaehlt nicht
+    reset();
+    p.giveItem('stop_generating', g);
+    const score1 = g.score.items;
+    pd = fresh('regenerate_response', 'luck');
+    readThenStep(pd);
+    if (p.health !== 4 || p.bonus.luck !== -1) out.push('Terms: Tausch-Preis falsch: ' + p.health + ' / ' + p.bonus.luck);
+    if (!p.active || p.active.id !== 'regenerate_response' || pd.itemId !== 'stop_generating' || pd.terms) out.push('Terms: Tausch legt nicht ab');
+    ticks(pd, 480, 400, 1.2); ticks(pd, 480, 288, 0.1);
+    if (p.active.id !== 'stop_generating' || p.health !== 4 || p.bonus.luck !== -1) out.push('Terms: Zuruecktauschen kostet etwas');
+    if (g.score.items !== score1 + 1) out.push('Terms: Tausch zaehlt ' + (g.score.items - score1) + ' Items');
+
+    // Der Vertrag verschwindet mit der Unterschrift
+    reset();
+    pd = fresh('cold_brew', null);
+    const note = new B.TermsNotice(pd);
+    g.banner('Terms of Service', 'test');
+    p.x = 480; p.y = 540; note.update(dt, g);
+    if (note.fade > 0) out.push('Terms: Vertrag erscheint aus der Ferne');
+    if (!g.bannerState) out.push('Terms: Banner verschwindet schon aus der Ferne');
+    p.x = 480; p.y = 400; note.update(dt, g);
+    if (note.dead || note.fade <= 0) out.push('Terms: Vertrag erscheint nicht in Lesenaehe');
+    if (g.bannerState) out.push('Terms: Banner beim Betreten liegt ueber dem Vertrag');
+    g.banner('Application declined', 'test');
+    note.update(dt, g);
+    if (!g.bannerState) out.push('Terms: Vertrag raeumt fremde Banner weg');
+    readThenStep(pd);
+    note.update(dt, g);
+    if (!note.dead) out.push('Terms: Vertrag bleibt nach der Unterschrift');
+    offs.forEach((off) => off());
+    reset();
+    return out;
+  }));
+
+  // --- Terms of Service: echtes Spiel und Bilder ----------------------------------
+  await page.evaluate(() => {
+    const g = BOTA.game;
+    g.newRun('TERMS-LOOK');
+    let d = 2;
+    g.enterFloor(d);
+    while (!g.floor.termsRoom && d < 30) g.enterFloor(++d);
+    BOTA.debug.god(true);
+    const door = Object.values(g.floor.termsRoom.room.doors).find((x) => !x.edge.hidden);
+    g.teleport(door.target.room);
+    g.room.enemies.length = 0; g.room.projectiles.length = 0;
+    g.setState('play');
+  });
+  await page.waitForTimeout(300);
+  await shot('terms-door');
+  problems.push(...await page.evaluate(() => (BOTA.debug.gotoRoom('terms') && BOTA.game.room.type === 'terms' ? [] : ['Terms: gotoRoom findet den Raum nicht'])));
+  await page.evaluate(() => { const g = BOTA.game, p = g.player; p.x = 480; p.y = 400; p.health = p.maxHealth = 6; });
+  await page.waitForTimeout(1300);
+  await shot('terms-notice-above');
+  await page.evaluate(() => { const p = BOTA.game.player; p.x = 480; p.y = 170; });
+  await page.waitForTimeout(300);
+  await shot('terms-notice-below');
+  await page.evaluate(() => { const p = BOTA.game.player; p.x = 480; p.y = 400; });
+  await page.keyboard.down('KeyW');
+  await page.waitForFunction(() => BOTA.game.player.y < 330 || BOTA.game.player.items.length, null, { timeout: 3000 }).catch(() => {});
+  await page.keyboard.up('KeyW');
+  await page.waitForTimeout(150);
+  await shot('terms-signed');
+  problems.push(...await page.evaluate(() => {
+    const g = BOTA.game, p = g.player, out = [];
+    if (p.health !== 4) out.push('Terms: Mit der Tastatur nicht unterschrieben, health ' + p.health);
+    if (g.room.pickups.some((x) => x instanceof BOTA.TermsNotice)) out.push('Terms: Vertrag bleibt im Raum');
+    BOTA.debug.god(false);
+    return out;
+  }));
   await browser.close();
 
   // --- Ergebnis ---------------------------------------------------------------

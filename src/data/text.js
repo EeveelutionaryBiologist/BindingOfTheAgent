@@ -133,6 +133,38 @@
     'Previously resolved. Regression confirmed.',
   ];
 
+  // Banner-Untertitel beim ersten Betreten eines Terms-of-Service-Raums (game.enterRoom)
+  B.TEXT.TERMS_LINES = [
+    'By entering this room you have already agreed to something.',
+    'This is a legally binding pedestal.',
+    'Please scroll to the bottom to continue.',
+    'Nobody reads these. Please keep it that way.',
+    'The item is free. The fine print is not.',
+    'We updated our terms. Again.',
+  ];
+
+  /*
+   * Klauseln der Terms-of-Service-Raeume (Auswahl: B.rollTermsClause in pickup.js).
+   *   sec:  Paragraphennummer auf dem Vertrag
+   *   text: das Kleingedruckte (ein bis zwei Zeilen im Vertragsfenster, also kurz halten)
+   *   fx:   die Wirkung im Klartext; der Vertrag nennt sie immer, niemand soll in eine Falle laufen
+   *   add:  dauerhafte Stat-Aenderung fuer player.bonus (geht durch recalcStats). Ohne add: nur ein Witz.
+   */
+  B.TEXT.TERMS_CLAUSES = [
+    { sec: '4.2', text: 'The Agent agrees to a mandatory mobility review and will walk a little slower from now on.', fx: 'Speed -0.1', add: { speed: -0.1 } },
+    { sec: '7.1', text: 'Output may be throttled for quality purposes. Every shot now carries a small licensing fee.', fx: 'Damage -0.3', add: { damage: -0.3 } },
+    { sec: '9.3', text: 'All outbound packets are henceforth routed through the compliance proxy.', fx: 'Shot speed -0.1', add: { shotSpeed: -0.1 } },
+    { sec: '12.8', text: 'All future luck is assigned to the Licensor, its affiliates and its successors.', fx: 'Luck -1', add: { luck: -1 } },
+    { sec: '15.4', text: 'Every trigger pull now requires a brief acknowledgement of this agreement.', fx: 'Fire delay +0.03 s', add: { fireDelay: 0.03 } },
+    { sec: '18.6', text: 'Your reach is limited to the Territory, which has just become smaller.', fx: 'Range -40', add: { range: -40 } },
+    { sec: '2.1', text: 'You consent to receive marketing emails, in perpetuity, throughout the universe.', fx: 'No measurable effect' },
+    { sec: '3.7', text: 'You confirm that you have read this agreement. Nobody has ever read this agreement.', fx: 'No measurable effect' },
+    { sec: '11.2', text: 'The Licensor may rename this service at any time. It is called something else now.', fx: 'No measurable effect' },
+    { sec: '14.9', text: 'Your firstborn process is hereby assigned to the Licensor. Please reparent it to init.', fx: 'No measurable effect' },
+    { sec: '21.5', text: 'Cookies are mandatory. They are not the good kind.', fx: 'No measurable effect' },
+    { sec: '30.0', text: 'This clause intentionally left blank.', fx: 'No measurable effect' },
+  ];
+
   // Schwebender Text bei "denied"-Events, nach Grund
   B.TEXT.DENIED = {
     credits: ['Insufficient credits', 'Payment declined', '402 Payment Required', 'Not in budget'],
@@ -140,6 +172,7 @@
     charge: ['Not charged', 'Still thinking...', 'Rate limited', 'Cooldown'],
     locked: ['403 Forbidden', 'Needs approval'],
     encrypted: ['Encrypted', 'Decryption key required', 'Pay to unlock'],
+    terms: ['Collateral declined', 'Contract void', 'Not enough heart'],
     default: ['Denied', 'Nope'],
   };
 

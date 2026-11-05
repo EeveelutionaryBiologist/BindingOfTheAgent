@@ -144,6 +144,16 @@ All resources (credits, bombs, keys) are capped at 99. The shop sells 3 of the p
 | ![Pipe](images/pipe.png) | **Pipe** | About 10 % of combat rooms leave one behind when cleared (never in front of a door or in the middle of the room) | Walk in and you're flushed one-way into a random other room of the floor: any room except the boss room, the secret room and the one you're in, visited or not. Reusable, with a new destination each time; after a jump, pipes ignore you for 1 s |
 | ![Trapdoor](images/trapdoor.png) | **Trapdoor** (`cd ..`) | Appears in the boss room after the boss dies | Drops you to the next floor |
 
+### Terms of Service rooms
+
+From floor 2, about half the floors have one: a dead-end room behind a crimson door marked §, with a § icon on the map.
+The door is never locked and there's nothing to fight. The pedestal holds an item from the treasure pool, and the deal costs
+**one full heart** of red health plus one **clause**. Stand near it for a second to read the contract, then step onto
+the pedestal to sign. Guardrails can't pay, and the deal is refused at one heart or less, so it can never kill you.
+
+About 60 % of clauses are small permanent penalties (for example Damage −0.3); the rest are jokes with no effect. The
+contract always states the effect in plain words. Regenerate Response changes the item but not the clause.
+
 ### Breakable objects
 
 Normal rooms often contain 1–5 breakable objects. They block movement and shots like rocks, but your shots wear them

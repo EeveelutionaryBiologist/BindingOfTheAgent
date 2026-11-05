@@ -509,7 +509,7 @@
         ctx.strokeRect(q.x, q.y, cw, ch);
         ctx.globalAlpha = under ? 0.35 : 0.92;
       }
-      const icon = { boss: 'map_boss', treasure: 'map_treasure', shop: 'map_shop', secret: 'map_secret' }[cell.type];
+      const icon = { boss: 'map_boss', treasure: 'map_treasure', shop: 'map_shop', secret: 'map_secret', terms: 'map_terms' }[cell.type];
       if (icon) {
         if (B.hasSprite(icon)) B.drawSprite(ctx, icon, q.x + cw / 2, q.y + ch / 2 + 1, { alpha: isCur ? 0.85 : 1 });
         else { ctx.fillStyle = '#fff'; ctx.fillRect(q.x + cw / 2 - 3, q.y + ch / 2 - 3, 6, 6); }

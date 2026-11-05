@@ -946,6 +946,20 @@
     ],
   });
 
+  // Terms-of-Service-Raum: ein Vertrag mit roten Zeilen und Siegel unten rechts
+  B.defineSprite('map_terms', {
+    palette: { p: '#f0e2c0', r: '#d64545' },
+    scale: 2,
+    rows: [
+      '.ppppp.',
+      '.prrrp.',
+      '.ppppp.',
+      '.prrrp.',
+      '.ppppp.',
+      '.pprrp.',
+    ],
+  });
+
   // Kleines Lautsprecher-Icon (Stummschaltung im HUD/Titel)
   B.defineSprite('hud_muted', {
     palette: { w: '#a89f97', r: '#e07a6a' },

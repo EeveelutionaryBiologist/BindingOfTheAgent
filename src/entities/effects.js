@@ -997,6 +997,15 @@
     FX.sparkles(game, p.x, p.y - 20, 6, 30, '#fff0b0', { delay: 0.2 });
   });
 
+  // Terms of Service unterschrieben: das Herz geht sichtbar drauf, ohne dass es ein Treffer war
+  on('termsSigned', (e) => {
+    const game = e.game || B.game;
+    const p = playerPos(game);
+    FX.text(game, p.x, p.y - 64, '-♥♥', '#ff5a6e', { scale: 2, life: 1.1 });
+    FX.ring(game, e.x, e.y, 90, '#d64545', 0.5, 5);
+    FX.sparkles(game, e.x, e.y - 20, 10, 46, '#ff9aa8', { delay: 0.1 });
+  });
+
   on('unlock', (e) => {
     const game = e.game || B.game;
     const p = playerPos(game);

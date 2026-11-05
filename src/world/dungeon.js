@@ -18,6 +18,7 @@
  * 12. Ab Etage 8: 1–2 Kampfraeume werden zur Zwischenboss-Begegnung mit offener Arena (assignEncounters).
  * 13. Zerstoerbare Objekte (Kisten, Buesche, ...) je nach Etagen-Thema in normalen Raeumen (assignProps).
  * 14. Kakteen aus Felsen, nur auf Themen mit cacti (assignCacti).
+ * 15. Ab Etage 2: Auf manchen Etagen wird eine Sackgasse zum Terms-of-Service-Raum (assignTerms).
  */
 'use strict';
 
@@ -31,6 +32,8 @@
   const PIPE_CHANCE = 0.1;   // Anteil der Kampfraeume, die beim Clearing ein Rohr hinterlassen (2026-11-01)
   const ENCOUNTER_TWO_FROM = 10; // ab dieser Tiefe kann es eine zweite Zwischenboss-Begegnung geben ...
   const ENCOUNTER_TWO_CHANCE = 0.5; // ... mit dieser Chance (Etage 8–9: immer genau eine)
+  const TERMS_FROM = 2;      // ab dieser Tiefe gibt es Terms-of-Service-Raeume (Etage 1 bleibt ohne Haken)
+  const TERMS_CHANCE = 0.5;  // Anteil der Etagen; auf Etage 2 etwas weniger, dort fehlt oefter eine freie Sackgasse
   const DIRS = B.DIRS;
   const DIR_KEYS = ['up', 'down', 'left', 'right'];
 
@@ -48,6 +51,7 @@
       this.keyRoom = null; // Zelle mit garantiertem Approval (ab Tiefe 2, siehe assignKeyRoom)
       this.readmeRoom = null; // Zelle mit dem README.md (oder null, siehe assignReadme)
       this.encounterRooms = []; // Zellen mit Zwischenboss-Begegnung (ab Tiefe 8, siehe assignEncounters)
+      this.termsRoom = null; // Zelle des Terms-of-Service-Raums (oder null, siehe assignTerms)
       this.documented = false; // README.md eingesammelt -> Karte (ohne Geheimraum) sichtbar
       this.generate();
     }
@@ -115,6 +119,48 @@
       this.assignEncounters(ordered);
       this.assignProps(ordered);
       this.assignCacti(ordered);
+      this.assignTerms(ordered); // bewusst als Letztes, siehe dort
+    }
+
+    /**
+     * Terms-of-Service-Raum (ab TERMS_FROM): Eine Sackgasse wird zum Raum mit einem Item, das ein Herz und eine
+     * Klausel kostet (Podest in pickup.js, Inhalt in game.populate). Infrage kommen normale Raeume, deren einzige
+     * sichtbare Tuer eine normale Kante ist; nie der Schluessel-Raum, der README-Raum oder eine Begegnung, damit das
+     * garantierte Approval, die Karte und die Arena erhalten bleiben. Ein verdeckter Zugang zum Geheimraum darf
+     * bleiben. Gibt es keine solche Sackgasse, hat die Etage keinen Raum: Boss, Schatz und Shop belegen die ersten
+     * drei Sackgassen, auf den kleinen Karten von Etage 2 bleibt deshalb in etwa 15 % der Faelle keine uebrig.
+     *
+     * Laeuft als Letztes, nach Objekten und Kakteen: Deren RNG-Stroeme laufen ueber alle Raeume, und wie viele
+     * Zahlen ein Raum zieht, haengt von seinem Layout ab. Ein frueherer Umbau wuerde also die Objekte und Kakteen
+     * der uebrigen Raeume verschieben. So bleibt alles ausserhalb dieses einen Raums wie ohne ihn, dafuer raeumt
+     * der Umbau hier die Objekte des Raums selbst weg (Kakteen verschwinden mit dem neuen Layout).
+     * Eigener RNG-Strom (':terms') mit immer gleich vielen Zuegen, egal ob es einen Raum gibt.
+     */
+    assignTerms(ordered) {
+      this.termsRoom = null;
+      const rng = new B.RNG(B.hashString(String(this.seed) + ':terms'));
+      const has = rng.chance(TERMS_CHANCE);
+      const roll = rng.float(0, 1);
+      const arenas = B.LAYOUTS.filter((l) => l.tags.includes('special'));
+      const layout = arenas.length ? rng.weighted(arenas, (l) => l.weight || 1) : null;
+      if (!has || this.depth < TERMS_FROM) return;
+      const cands = ordered.filter((c) => {
+        if (c.type !== 'normal' || c === this.keyRoom || c === this.readmeRoom || this.encounterRooms.includes(c)) return false;
+        const open = Object.values(c.room.doors).filter((door) => !door.edge.hidden);
+        return open.length === 1 && open[0].edge.kind === 'normal';
+      });
+      if (!cands.length) return;
+      const cell = cands[Math.min(cands.length - 1, Math.floor(roll * cands.length))];
+      const room = cell.room;
+      cell.type = 'terms';
+      room.type = 'terms';
+      room.stampLayout(layout);
+      room.props.clear();
+      room.plannedEnemies = [];
+      room.looseLoot = [];
+      room.hasPipe = false;
+      for (const door of Object.values(room.doors)) if (!door.edge.hidden) door.edge.kind = 'terms';
+      this.termsRoom = cell;
     }
 
     /**
