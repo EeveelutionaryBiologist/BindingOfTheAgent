@@ -721,6 +721,15 @@
     desc: 'One of 47. Nobody knows which one is failing.',
   };
 
+  // Minion des Agent Swarm (entities/boss-agent-swarm.js): umkreist den Spieler, schiesst gezielt, startet einmal
+  // einen noch kleineren Subagent (Tiefe 2).
+  E.subagent = {
+    name: 'Subagent', hp: 12, r: 14, speed: 125, contactDamage: 1, flying: true,
+    behavior: 'subagent', sprite: 'enemy_subagent', color: '#b3202a',
+    spawn: false, cost: 0.5,
+    desc: 'It was told to spawn a subagent. It was not told to stop.',
+  };
+
   // Modul des Megalith (Boss, ab 50 %): kriecht zurueck zum Boss und heilt ihn, wenn es ankommt
   // ("Refactor rejected" — alles wandert zurueck in die eine Datei). Ohne Besitzer jagt es den Spieler.
   E.megalith_module = {

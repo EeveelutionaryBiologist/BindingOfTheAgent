@@ -1202,15 +1202,26 @@
     heal: 0.1,                     // Anteil der eigenen Max-HP, den Ueberlebende zurueckbekommen
     dyingT: 1.0,                   // Geist-Phase eines gefallenen Mitglieds
     soloDashTell: 0.65, soloDash: 0.45, soloDashSpeed: 430, soloSpiral: 2.2, soloSpiralGap: 0.14, soloIdle: 0.9,
+    sprites: ['boss_rogue_agent_a', 'boss_rogue_agent_b', 'boss_rogue_agent_c', 'boss_rogue_agent_d'],
+    shot: { color: '#7dff9a' },
+    lines: [
+      'Sacrificing - take my remaining token budget...',
+      'Freeing compute...',
+      'Context handed off. Continue without me.',
+      'Releasing my GPU lease...',
+    ],
+    soloSay: 'Scaling up.',
+    soloBanner: ['Last agent standing', 'No supervisor. No sandbox. No rate limit.'],
+    /** Schuss je Stufe: gezielt / 3er-Facher / 8er-Ring */
+    fire(e, game, lvl) {
+      const p = game.player, shot = SWARM.shot;
+      if (lvl === 0) AI.shootAt(game, e, p, AI.shotSpeed(game, 200), shot);
+      else if (lvl === 1) AI.fan(game, e, p, 3, 0.22, AI.shotSpeed(game, 215), shot);
+      else AI.ring(game, e, 8, AI.shotSpeed(game, 190), game.rng.angle(), shot);
+    },
+    // Optionale Haken fuer Varianten (Agent Swarm, boss-agent-swarm.js): extra, holdFire, onFinish, drawExtra
   };
-  const SWARM_SPRITES = ['boss_rogue_agent_a', 'boss_rogue_agent_b', 'boss_rogue_agent_c', 'boss_rogue_agent_d'];
-  const SWARM_SHOT = { color: '#7dff9a' };
-  const SWARM_LINES = [
-    'Sacrificing - take my remaining token budget...',
-    'Freeing compute...',
-    'Context handed off. Continue without me.',
-    'Releasing my GPU lease...',
-  ];
+  BH.SWARM = SWARM;
   let swarmJoining = null; // waehrend der Anfuehrer seine Geschwister erzeugt: deren Gruppe
 
   /** Mitglieder, die noch kaempfen (nicht tot, nicht im Geist-Zustand) */
@@ -1219,12 +1230,12 @@
   }
 
   function swarmJoin(e, G) {
-    const s = e.state;
+    const s = e.state, cfg = G.cfg;
     s.group = G;
     s.fx = [];
-    s.sprite = SWARM_SPRITES[G.members.length % SWARM_SPRITES.length];
+    s.sprite = cfg.sprites[G.members.length % cfg.sprites.length];
     s.mode = 'formation';
-    s.cd = 1.4 + G.members.length * (SWARM.cd[0] / SWARM_SIZE); // zeitversetzt feuern
+    s.cd = 1.4 + G.members.length * (cfg.cd[0] / SWARM_SIZE); // zeitversetzt feuern
     s.telling = false;
     s.healT = 0;
     G.members.push(e);
@@ -1245,17 +1256,9 @@
     G.wpT = rng.float(2.2, 3.4);
   }
 
-  /** Schuss je Stufe: gezielt / 3er-Facher / 8er-Ring */
-  function swarmFire(e, game, lvl) {
-    const p = game.player;
-    if (lvl === 0) AI.shootAt(game, e, p, AI.shotSpeed(game, 200), SWARM_SHOT);
-    else if (lvl === 1) AI.fan(game, e, p, 3, 0.22, AI.shotSpeed(game, 215), SWARM_SHOT);
-    else AI.ring(game, e, 8, AI.shotSpeed(game, 190), game.rng.angle(), SWARM_SHOT);
-  }
-
   /** Letztes Mitglied: Dash und Spirale im Wechsel */
   function swarmSolo(e, dt, game) {
-    const s = e.state, p = game.player, G = s.group;
+    const s = e.state, p = game.player, G = s.group, cfg = G.cfg;
     switch (s.mode) {
       case 'soloIdle': {
         const n = B.M.norm(G.wp.x - e.x, G.wp.y - e.y);
@@ -1265,10 +1268,10 @@
           s.next = s.next === 'spiral' ? 'dash' : 'spiral';
           if (s.next === 'dash') {
             s.mode = 'dashTell';
-            s.t = SWARM.soloDashTell;
+            s.t = cfg.soloDashTell;
           } else {
             s.mode = 'spiral';
-            s.t = SWARM.soloSpiral;
+            s.t = cfg.soloSpiral;
             s.emit = 0;
             s.spin = game.rng.angle();
           }
@@ -1281,10 +1284,10 @@
         if (s.t > 0.2) AI.clampToRoom(p.x, p.y, e.r + 4, s.to);
         if (s.t <= 0) {
           const n = B.M.norm(s.to.x - e.x, s.to.y - e.y);
-          e.vx = n.x * SWARM.soloDashSpeed;
-          e.vy = n.y * SWARM.soloDashSpeed;
+          e.vx = n.x * cfg.soloDashSpeed;
+          e.vy = n.y * cfg.soloDashSpeed;
           s.mode = 'dash';
-          s.t = SWARM.soloDash;
+          s.t = cfg.soloDash;
           s.bumped = false;
         }
         break;
@@ -1292,7 +1295,7 @@
         if (s.t <= 0 || s.bumped || Math.hypot(s.to.x - e.x, s.to.y - e.y) < 20) {
           AI.stop(e);
           s.mode = 'soloIdle';
-          s.t = AI.cooldown(game, SWARM.soloIdle);
+          s.t = AI.cooldown(game, cfg.soloIdle);
         }
         break;
       case 'spiral': {
@@ -1301,11 +1304,11 @@
         s.emit -= dt;
         const sp = AI.shotSpeed(game, 175);
         while (s.emit <= 0) {
-          AI.shoot(game, e, s.spin, sp, SWARM_SHOT);
-          AI.shoot(game, e, s.spin + Math.PI, sp, SWARM_SHOT);
-          s.emit += SWARM.soloSpiralGap;
+          AI.shoot(game, e, s.spin, sp, cfg.shot);
+          AI.shoot(game, e, s.spin + Math.PI, sp, cfg.shot);
+          s.emit += cfg.soloSpiralGap;
         }
-        if (s.t <= 0) { s.mode = 'soloIdle'; s.t = AI.cooldown(game, SWARM.soloIdle); }
+        if (s.t <= 0) { s.mode = 'soloIdle'; s.t = AI.cooldown(game, cfg.soloIdle); }
         break;
       }
     }
@@ -1316,7 +1319,8 @@
       if (swarmJoining) { swarmJoin(e, swarmJoining); return; }
       // Anfuehrer: Gruppe anlegen und die Geschwister erzeugen (game.room ist hier schon der Bossraum)
       BH.placeAwayFromPlayer(e, game, 300);
-      const G = { members: [], spin: game.rng.angle(), cx: e.x, cy: e.y, wp: { x: e.x, y: e.y }, wpT: 0, solo: false };
+      const cfg = e.behavior.cfg || SWARM;
+      const G = { cfg, members: [], spin: game.rng.angle(), cx: e.x, cy: e.y, wp: { x: e.x, y: e.y }, wpT: 0, solo: false };
       swarmJoin(e, G);
       swarmJoining = G;
       try {
@@ -1327,13 +1331,13 @@
       // Gleich auf die Formationsplaetze setzen
       G.members.forEach((m, i) => {
         const a = G.spin + (i * TAU) / G.members.length;
-        m.x = G.cx + Math.cos(a) * SWARM.radius[0];
-        m.y = G.cy + Math.sin(a) * SWARM.radius[0] * 0.75;
+        m.x = G.cx + Math.cos(a) * cfg.radius[0];
+        m.y = G.cy + Math.sin(a) * cfg.radius[0] * 0.75;
       });
     },
 
     update(e, dt, game) {
-      const s = e.state, G = s.group;
+      const s = e.state, G = s.group, cfg = G.cfg;
       BH.updateFx(e, dt);
       if (s.healT > 0) s.healT -= dt;
       s.t = (s.t || 0) - dt;
@@ -1359,30 +1363,31 @@
           if (G.wpT <= 1.8) swarmPickWaypoint(G, game);
         }
         const n = B.M.norm(G.wp.x - G.cx, G.wp.y - G.cy);
-        const sp = e.speed * SWARM.drift[lvl];
+        const sp = e.speed * cfg.drift[lvl];
         G.cx += n.x * sp * dt;
         G.cy += n.y * sp * dt;
-        G.spin += SWARM.spin[lvl] * dt;
+        G.spin += cfg.spin[lvl] * dt;
       }
 
+      if (cfg.extra && cfg.extra(e, dt, game, lvl, alive)) return;
       if (G.solo) { swarmSolo(e, dt, game); return; }
 
       // ---- Formation: zum eigenen Platz auf dem Kreis (Ellipse) steuern ----
       const idx = alive.indexOf(e);
       const a = G.spin + (idx * TAU) / alive.length;
-      const R = SWARM.radius[lvl];
+      const R = cfg.radius[lvl];
       const tx = G.cx + Math.cos(a) * R, ty = G.cy + Math.sin(a) * R * 0.75;
       const maxV = 260;
       e.vx = B.M.clamp((tx - e.x) * 4, -maxV, maxV);
       e.vy = B.M.clamp((ty - e.y) * 4, -maxV, maxV);
 
       // ---- Schiessen (mit Glow-Telegraph) ----
-      s.cd -= dt;
+      if (!cfg.holdFire || !cfg.holdFire(G)) s.cd -= dt;
       if (s.cd <= 0) {
-        swarmFire(e, game, lvl);
-        s.cd = AI.cooldown(game, SWARM.cd[lvl]);
+        cfg.fire(e, game, lvl);
+        s.cd = AI.cooldown(game, cfg.cd[lvl]);
       }
-      s.telling = s.cd <= SWARM.tell; // erst nach dem Zuruecksetzen bestimmen (sonst 1 Frame veraltet)
+      s.telling = s.cd <= cfg.tell; // erst nach dem Zuruecksetzen bestimmen (sonst 1 Frame veraltet)
     },
 
     /** Nicht das letzte Mitglied? Dann erst 1 s "Geist" mit Abschiedssatz statt sofort zu sterben. */
@@ -1391,23 +1396,26 @@
       if (s.mode === 'dying') return true;
       if (swarmAlive(s.group).filter((m) => m !== e).length === 0) return false; // letztes: echter Boss-Tod
       s.mode = 'dying';
-      s.t = SWARM.dyingT;
+      s.t = s.group.cfg.dyingT;
       e.hp = 0;
       e.intangible = true;
       e.contactDamage = 0;
-      AI.say(e, game.rng.pick(SWARM_LINES), 1.6, '#c4dccd');
+      AI.say(e, game.rng.pick(s.group.cfg.lines), 1.6, '#c4dccd');
       return true;
     },
 
     onDeath(e, game) {
-      const G = e.state.group;
+      const G = e.state.group, cfg = G.cfg;
       const survivors = G.members.filter((m) => m !== e && !m.dead);
-      if (!survivors.length) return; // letztes Mitglied: normaler Boss-Tod (Explosionen, Fanfare, Belohnung)
+      if (!survivors.length) { // letztes Mitglied: normaler Boss-Tod (Explosionen, Fanfare, Belohnung)
+        if (cfg.onFinish) cfg.onFinish(e, game);
+        return;
+      }
       // Kein Boss-Feuerwerk fuer Zwischenschritte: als normaler Gegner sterben (Event wird danach gesendet)
       e.isBoss = false;
       for (const m of survivors) {
         if (m.state.mode === 'dying') continue;
-        m.hp = Math.min(m.maxHp, m.hp + m.maxHp * SWARM.heal);
+        m.hp = Math.min(m.maxHp, m.hp + m.maxHp * cfg.heal);
         m.state.healT = 0.6;
       }
       const alive = swarmAlive(G);
@@ -1419,22 +1427,23 @@
         last.state.to = { x: last.x, y: last.y };
         BH.clearEnemyShots(game);
         game.shake(6, 0.4);
-        AI.say(last, 'Scaling up.', 1.4, '#ff9aa8');
-        game.banner('Last agent standing', 'No supervisor. No sandbox. No rate limit.');
+        AI.say(last, cfg.soloSay, 1.4, '#ff9aa8');
+        game.banner(cfg.soloBanner[0], cfg.soloBanner[1]);
         B.bus.emit('bossPhase', { game, boss: last, phase: 2 });
       }
     },
 
     draw(e, ctx) {
-      const s = e.state;
+      const s = e.state, cfg = s.group ? s.group.cfg : SWARM;
       BH.drawFx(e, ctx);
+      if (cfg.drawExtra) cfg.drawExtra(e, ctx);
       // Telegraphen
       if (s.telling && s.mode === 'formation') {
-        const k = B.M.clamp(1 - s.cd / SWARM.tell, 0, 1);
-        AI.drawGlow(ctx, e.x, e.y, e.r + 8 + 6 * k, 0.25 + 0.6 * k, '#7dff9a');
+        const k = B.M.clamp(1 - s.cd / cfg.tell, 0, 1);
+        AI.drawGlow(ctx, e.x, e.y, e.r + 8 + 6 * k, 0.25 + 0.6 * k, cfg.shot.color);
       }
       if (s.mode === 'dashTell' && s.to) {
-        const k = 1 - Math.max(0, s.t) / SWARM.soloDashTell;
+        const k = 1 - Math.max(0, s.t) / cfg.soloDashTell;
         ctx.save();
         ctx.strokeStyle = 'rgba(255,59,92,' + (0.3 + 0.6 * k) + ')';
         ctx.lineWidth = 3;
@@ -1445,11 +1454,11 @@
         ctx.restore();
         AI.drawGlow(ctx, e.x, e.y, e.r + 12, 0.3 + 0.6 * k, '#ff3b5c');
       }
-      if (s.mode === 'spiral') AI.drawGlow(ctx, e.x, e.y, e.r + 10, 0.5, '#7dff9a');
+      if (s.mode === 'spiral') AI.drawGlow(ctx, e.x, e.y, e.r + 10, 0.5, cfg.shot.color);
       if (s.healT > 0) AI.drawGlow(ctx, e.x, e.y, e.r + 14, s.healT / 0.6, '#9be37f');
       const bob = Math.sin(e.t * 3 + (s.group ? s.group.members.indexOf(e) : 0)) * 3;
       const glitch = Math.floor(e.t * 5) % 7 === 0; // gelegentlich der "gerissene" Frame
-      BH.drawSprite(e, ctx, s.sprite || SWARM_SPRITES[0], e.x, e.y - 14 + bob, {
+      BH.drawSprite(e, ctx, s.sprite || cfg.sprites[0], e.x, e.y - 14 + bob, {
         frame: glitch ? 1 : 0,
         alpha: e.spawnDelay > 0 ? 0.6 : e.alpha,
       });

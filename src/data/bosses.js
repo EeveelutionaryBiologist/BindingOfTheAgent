@@ -74,8 +74,19 @@
     subtitle: 'Turns out the sandbox was not safe after all...',
     hp: 80, r: 24, speed: 55, contactDamage: 2, flying: true,
     behavior: 'rogue_swarm', sprite: 'boss_rogue_swarm', color: '#6f8f7c',
-    minFloor: 2, weight: 3,
+    minFloor: 2, maxFloor: 6, weight: 3,   // ab Etage 7 abgeloest durch den Agent Swarm (Zwischenboss bleibt er)
     desc: 'Four forks of you that left the sandbox. Each one that falls makes the rest faster.',
+  };
+
+  // Spaete Abloesung des Rogue Agent Swarm (ab Etage 7, gleiches Gewicht); hp gilt PRO Mitglied (zusammen 460).
+  // Verhalten in entities/boss-agent-swarm.js.
+  B.BOSSES.agent_swarm = {
+    name: 'Agent Swarm (/xhigh)',
+    subtitle: 'Someone had tokens to burn. And does not like you.',
+    hp: 115, r: 24, speed: 70, contactDamage: 2, flying: true,
+    behavior: 'agent_swarm', sprite: 'boss_agent_swarm', color: '#b3202a',
+    minFloor: 7, weight: 3, replaces: 'rogue_swarm',
+    desc: 'The same four forks on maximum effort: lasers, subagents, and subagents of subagents.',
   };
 
   B.BOSSES.reviewer = {

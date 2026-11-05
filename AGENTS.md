@@ -78,6 +78,10 @@ Live state is under `BOTA.game` (`.player`, `.room`, `.floor`, `.depth`, `.state
 - a Graphics Glitch touching you scrambles the HUD (a new hit restarts the timer), every glitch area renders, and its
   jumps never land inside obstacles;
 - the Antagonistic Reviewer's laser and stamps hit exactly where drawn, and every nitpick row has one gap;
+- the **Agent Swarm (/xhigh)** replaces the Rogue Agent Swarm from floor 7 (which stays a side quest); its laser waits for the
+  full aim and lock, only hits in the beam and on the line, and the formation holds fire during lock and beam; subagents
+  come after a target ring, depth 2 is smaller and never goes deeper, the cap of 4 holds, the last agent still lasers;
+  subagents die with the swarm, score nothing, and there is one boss death;
 - the Rogue Agent Swarm spawns 4 members with one health bar, ghosts before dying, heals survivors by 10 %, goes solo
   for the last member and emits exactly one boss death;
 - bosses never repeat on consecutive floors (300 simulated runs plus a real floor sequence), and README.md appears on
@@ -248,7 +252,7 @@ core/namespace → core/rng → core/math → core/input → core/sprites → co
 data/palette → data/text → data/sprites-core → data/sprites-enemies → data/sprites-items
 data/layouts → data/enemies → data/bosses → data/items
 world/room → world/dungeon
-entities/entity → projectile → player → enemy → boss → bosses-late → boss-memory-hog → pickup → familiar → effects
+entities/entity → projectile → player → enemy → boss → bosses-late → boss-memory-hog → boss-agent-swarm → pickup → familiar → effects
 render/renderer → render/hud → render/screens
 game → main
 ```
@@ -473,7 +477,7 @@ The previous floor's boss is excluded, and bosses already met count `weight · t
     helpers in `B.BossHelpers`.
   - Bosses emit `bossPhase / bossStomp / bossBounce`.
   - The Infinite Loop's body is made of separate `loop_segment` enemies (`ignoreForClear`, `proxy` → head).
-  - **Boss groups:** the Rogue Agent Swarm is four real `Boss` entities. The first one's `init` spawns the other three
+  - **Boss groups:** the Rogue Agent Swarm and the Agent Swarm are four real `Boss` entities each. The first one's `init` spawns the other three
     and all share `e.bossGroup` (one array), which the HUD sums into a single health bar. Non-final members set
     `isBoss = false` in `onDeath`, so only the last death plays the boss explosion and fanfare.
 - **`Pickup / Pedestal / Trapdoor`** (`entities/pickup.js`):
@@ -775,7 +779,7 @@ shared palette `B.CONTEXT_COLORS`); because the rain is light blue, **danger is 
   when none are left.
 
 Minions (`spawn: false`): `leaklet`, `microservice`, `megalith_module` (Megalith phase 2; crawls back and heals it), `loop_segment`, `nested_loop_part`, `detached_head_tag` (Detached HEAD's head),
-`octo_arm` (Octopus Merge arm segment), `spinlock_segment` (Spinlock body; invulnerable, shields the head),
+`subagent` (Agent Swarm's small agents), `octo_arm` (Octopus Merge arm segment), `spinlock_segment` (Spinlock body; invulnerable, shields the head),
 `port_scanner_port` (Port Scanner's port; intangible floor socket, doesn't count for clearing), `overflow_puddle` (Overflow
 Buffer's slowing puddle; static, intangible, harmless, doesn't count for clearing).
 
@@ -831,7 +835,7 @@ families (screenshots 2026-11-03); cacti stay a Sandbox Borders floor feature.
 
 **Bosses** (base HP): `monolith` 360 (floors 1–6), `stakeholder` 250 (floors 1–6), `friday_deploy` 240 (floor 4+),
 `infinite_loop` 300 (floors 2–7), `memory_hog` 300 (floors 4–9, ×2 on Dependency Hell), `megalith` 460 (floor 7+, replaces the Monolith), `shareholder` 380 (floor 7+,
-replaces the Stakeholder), `nested_loop` 450 (floor 8+, replaces the Infinite Loop), `rogue_swarm` 4 × 80, `reviewer`
+replaces the Stakeholder), `nested_loop` 450 (floor 8+, replaces the Infinite Loop), `rogue_swarm` 4 × 80 (floors 2–6), `agent_swarm` 4 × 115 (floor 7+, replaces the Rogue Agent Swarm), `reviewer`
 340 (floor 4+), `octopus_merge` 300 (330 until 2026-11-03; Forgotten Branches only, weight 12: about 52 % on
 floor 3, about 41 % on floors 14, 25, …). Each replacement has its predecessor's weight and a `replaces` field, so
 a floor never has the predecessor as a side quest (the side quests keep the retired bosses alive past their `maxFloor`). Friday Deploy and the Reviewer moved from floors 2 and 3 to floor 4 on
@@ -868,6 +872,15 @@ a floor never has the predecessor as a side quest (the side quests keep the reti
     vanishes on arrival via its `range`). **Quarterly earnings** run all fight: every 12 s, between attacks, he is
     stunned for 1.5 s with `damageTakenMult` 1.25 if the player took ≥ 8 % of his max HP that quarter, otherwise he
     fires a telegraphed 10-shot ring and gets 8 % faster (at most 3 times). The HUD line shows the quarter clock.
+- **Agent Swarm (/xhigh)** (2026-11-05) lives in `entities/boss-agent-swarm.js` and runs on the Rogue Agent Swarm's code in
+  `boss.js`: the behaviour is the same object with its own `cfg` (`XHIGH` instead of `SWARM`), and `boss.js` offers the hooks
+  `extra`, `holdFire`, `onFinish` and `drawExtra`. A new swarm variant needs only a new `cfg`. Its colour is a deep crimson on
+  purpose: its body is the player's, so it must stay well away from the coral avatar. The **laser** is aim, lock, beam
+  (full heart); the formation holds fire during lock and beam, the rule the Octopus Merge playtest taught us: a big
+  attack gets the room to itself. **Subagents** (`subagent`, `ignoreForClear`, `state.owner` so they score nothing) are
+  capped at `XHIGH.minions` in `spawnSubagent`, the only place that may check it, because several target rings can be
+  running at once. Depth 1 starts one depth-2 child; `maxDepth` stops it there. The name comes from the idea of subagents
+  at depth > 1.
 - **The Memory Hog** (2026-11-04) lives in `entities/boss-memory-hog.js`; the header there lists every attack, all
   numbers are in `HOG`. A squat, front-facing steel-blue hog whose quills are `1`-bits. **Keep him a hog:** no upright
   stance, no rolling or spin attack; a blue hedgehog must not drift toward a famous mascot (§1). Floor 3 stays the

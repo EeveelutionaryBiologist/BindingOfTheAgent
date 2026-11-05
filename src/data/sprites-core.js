@@ -304,6 +304,30 @@
       frames: [rogueFrame(top, false), rogueFrame(top, true)],
     });
   }
+  // Agent Swarm (/xhigh): dieselben vier in tiefem Rot mit gelb gluehendem Auge. Bewusst dunkler als der korallfarbene
+  // Spieler, damit man im Getuemmel nicht sich selbst mit ihnen verwechselt.
+  const XHIGH_PAL = Object.assign({}, ROGUE_PAL, {
+    D: '#2c0a10', o: '#a81e2c', l: '#cc3a40', L: '#f07a6a', d: '#6e1420', f: '#8a1a26', s: '#430d16',
+    k: '#14050a', m: '#22070d', e: '#ffe45c', E: '#fff6c8',
+  });
+  const XHIGH_STARS = { y: '#ffb02e', z: '#ffd27a', Y: '#fff0c8', W: '#ffffff' };
+  const XHIGH_VARIANTS = [
+    ['boss_xhigh_agent_a', 'star', XHIGH_STARS],
+    ['boss_xhigh_agent_b', 'star', { y: '#ffe45c', z: '#fff09a', Y: '#fffbe0', W: '#ffffff' }],
+    ['boss_xhigh_agent_c', 'hat', { h: '#3a3a42', H: '#6a6a76' }],
+    ['boss_xhigh_agent_d', 'headset', {}],
+  ];
+  for (const [name, top, pal] of XHIGH_VARIANTS) {
+    B.defineSprite(name, {
+      palette: Object.assign({}, XHIGH_PAL, pal), scale: 5,
+      frames: [rogueFrame(top, false), rogueFrame(top, true)],
+    });
+  }
+  // Subagent: derselbe Koerper, nur klein (Tiefe 2 verkleinert ihn weiter ueber e.sizeMult)
+  B.defineSprite('enemy_subagent', {
+    palette: Object.assign({}, XHIGH_PAL, XHIGH_STARS), scale: 3,
+    frames: [rogueFrame('star', false), rogueFrame('star', true)],
+  });
   // Gruppenbild fuer Intro-Karte und Inhaltsliste: die Sterne werden hier per Zeichen unterschieden
   // (r = roter, g = gruener Stern), weil ein Sprite nur eine Palette hat.
   (function () {
@@ -315,6 +339,14 @@
     B.defineSprite('boss_rogue_swarm', {
       palette: Object.assign({}, ROGUE_PAL, {
         1: '#ff3b5c', 2: '#ff9aa8', 3: '#ffd0d8', 4: '#ffffff', 5: '#3bff7a', 6: '#a8ffc4', 7: '#e0ffe9',
+      }),
+      scale: 4,
+      rows: side(A, Bv).concat(['.'.repeat(27)], side(C, Dv)),
+    });
+    B.defineSprite('boss_agent_swarm', {
+      palette: Object.assign({}, XHIGH_PAL, {
+        1: '#ffb02e', 2: '#ffd27a', 3: '#fff0c8', 4: '#ffffff', 5: '#ffe45c', 6: '#fff09a', 7: '#fffbe0',
+        h: '#3a3a42', H: '#6a6a76',
       }),
       scale: 4,
       rows: side(A, Bv).concat(['.'.repeat(27)], side(C, Dv)),

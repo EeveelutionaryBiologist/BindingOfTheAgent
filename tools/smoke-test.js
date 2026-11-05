@@ -79,6 +79,9 @@
  *     echte Credits hoechstens coinCap und sie verfallen; "Hostile takeover" bei 40 %; Rueckkauf friert ein und
  *     schickt alle Kugeln zu ihm; Quartal verfehlt -> betaeubt (Schadensfaktor, danach weg), geschlagen -> Ring erst
  *     nach Telegraph und schneller; alle Kugeln 165–260 px/s; je genau ein Boss-Tod
+ *   - Agent Swarm (/xhigh): loest den Rogue Agent Swarm ab Etage 7 ab (Zwischenboss bleibt der alte); Laser mit voller
+ *     Vorwarnung, Treffer nur im Strahl und nur auf der Linie, Formation schweigt waehrend Lock und Strahl; Subagents
+ *     mit Zielring, Tiefe 2 kleiner, nie tiefer, Deckel haelt; Solo mit Laser; ein Boss-Tod, keine Reste, kein Score
  *   - Verschaerfte Grundgegner: gleiche Werte wie Bug und Null Pointer ausser 2 Kontaktschaden, nie vor Etage 8, auf
  *     den Etagen 8–22 je 2.5–9 % der Gegner; ein Treffer kostet ein volles Herz
  *   - Team-Items: Pools; Von Neumann: Werte; Sharp Left Turn: Kurve einmal, 90 Grad links in jeder Richtung, Strecke
@@ -826,6 +829,143 @@ const URL = 'file://' + path.join(ROOT, 'index.html').replace(/\\/g, '/') + '?se
     return out;
   });
   problems.push(...swarmProblems);
+
+  // --- Agent Swarm (/xhigh): loest den Rogue Agent Swarm ab Etage 7 ab; Laser, Subagents bis Tiefe 2 ---
+  const xhighProblems = await page.evaluate(() => {
+    const out = [], g = BOTA.game, DT = 1 / 60, BH = BOTA.BossHelpers, X = BH.xhigh, BO = BOTA.BOSSES;
+    for (let d = 1; d <= 22; d++) {
+      const th = BOTA.themeKeyAt(d), old = BOTA.bossEligible(BO.rogue_swarm, d, th), neu = BOTA.bossEligible(BO.agent_swarm, d, th);
+      if (d >= 2 && d <= 6 && (!old || neu)) out.push('Agent Swarm: falscher Swarm auf Etage ' + d);
+      if (d >= 7 && (old || !neu)) out.push('Agent Swarm: falscher Swarm auf Etage ' + d);
+    }
+    if (BO.agent_swarm.replaces !== 'rogue_swarm' || BO.agent_swarm.weight !== BO.rogue_swarm.weight) out.push('Agent Swarm: replaces oder Gewicht falsch');
+    if (!BOTA.ENCOUNTER_BOSSES.includes('rogue_swarm') || BOTA.ENCOUNTER_BOSSES.includes('agent_swarm')) out.push('Agent Swarm: Zwischenboss-Liste falsch');
+    if (BO.agent_swarm.hp * 4 <= BO.rogue_swarm.hp * 4) out.push('Agent Swarm: nicht zaeher als der Rogue Agent Swarm');
+
+    const d0 = g.depth, p0 = g.player, rng0 = g.rng;
+    let deaths = 0;
+    const off = BOTA.bus.on('enemyDeath', (e) => { if (e.boss) deaths++; });
+    try {
+      g.enterFloor(8); g.setState('play');
+      BOTA.debug.gotoRoom('boss');
+      for (let i = 0; i < 4; i++) BOTA.debug.killAll();
+      g.room.enemies.length = 0; g.room.projectiles.length = 0;
+      g.room.stampLayout(BOTA.LAYOUTS.find((l) => l.id === 'empty'));
+      g.rng = new BOTA.RNG(4242);
+      const pl = new BOTA.Player(480, 500); pl.recalcStats(); g.player = pl;
+      const hits = [];
+      pl.hurt = function (amount) { hits.push({ amount }); return false; };
+      BOTA.debug.spawnBoss('agent_swarm', 480, 220);
+      const M = g.room.enemies.filter((e) => e.id === 'agent_swarm');
+      const G = M[0].state.group;
+      if (M.length !== 4 || !M.every((m) => m.bossGroup === M[0].bossGroup && m.bossGroup.length === 4)) out.push('Agent Swarm: ' + M.length + ' Mitglieder oder kein gemeinsamer Balken');
+      if (G.cfg !== X) out.push('Agent Swarm: falsche Konfiguration');
+      const seen = new Set();
+      const shotCheck = () => {
+        let fresh = 0;
+        for (const pr of g.room.projectiles) {
+          if (pr.team !== 'enemy' || seen.has(pr)) continue;
+          seen.add(pr); fresh++;
+          const v = Math.hypot(pr.vx, pr.vy);
+          if (v < 165 || v > 260) out.push('Agent Swarm: Schuss mit ' + v.toFixed(0) + ' px/s');
+        }
+        return fresh;
+      };
+      const step = () => { g.state = 'play'; g.update(DT); return shotCheck(); };
+      const holder = () => M.find((m) => !m.dead && m.state.laser);
+
+      // Laser: Vorwarnung, Treffer nur im Strahl und genau auf der Linie, die Formation schweigt
+      G.laserT = 0.5; G.summonT = Infinity;
+      let aimT = 0, lockT = 0, beamHits = 0, early = 0, shotsWhileHeld = 0, episodes = 0, offHits = 0, was = null;
+      for (let i = 0; i < 60 * 22 && episodes < 2; i++) {
+        G.summonT = Infinity;
+        const h = holder(), L = h && h.state.laser, near = () => M.some((m) => Math.hypot(m.x - pl.x, m.y - pl.y) < 70);
+        if (L) {
+          const pt = { x: L.path[0].x + (L.path[1].x - L.path[0].x) * 0.7, y: L.path[0].y + (L.path[1].y - L.path[0].y) * 0.7 };
+          const side = episodes === 1 && L.mode === 'fire' ? 60 : 0;
+          pl.x = pt.x - Math.sin(L.aim) * side; pl.y = pt.y + Math.cos(L.aim) * side;
+        }
+        hits.length = 0;
+        g.room.projectiles.length = 0;
+        const fresh = step();
+        const after = holder(), LA = after && after.state.laser;
+        if (L && L.mode === 'aim') aimT += DT;
+        if (L && L.mode === 'lock') lockT += DT;
+        const beam = hits.filter((x) => x.amount === 2).length > 0 && !near();
+        if (L && L.mode !== 'fire' && beam) early++;
+        if (L && L.mode === 'fire' && beam) { if (episodes === 0) beamHits++; else offHits++; }
+        if (L && L.mode !== 'aim' && fresh) shotsWhileHeld += fresh;
+        if (was && !LA) episodes++;
+        was = LA || null;
+      }
+      if (episodes < 2) out.push('Agent Swarm: nur ' + episodes + ' Laser in 22 s');
+      if (aimT / 2 < X.laserAim - 0.05 || lockT / 2 < X.laserLock - 0.05) out.push('Agent Swarm: Laser-Vorwarnung zu kurz (' + aimT.toFixed(2) + ' / ' + lockT.toFixed(2) + ')');
+      if (early) out.push('Agent Swarm: Laser trifft ' + early + 'x vor dem Strahl');
+      if (!beamHits) out.push('Agent Swarm: Laser trifft auf der Linie nicht');
+      if (offHits) out.push('Agent Swarm: Laser trifft ' + offHits + 'x neben der Linie');
+      if (shotsWhileHeld) out.push('Agent Swarm: ' + shotsWhileHeld + ' Schuesse waehrend Lock oder Strahl');
+
+      // Subagents: Zielring zuerst, Tiefe 1 startet Tiefe 2, Tiefe 2 startet nichts, Deckel gilt
+      pl.x = 480; pl.y = 500;
+      G.laserT = Infinity; G.summonT = 0.05;
+      const subs = () => g.room.enemies.filter((e) => e.id === 'subagent' && !e.dead);
+      let ringT = 0;
+      for (let i = 0; i < 300 && !subs().length; i++) { G.laserT = Infinity; if (M.some((m) => m.state.summon)) ringT += DT; step(); }
+      const first = subs()[0];
+      if (!first) out.push('Agent Swarm: kein Subagent');
+      else {
+        if (ringT < 0.6) out.push('Agent Swarm: Subagent ohne Zielring (' + ringT.toFixed(2) + ' s)');
+        if (first.state.depth !== 1 || !first.state.owner || !first.ignoreForClear) out.push('Agent Swarm: Subagent falsch verbunden');
+        G.summonT = Infinity; first.state.spawnT = 0;
+        let childRing = 0;
+        for (let i = 0; i < 180 && subs().length < 2; i++) { G.laserT = Infinity; G.summonT = Infinity; if (first.state.child) childRing += DT; step(); }
+        const child = subs().find((e) => e !== first);
+        if (!child || child.state.depth !== 2 || child.r >= first.r || child.maxHp >= first.maxHp) out.push('Agent Swarm: Tiefe 2 fehlt oder ist nicht kleiner');
+        if (childRing < 0.6) out.push('Agent Swarm: Tiefe 2 ohne Zielring');
+        let peak = 0, deep = 0;
+        G.summonT = 0;
+        for (let i = 0; i < 60 * 45; i++) {
+          G.laserT = Infinity;
+          if (G.summonT > 1) G.summonT = 0.1;
+          for (const sb of subs()) if (sb.state.depth === 1 && sb.state.spawnT > 1 && sb.state.spawnT !== Infinity) sb.state.spawnT = 0.1;
+          step();
+          peak = Math.max(peak, subs().length);
+          deep = Math.max(deep, ...subs().map((e) => e.state.depth), 0);
+        }
+        if (peak > X.minions) out.push('Agent Swarm: ' + peak + ' Subagents statt hoechstens ' + X.minions);
+        if (deep > X.maxDepth) out.push('Agent Swarm: Tiefe ' + deep);
+      }
+      if (!g.room.hasLivingEnemies()) out.push('Agent Swarm: Raum gilt als geraeumt');
+
+      // Solo: letztes Mitglied bekommt weiter Laser; Subagents sterben mit ihm, ein Boss-Tod, kein Score fuer sie
+      for (const m of M.slice(0, 3)) { m.hurt(99999, g, null); }
+      for (let i = 0; i < 150; i++) { G.laserT = Infinity; step(); }
+      const last = M[3];
+      if (!G.solo) out.push('Agent Swarm: kein Solo');
+      G.laserT = 0;
+      let soloBeam = false;
+      for (let i = 0; i < 400 && !soloBeam; i++) { step(); if (last.state.laser) soloBeam = true; }
+      if (!soloBeam) out.push('Agent Swarm: Solo ohne Laser');
+      G.summonT = 0;
+      for (let i = 0; i < 90; i++) step();
+      const kills = g.score.kills;
+      deaths = 0;
+      last.hurt(99999, g, null);
+      for (let i = 0; i < 60; i++) step();
+      if (deaths !== 1) out.push('Agent Swarm: ' + deaths + ' Boss-Tode');
+      if (subs().length) out.push('Agent Swarm: Subagents ueberleben den Schwarm');
+      if (g.score.kills !== kills) out.push('Agent Swarm: Subagents zaehlen im Score');
+      if (g.room.hasLivingEnemies()) out.push('Agent Swarm: Raum nicht geraeumt');
+    } finally {
+      off();
+      g.player = p0; g.rng = rng0;
+      for (let i = 0; i < 4; i++) BOTA.debug.killAll();
+      g.room.projectiles.length = 0;
+      g.enterFloor(d0); g.setState('play');
+    }
+    return out;
+  });
+  problems.push(...xhighProblems);
 
   // --- Stale Branch: nur Forgotten Branches, altert gruen->gelb->braun->kahl, wird schneller, Zaehler steigt,
   //     kahl: Warnung (enemyWindup) -> Sprung mit vollem Herz -> zurueck auf 1; Laub-Effekte und -Sounds ---
