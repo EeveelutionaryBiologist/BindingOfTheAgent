@@ -20,8 +20,9 @@ Training Data) live only on their own floor until floor 8.
 
 **Floor 8 and deeper: everything at once.** From floor 8 the floor identity fades. The odds of every enemy that is
 rare or absent on a floor are raised toward normal (a quarter of the way on floor 8, about a tenth more per floor,
-completely from floor 16). The floor families now turn up on every floor, more and more often, and the Octopus Merge
-can be the floor boss anywhere (at most as likely as a regular boss). The home floors still get their bonus (for example
+up to floor 11). The floor families now turn up on most floors, and from floor 8 the Octopus Merge
+can be the floor boss almost anywhere (at most as likely as a regular boss). Each floor still keeps a few enemies out for good
+(see `enemies.md`), and The Context Limit has no Octopus Merge or Shareholder. The home floors still get their bonus (for example
 Deprecation Warnings on Sandbox Borders). Some combat rooms on these floors also hold a **side quest**: one of the early
 bosses (The Monolith, The Stakeholder, The Infinite Loop or the Rogue Agent Swarm) at half the floor boss's HP, in an
 open arena, without the intro card or the trapdoor. There's one on floors 8 and 9 and one or two from floor 10.

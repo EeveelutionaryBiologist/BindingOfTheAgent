@@ -109,8 +109,8 @@ Per floor, deterministic from `hash(runSeed + depth)`:
    at most one already-filled neighbour (keeps it tree-ish, avoids blobs), and a coin flip agrees.
 4. Retry until the target count is met **and** there are ≥ 3 dead ends.
 5. Special rooms are assigned to dead ends: **Boss** (farthest from start by BFS distance), **Treasure**, **Shop**.
-6. **Secret room**: an empty cell adjacent to ≥ 2 rooms but not to the boss room. Its doors are hidden walls
-   until a Force Push explodes next to them.
+6. **Secret rooms**: 0–3 per floor, usually 1 (20/60/15/5 %). Each is an empty cell adjacent to ≥ 2 rooms but not to the
+   boss room or another secret room. Its doors are hidden walls until a Force Push explodes next to them.
 7. From depth 2 onwards, Treasure and Shop doors are **locked** (cost one Approval).
 8. From depth 2 onwards, one combat room per floor is picked to drop a **guaranteed Approval** when cleared
    (on top of the normal clear reward), so at least one locked door can always be opened.
@@ -436,6 +436,11 @@ All milestones done. What shipped, compared with this doc:
     15 % fewer shots per second in both phases. The breaks shrink with depth, back to roughly the old pace.
   - Guaranteed Approval per floor from depth 2 (see §6, step 8). Before this, 55–80 % of floors had no
     Approval drop at all.
+- **Same enemies every cycle (2026-11-06):** enemy spawns go by the floor within its cycle, so The Backlog II has the same
+  enemies as The Backlog. Room budget, HP and bosses stay on the real depth. Details in AGENTS.md.
+- **Weights review and secret rooms (2026-11-05):** each floor from 3 on now keeps some enemies out for good (`themes: 0`, not
+  lifted by the cacophony), which takes floors 8–11 from 30–34 possible enemies to 23–26. A floor has 0–3 secret rooms
+  instead of exactly one. Details in AGENTS.md.
 - **Surprise round (2026-11-05):** own enemies for floors 8–10 (Cosine Similarity, Heisenbug, Bit Bucket), Terms of Service
   rooms, seed entry, a daily run with today's best score, same-seed retry and an incident timeline on the post-mortem.
   `rm -rf` and the On-Call Pager now scale with depth. Details in AGENTS.md.

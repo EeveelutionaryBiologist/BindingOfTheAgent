@@ -25,7 +25,7 @@ Controls are basically ripped straight from Binding Of Isaac.
 
 Clear a room to open its doors. Find the treasure room (gold door), the shop (green), the boss (red, with teeth),
 and drop through the trapdoor. From floor 2 onwards, treasure and shop doors need an **Approval** (key).
-Secret rooms hide behind cracked walls: Force Push them. A door marked § leads to a **Terms of Service** room: a free item
+Secret rooms hide behind cracked walls: Force Push them. Most floors have one, some have none or several. A door marked § leads to a **Terms of Service** room: a free item
 for one heart and whatever the contract says. Read it. There is no ending. After the last floor you get your Final
 Score and a choice: start over, or keep going with everything you have. There is only the next floor.
 

@@ -68,6 +68,10 @@
  *   - Etagen-Besetzung (home/AWAY) auf 1–7: Heimat-Gegner wie in ROSTER, Auswaerts-Faktor genau AWAY, Raeume voll,
  *     Auswaerts-Anteil 5–45 %; Kakophonie ab 8 (mixAt, Anhebung, Familien ueberall, Octopus Merge gedeckelt);
  *     Determinismus (Begegnungen ziehen nicht aus dem Etagen-RNG)
+ *   - Harte Ausschluesse (themes: 0) aus der Gewichts-Durchsicht: Tabelle BANS und BOSS_BANS stimmt mit den Daten ueberein,
+ *     die Kakophonie hebt sie nie an, in beiden Durchgaengen wird nichts davon gewuerfelt, andere Faktoren bleiben
+ *   - Geheimraeume: 0–3 pro Etage, Anteile nahe 20/60/15/5 %, nie neben Boss oder Geheimraum, mindestens 2 versteckte
+ *     Tueren, deterministisch; eine Bombe oeffnet nur ihre Tuer; Deep Packet Inspection zeigt alle
  *   - Zwischenboss-Begegnungen ab 8: Anzahl je Tiefe, Platzierung, offene Arena, nie der Etagen-Boss; jeder der vier
  *     Bosse durch eine Tuer: kein Intro, HP x ENCOUNTER_HP, agiert, raeumt den Raum, keine Falltuer/Reste
  *   - Themen-Gegner und -Bosse "nur auf ihrer Etage" gilt vor Etage 8 (danach Kakophonie)
@@ -90,7 +94,9 @@
  *     bei genug Schaden, sonst Wipe mit erreichbaren sicheren Spalten; Phase 2; keine Reste, Schloesser enden
  *   - Trojan: ab Etage 5 als Bonus, getarnt wie ein Objekt der Etage; Naehe, Schuss und Explosion enttarnen; Telegraph
  *     vor Ring und Kontakt; Luke vor dem Faecher; sperrt keinen geraeumten Raum
- *   - Ruhestand: Bug und Friday Deploy enden nach Etage 7, Null Pointer und Reviewer nach Etage 9, auch im zweiten Durchgang
+ *   - Durchgaenge: Gegner-Gewichte jeder Etage gelten in jedem Durchgang gleich (B.spawnDepth), Budget und Bosse nach echter Tiefe
+ *   - Ruhestand: Bug und Null Pointer enden nach Etage 7 und 9 und kommen im naechsten Durchgang wieder; Friday Deploy und
+ *     Reviewer bleiben als Bosse dauerhaft weg
  *   - Verschaerfte Grundgegner: gleiche Werte wie Bug und Null Pointer ausser 2 Kontaktschaden, nie vor Etage 8, auf
  *     den Etagen 8–22 je 2.5–9 % der Gegner; ein Treffer kostet ein volles Herz
  *   - Team-Items: Pools; Von Neumann: Werte; Sharp Left Turn: Kurve einmal, 90 Grad links in jeder Richtung, Strecke
@@ -320,7 +326,8 @@ const URL = 'file://' + path.join(ROOT, 'index.html').replace(/\\/g, '/') + '?se
       for (let i = 0; i < 40; i++) {
         const list = BOTA.rollRoomEnemies(new BOTA.RNG(BOTA.hashString('theme' + d + ':' + i)), d);
         if (!list.length) { out.push('Etage ' + d + ' (' + th + '): leerer Kampfraum'); break; }
-        const bad = list.filter((id) => (BOTA.ENEMIES[id].minFloor || 1) > d || BOTA.themeWeight(BOTA.ENEMIES[id], th, d) <= 0);
+        const sd = BOTA.spawnDepth(d);
+        const bad = list.filter((id) => (BOTA.ENEMIES[id].minFloor || 1) > sd || BOTA.themeWeight(BOTA.ENEMIES[id], th, sd) <= 0);
         if (bad.length) { out.push('Etage ' + d + ' (' + th + '): nicht erlaubte Gegner ' + bad.join(',')); break; }
       }
       const boss = BOTA.rollBoss(new BOTA.RNG(d), d);
@@ -348,17 +355,21 @@ const URL = 'file://' + path.join(ROOT, 'index.html').replace(/\\/g, '/') + '?se
         const branches = BOTA.themeKeyAt(d) === 'branches';
         const only = share(d, '__only'), bonus = share(d, '__bonus'), zero = share(d, '__zero');
         const boss = BOTA.rollBossVaried(new BOTA.RNG(d), d, []);
-        if (d < BOTA.MIX_FROM) {
+        // Gegner richten sich nach der Etage im Durchgang (B.spawnDepth), Bosse nach der echten Tiefe
+        if (BOTA.spawnDepth(d) < BOTA.MIX_FROM) {
           if (branches !== (only > 0)) out.push('themeOnly: Anteil ' + only.toFixed(3) + ' auf Etage ' + d);
           if (branches !== (bonus > 0)) out.push('themeOnly (Bonus): Anteil ' + bonus.toFixed(3) + ' auf Etage ' + d);
           if (branches && zero > 0) out.push('themes 0: trotzdem gespawnt auf Etage ' + d);
+        } else {
+          // Kakophonie: der themeOnly-Ausschluss wird angehoben -> taucht ueberall auf; eine explizite 0 bleibt 0
+          if (!(only > 0)) out.push('Kakophonie: themeOnly fehlt auf Etage ' + d);
+          if (!(bonus > 0)) out.push('Kakophonie: themeOnly-Bonus fehlt auf Etage ' + d);
+          if (branches && zero > 0) out.push('Kakophonie hebt themes 0 an: Etage ' + d);
+        }
+        if (d < BOTA.MIX_FROM) {
           // Bosse: themeOnly-Boss nur (und mit Gewicht 1000 praktisch immer) auf seinem Thema
           if (branches !== (boss === '__boss')) out.push('Boss themeOnly: ' + boss + ' auf Etage ' + d);
         } else {
-          // Kakophonie: Ausschluss (themeOnly, Faktor 0) wird angehoben -> taucht ueberall auf
-          if (!(only > 0)) out.push('Kakophonie: themeOnly fehlt auf Etage ' + d);
-          if (!(bonus > 0)) out.push('Kakophonie: themeOnly-Bonus fehlt auf Etage ' + d);
-          if (!(zero > 0)) out.push('Kakophonie: themes 0 fehlt auf Etage ' + d);
           // Themen-Boss: auf seiner Etage praktisch immer, sonst hoechstens mit Gewicht 3 x Mischungsgrad
           if (branches && boss !== '__boss') out.push('Boss themeOnly fehlt auf seiner Etage ' + d);
           const bw = BOTA.bossWeightAt(BS.__boss, BOTA.themeKeyAt(d), d);
@@ -1219,8 +1230,9 @@ const URL = 'file://' + path.join(ROOT, 'index.html').replace(/\\/g, '/') + '?se
         const n = l.filter((id) => id === 'trojan').length;
         rooms++; if (n) with1++; peak = Math.max(peak, n);
       }
-      if (d < 5 && with1) out.push('Trojan schon auf Etage ' + d);
-      if (d >= 5 && (with1 / rooms < 0.06 || with1 / rooms > 0.25)) out.push('Trojan: Anteil ' + (with1 / rooms).toFixed(3) + ' auf Etage ' + d);
+      const sd = BOTA.spawnDepth(d);
+      if (sd < 5 && with1) out.push('Trojan schon auf Etage ' + d);
+      if (sd >= 5 && (with1 / rooms < 0.06 || with1 / rooms > 0.25)) out.push('Trojan: Anteil ' + (with1 / rooms).toFixed(3) + ' auf Etage ' + d);
       if (peak > 1) out.push('Trojan: ' + peak + ' in einem Raum');
     }
     const d0 = g.depth, p0 = g.player, rng0 = g.rng;
@@ -1599,10 +1611,11 @@ const URL = 'file://' + path.join(ROOT, 'index.html').replace(/\\/g, '/') + '?se
         rooms++; withOrphan += n;
       }
       const share = withOrphan / rooms;
-      // vor Etage 8 nur auf Forgotten Branches, danach ueberall mit angehobenem Faktor (Kakophonie)
-      const f = BOTA.themeWeight(E.orphan_commit, BOTA.themeKeyAt(d), d);
+      // vor Etage 8 nur auf Forgotten Branches, danach ueberall mit angehobenem Faktor (Kakophonie); jeder Durchgang gleich
+      const sd = BOTA.spawnDepth(d);
+      const f = BOTA.themeWeight(E.orphan_commit, BOTA.themeKeyAt(d), sd);
       if (f <= 0) { if (share > 0) out.push('Orphan Commit auf Etage ' + d); continue; }
-      const want = Math.min(0.25, (E.orphan_commit.bonusChance + 0.01 * (d - 1)) * f);
+      const want = Math.min(0.25, (E.orphan_commit.bonusChance + 0.01 * (sd - 1)) * f);
       if (Math.abs(share - want) > 0.05) out.push('Orphan Commit: Anteil ' + share.toFixed(3) + ' statt ~' + want.toFixed(2) + ' auf Etage ' + d);
     }
 
@@ -2498,12 +2511,12 @@ const URL = 'file://' + path.join(ROOT, 'index.html').replace(/\\/g, '/') + '?se
       if (BOTA.HUD.scanMarks(g).length) out.push('Deep Packet Inspection: Marken ohne Item');
       pl.giveItem('deep_packet_inspection', g);
       const cells = [...g.floor.cells.values()];
-      const bossCell = cells.find((c) => c.type === 'boss'), secretCell = cells.find((c) => c.type === 'secret');
+      const bossCell = cells.find((c) => c.type === 'boss'), secretCells = cells.filter((c) => c.type === 'secret');
       const seen0 = cells.map((c) => c.room.seen).join();
       let marks = BOTA.HUD.scanMarks(g);
       if (!marks.some((m) => m.type === 'boss' && m.color === '#ff5a5a')) out.push('Deep Packet Inspection: Boss fehlt');
-      if (secretCell && !marks.some((m) => m.type === 'secret' && m.color === '#5fa8ff')) out.push('Deep Packet Inspection: Geheimraum fehlt');
-      if (marks.length !== (secretCell ? 2 : 1)) out.push('Deep Packet Inspection: ' + marks.length + ' Marken');
+      if (marks.filter((m) => m.type === 'secret' && m.color === '#5fa8ff').length !== secretCells.length) out.push('Deep Packet Inspection: Geheimraum fehlt');
+      if (marks.length !== 1 + secretCells.length) out.push('Deep Packet Inspection: ' + marks.length + ' Marken');
       if (cells.map((c) => c.room.seen).join() !== seen0) out.push('Deep Packet Inspection: aendert room.seen');
       if (marks.some((m) => m.off !== (m.gx < 0 || m.gy < 0 || m.gx >= 7 || m.gy >= 5))) out.push('Deep Packet Inspection: Fensterlage falsch');
       const cvs = document.createElement('canvas').getContext('2d');
@@ -2577,7 +2590,14 @@ const URL = 'file://' + path.join(ROOT, 'index.html').replace(/\\/g, '/') + '?se
       return pairs.map(([id]) => (n[id] || 0) / all);
     };
     for (let d = 1; d <= 7; d++) if (share(d).some((x) => x > 0)) out.push('Verschaerfte Gegner schon auf Etage ' + d);
-    for (let d = 8; d <= 22; d++) for (const x of share(d)) if (x < 0.025 || x > 0.09) out.push('Verschaerfte Gegner auf Etage ' + d + ': Anteil ' + x.toFixed(3));
+    for (let d = 8; d <= 22; d++) {
+      share(d).forEach((x, i) => {
+        // Der Game-breaking Bug ist auf The Latent Space ausgeschlossen (harte Ausschluesse, siehe BANS)
+        // und in jedem Durchgang erst ab der achten Etage dabei
+        const banned = BOTA.spawnDepth(d) < 8 || BOTA.themeWeight(E[pairs[i][0]], BOTA.themeKeyAt(d), d) === 0;
+        if (banned ? x > 0 : (x < 0.025 || x > 0.09)) out.push('Verschaerfte Gegner auf Etage ' + d + ': ' + pairs[i][0] + ' Anteil ' + x.toFixed(3));
+      });
+    }
 
     // Ein Treffer kostet wirklich ein volles Herz (Grundgegner: ein halbes)
     const d0 = g.depth, p0 = g.player;
@@ -2606,7 +2626,8 @@ const URL = 'file://' + path.join(ROOT, 'index.html').replace(/\\/g, '/') + '?se
   });
   problems.push(...eliteProblems);
 
-  // --- Ruhestand: Bug, Null Pointer, Friday Deploy und Reviewer enden auf ihrer maxFloor, auch im zweiten Durchgang ---
+  // --- Ruhestand: Bug und Null Pointer enden auf ihrer maxFloor und kommen im naechsten Durchgang wieder (B.spawnDepth);
+  //     Friday Deploy und Reviewer sind Bosse und bleiben dauerhaft weg ---
   const retiredProblems = await page.evaluate(() => {
     const out = [], E = BOTA.ENEMIES, BO = BOTA.BOSSES;
     const rolled = (id, d) => {
@@ -2616,10 +2637,11 @@ const URL = 'file://' + path.join(ROOT, 'index.html').replace(/\\/g, '/') + '?se
     for (const [id, last] of [['bug', 7], ['null_pointer', 9]]) {
       if (E[id].maxFloor !== last) out.push(id + ': maxFloor ' + E[id].maxFloor);
       if (!rolled(id, last)) out.push(id + ': fehlt auf seiner letzten Etage ' + last);
-      for (const d of [last + 1, 12, 13, 16, 23]) {
+      for (const d of [last + 1, 11, last + 12, 22]) {
         if (rolled(id, d)) out.push(id + ': noch auf Etage ' + d);
         if (BOTA.enemyWeightAt(E[id], d) !== 0) out.push(id + ': Gewicht auf Etage ' + d);
       }
+      for (const d of [12, 23]) if (!rolled(id, d)) out.push(id + ': fehlt in The Backlog (Etage ' + d + ')');
     }
     for (const [id, last] of [['friday_deploy', 7], ['reviewer', 9]]) {
       if (!BOTA.bossEligible(BO[id], last, BOTA.themeKeyAt(last))) out.push(id + ': fehlt auf seiner letzten Etage ' + last);
@@ -2966,7 +2988,7 @@ const URL = 'file://' + path.join(ROOT, 'index.html').replace(/\\/g, '/') + '?se
     if (!def || !BOTA.ENEMIES.overflow_puddle) { out.push('Overflow Buffer: Definition fehlt'); return out; }
     if (def.family !== 'context' || (def.themeOnly || []).join() !== 'context' || def.minFloor !== 11) out.push('Overflow Buffer: Familie/Thema/minFloor falsch');
     if (BOTA.spriteFrameCount('enemy_overflow_buffer') !== 2) out.push('Overflow Buffer: Sprite ohne 2 Frames');
-    // 1) Wuerfeln: nie vor Etage 11; auf The Context Limit haeufiger als auf einer Etage danach
+    // 1) Wuerfeln: nie vor Etage 11 und nicht auf der Etage danach (der naechste Durchgang beginnt von vorn)
     const count = (d, n) => {
       let c = 0;
       for (let i = 0; i < n; i++) {
@@ -2981,8 +3003,8 @@ const URL = 'file://' + path.join(ROOT, 'index.html').replace(/\\/g, '/') + '?se
     const other = CX + 1;
     const nCx = count(CX, 400), nOther = count(other, 400);
     if (!nCx) out.push('Overflow Buffer: taucht auf The Context Limit (Etage ' + CX + ') nie auf');
-    if (!(nCx > nOther)) out.push('Overflow Buffer: auf Etage ' + CX + ' nicht haeufiger als auf Etage ' + other + ' (' + nCx + ' / ' + nOther + ')');
-    if (!(BOTA.enemyWeightAt(def, CX) > BOTA.enemyWeightAt(def, other) && BOTA.enemyWeightAt(def, other) > 0)) out.push('Overflow Buffer: Gewicht Etage ' + CX + ' nicht hoeher als Etage ' + other);
+    if (nOther) out.push('Overflow Buffer: taucht auf Etage ' + other + ' auf (' + nOther + ')');
+    if (!(BOTA.enemyWeightAt(def, CX) > 0 && BOTA.enemyWeightAt(def, other) === 0)) out.push('Overflow Buffer: Gewicht Etage ' + CX + ' nicht hoeher als Etage ' + other);
 
     const d0 = g.depth;
     const p = g.player;
@@ -3175,13 +3197,13 @@ const URL = 'file://' + path.join(ROOT, 'index.html').replace(/\\/g, '/') + '?se
     const g = BOTA.game, E = BOTA.ENEMIES, DT = 1 / 60, BH = BOTA.BEHAVIORS.summarizer;
     const d0 = g.depth;
     const CL = BOTA.FLOOR_THEMES.findIndex((t) => t.key === 'context') + 1;
-    // 1) Spawn-Regeln: nie vor Etage 11; auf The Context Limit staerker gewichtet; hoechstens 1 pro Raum
+    // 1) Spawn-Regeln: nur auf The Context Limit (nie davor, nicht auf der Etage danach); hoechstens 1 pro Raum
     for (let d = 1; d < CL; d++) {
       for (let i = 0; i < 150; i++) if (BOTA.rollRoomEnemies(new BOTA.RNG(BOTA.hashString('summ' + d + ':' + i)), d).includes('summarizer')) { out.push('Summarizer auf Etage ' + d); break; }
     }
     const other = CL + 1;
     const wCL = BOTA.enemyWeightAt(E.summarizer, CL), wOther = BOTA.enemyWeightAt(E.summarizer, other);
-    if (!(wCL > wOther && wOther > 0)) out.push('Summarizer: Gewicht ' + wCL + ' (Etage ' + CL + ') vs. ' + wOther + ' (Etage ' + other + ')');
+    if (!(wCL > 0 && wOther === 0)) out.push('Summarizer: Gewicht ' + wCL + ' (Etage ' + CL + ') vs. ' + wOther + ' (Etage ' + other + ')');
     let nCL = 0, nOther = 0;
     for (let i = 0; i < 600; i++) {
       const l = BOTA.rollRoomEnemies(new BOTA.RNG(BOTA.hashString('summCL:' + i)), CL).filter((x) => x === 'summarizer').length;
@@ -3189,7 +3211,7 @@ const URL = 'file://' + path.join(ROOT, 'index.html').replace(/\\/g, '/') + '?se
       if (l > 1 || l2 > 1) { out.push('Summarizer: ' + Math.max(l, l2) + ' in einem Raum'); break; }
       nCL += l; nOther += l2;
     }
-    if (!(nCL > nOther && nCL > 0)) out.push('Summarizer: ' + nCL + ' Raeume auf Etage ' + CL + ', ' + nOther + ' auf Etage ' + other);
+    if (!(nOther === 0 && nCL > 0)) out.push('Summarizer: ' + nCL + ' Raeume auf Etage ' + CL + ', ' + nOther + ' auf Etage ' + other);
 
     // 2) Verhalten (direkt gesteppt; nur der Summarizer laeuft, die Ziele stehen still)
     const ev = [];
@@ -3370,7 +3392,7 @@ const URL = 'file://' + path.join(ROOT, 'index.html').replace(/\\/g, '/') + '?se
     // 0) Zone = mittleres Drittel der Innenraum-Breite
     const W = I.x1 - I.x0;
     if (Math.abs(Z.x0 - (I.x0 + W / 3)) > 1e-6 || Math.abs(Z.x1 - (I.x0 + 2 * W / 3)) > 1e-6) out.push('Lost in the Middle: Zone ' + Z.x0 + '–' + Z.x1);
-    // 1) Spawn: nie vor Etage 11; auf The Context Limit dabei und schwerer gewichtet als auf den Etagen danach
+    // 1) Spawn: nie vor Etage 11; auf The Context Limit dabei, in der naechsten Runde erst dort wieder
     for (let d = 1; d < CX; d++) {
       for (let i = 0; i < 300; i++) {
         if (BOTA.rollRoomEnemies(new BOTA.RNG(BOTA.hashString('lost' + d + ':' + i)), d).includes('lost_in_the_middle')) { out.push('Lost in the Middle auf Etage ' + d); break; }
@@ -3385,7 +3407,7 @@ const URL = 'file://' + path.join(ROOT, 'index.html').replace(/\\/g, '/') + '?se
     }
     if (!seen) out.push('Lost in the Middle: taucht auf Etage ' + CX + ' nie auf');
     for (const d of [12, 15]) {
-      if (!(BOTA.enemyWeightAt(def, CX) > BOTA.enemyWeightAt(def, d))) out.push('Lost in the Middle: Etage ' + CX + ' nicht schwerer als Etage ' + d);
+      if (!(BOTA.enemyWeightAt(def, CX) > 0 && BOTA.enemyWeightAt(def, d) === 0)) out.push('Lost in the Middle: Gewicht auf Etage ' + d);
     }
     if (AI.shotSpeed({ depth: 99 }, P.shotSpeed) > 260 || AI.shotSpeed({ depth: 1 }, P.shotSpeed) < 165) out.push('Lost in the Middle: Schusstempo ausserhalb 165–260');
 
@@ -3679,8 +3701,9 @@ const URL = 'file://' + path.join(ROOT, 'index.html').replace(/\\/g, '/') + '?se
     for (const d of [8, 9, 10]) for (let i = 0; i < 600; i++) for (const id of BOTA.rollRoomEnemies(new BOTA.RNG(BOTA.hashString('fam' + d + ':' + i)), d)) seen.add(id);
     for (const id of fam.concat(['orphan_commit'])) if (!seen.has(id)) out.push('Kakophonie: ' + id + ' fehlt auf Etage 8–10');
     for (const id of ['overflow_buffer', 'summarizer', 'lost_in_the_middle']) if (seen.has(id)) out.push('Kakophonie: ' + id + ' schon auf Etage 8–10');
-    const s8 = famShare(8), s12 = famShare(12);
-    if (!(s8 > 0.05 && s12 > s8)) out.push('Kakophonie: Familien-Anteil ' + s8.toFixed(3) + ' (8) / ' + s12.toFixed(3) + ' (12)');
+    // Am Anfang des naechsten Durchgangs ist die Kakophonie fuer Gegner wieder vorbei, auf Etage 19 wieder da
+    const s8 = famShare(8), s12 = famShare(12), s19 = famShare(19);
+    if (!(s8 > 0.05 && s19 > 0.05 && s12 === 0)) out.push('Kakophonie: Familien-Anteil ' + s8.toFixed(3) + ' (8) / ' + s12.toFixed(3) + ' (12) / ' + s19.toFixed(3) + ' (19)');
     // Octopus Merge sickert ab 8 mit gedeckeltem Gewicht (3 x mix) in fremde Etagen
     const ow = BOTA.bossWeightAt(BOTA.BOSSES.octopus_merge, 'latent', 8);
     if (Math.abs(ow - 0.75) > 1e-9) out.push('Octopus Merge auf Etage 8: Gewicht ' + ow);
@@ -3741,6 +3764,183 @@ const URL = 'file://' + path.join(ROOT, 'index.html').replace(/\\/g, '/') + '?se
     return out;
   });
   problems.push(...spawnProblems);
+
+  // --- Harte Ausschluesse aus der Gewichts-Durchsicht (2026-11-05): themes: 0 gilt auch in der Kakophonie und in beiden
+  //     Durchgaengen. Die Tabellen sind die Quelle der Wahrheit; eine neue Sperre gehoert auch hier hinein. ---
+  const banProblems = await page.evaluate(() => {
+    const out = [];
+    const E = BOTA.ENEMIES, BO = BOTA.BOSSES;
+    const BANS = {
+      branches: ['zombie_process'],
+      sandbox: ['memory_leak', 'merge_conflict', 'spaghetti_code'],
+      training: ['zombie_process'],
+      latent: ['game_breaking_bug', 'merge_conflict', 'port_scanner', 'rate_limiter', 'scope_creep', 'spaghetti_code'],
+      undefined: ['deprecation_warning', 'dust_daemon', 'honeypot', 'race_condition', 'rolling_release', 'rootkit', 'scope_creep', 'spinlock'],
+      devnull: ['cherry_pick', 'detached_head', 'flaky_test', 'graphics_glitch', 'merge_conflict', 'stale_branch'],
+      context: ['cherry_pick', 'dust_daemon', 'honeypot', 'race_condition', 'rolling_release', 'rootkit', 'spaghetti_code', 'spinlock'],
+    };
+    const BOSS_BANS = { context: ['octopus_merge', 'shareholder'] };
+    const zeros = (defs) => {
+      const z = {};
+      for (const [id, def] of Object.entries(defs)) {
+        for (const [th, f] of Object.entries(def.themes || {})) if (f === 0) (z[th] = z[th] || []).push(id);
+      }
+      for (const th of Object.keys(z)) z[th].sort();
+      return z;
+    };
+    const same = (a, b) => JSON.stringify(Object.keys(a).sort().map((k) => [k, a[k]])) === JSON.stringify(Object.keys(b).sort().map((k) => [k, b[k]]));
+    if (!same(zeros(E), BANS)) out.push('Gegner-Sperren weichen von BANS ab: ' + JSON.stringify(zeros(E)));
+    if (!same(zeros(BO), BOSS_BANS)) out.push('Boss-Sperren weichen von BOSS_BANS ab: ' + JSON.stringify(zeros(BO)));
+
+    for (let d = 1; d <= 22; d++) {
+      const th = BOTA.themeKeyAt(d), banned = BANS[th] || [], bossBanned = BOSS_BANS[th] || [];
+      for (const id of banned) {
+        if (BOTA.themeWeight(E[id], th, d) !== 0 || BOTA.enemyWeightAt(E[id], d) !== 0) out.push(id + ': Gewicht auf Etage ' + d);
+      }
+      let n = 0, rooms = 0;
+      for (let i = 0; i < 300; i++) {
+        const list = BOTA.rollRoomEnemies(new BOTA.RNG(BOTA.hashString('ban' + d + ':' + i)), d);
+        rooms++; n += list.length;
+        const hit = list.find((id) => banned.includes(id));
+        if (hit) { out.push(hit + ' gewuerfelt auf Etage ' + d); break; }
+      }
+      if (n / rooms < 3) out.push('Etage ' + d + ': nur ' + (n / rooms).toFixed(2) + ' Gegner pro Raum');
+      for (const id of bossBanned) if (BOTA.bossEligible(BO[id], d, th)) out.push(id + ': Boss auf Etage ' + d);
+      for (let i = 0; i < 200; i++) {
+        const boss = BOTA.rollBossVaried(new BOTA.RNG(BOTA.hashString('banboss' + d + ':' + i)), d, []);
+        if (bossBanned.includes(boss)) { out.push(boss + ' als Boss auf Etage ' + d); break; }
+      }
+      const possible = Object.keys(BO).filter((id) => BOTA.bossEligible(BO[id], d, th));
+      if (possible.length < 2) out.push('Etage ' + d + ': nur ' + possible.length + ' moegliche Bosse');
+    }
+    // Eine Sperre gilt nur fuer ihr Thema: ohne sie bleibt die Kakophonie, wie sie ist
+    if (Math.abs(BOTA.themeWeight(E.stale_branch, 'latent', 8) - 0.25) > 1e-9) out.push('Sperre wirkt auf fremdes Thema');
+    if (Math.abs(BOTA.bossWeightAt(BO.octopus_merge, 'devnull', 10) - 3 * BOTA.mixAt(10)) > 1e-9) out.push('Boss-Sperre wirkt auf fremdes Thema');
+    return out;
+  });
+  problems.push(...banProblems);
+
+  // --- Durchgaenge: Jede Etage rollt in jedem Durchgang dieselben Gegner mit denselben Gewichten (B.spawnDepth).
+  //     Budget, Gegnerzahl und Bosse richten sich weiter nach der echten Tiefe. ---
+  const cycleProblems = await page.evaluate(() => {
+    const out = [], E = BOTA.ENEMIES, BO = BOTA.BOSSES, N = BOTA.FLOOR_THEMES.length;
+    for (const [d, want] of [[1, 1], [N, N], [N + 1, 1], [2 * N, N], [2 * N + 1, 1], [3 * N + 8, 8]]) {
+      if (BOTA.spawnDepth(d) !== want) out.push('spawnDepth(' + d + ') = ' + BOTA.spawnDepth(d));
+    }
+    for (const [id, def] of Object.entries(E)) {
+      for (let d = 1; d <= N; d++) {
+        for (const c of [1, 2, 3]) {
+          if (BOTA.enemyWeightAt(def, d) !== BOTA.enemyWeightAt(def, d + c * N)) out.push(id + ': Gewicht auf Etage ' + (d + c * N) + ' anders als auf ' + d);
+        }
+      }
+    }
+    for (let d = 1; d <= N; d++) {
+      const allowed = (id) => {
+        const def = E[id];
+        return (def.minFloor || 1) <= d && (def.maxFloor === undefined || d <= def.maxFloor) && BOTA.themeWeight(def, BOTA.themeKeyAt(d), d) > 0;
+      };
+      for (let i = 0; i < 300; i++) {
+        const hit = BOTA.rollRoomEnemies(new BOTA.RNG(BOTA.hashString('cyc' + d + ':' + i)), d + N).find((id) => !allowed(id));
+        if (hit) { out.push(hit + ' auf Etage ' + (d + N) + ', aber nicht auf ' + d); break; }
+      }
+    }
+    // Gleiche Gegner, aber mehr davon: das Budget bleibt an der echten Tiefe
+    const perRoom = (d) => {
+      let n = 0;
+      for (let i = 0; i < 500; i++) n += BOTA.rollRoomEnemies(new BOTA.RNG(BOTA.hashString('cycn' + d + ':' + i)), d).length;
+      return n / 500;
+    };
+    const a = perRoom(1), b = perRoom(N + 1);
+    if (!(b > a + 2)) out.push('Budget folgt dem Durchgang: ' + a.toFixed(2) + ' / ' + b.toFixed(2) + ' Gegner pro Raum');
+    // Bosse bleiben an der echten Tiefe
+    const th = BOTA.themeKeyAt(N + 1);
+    if (BOTA.bossEligible(BO.monolith, N + 1, th) || !BOTA.bossEligible(BO.megalith, N + 1, th)) out.push('Bosse folgen dem Durchgang');
+    return out;
+  });
+  problems.push(...cycleProblems);
+
+  // --- Geheimraeume: 0 bis 3 pro Etage, meist einer ---
+  const secretProblems = await page.evaluate(() => {
+    const out = [];
+    const g = BOTA.game;
+    const secretsOf = (f) => [...f.cells.values()].filter((c) => c.type === 'secret');
+    const counts = [0, 0, 0, 0];
+    let floors = 0;
+    for (let d = 1; d <= 22; d++) {
+      for (let i = 0; i < 150; i++) {
+        const f = new BOTA.Floor(d, 'sec' + d + ':' + i), sec = secretsOf(f);
+        floors++;
+        if (sec.length > 3) { out.push('Etage ' + d + ': ' + sec.length + ' Geheimraeume'); continue; }
+        counts[sec.length]++;
+        for (const c of sec) {
+          const doors = Object.values(c.room.doors);
+          if (doors.length < 2) out.push('Geheimraum mit ' + doors.length + ' Tueren auf Etage ' + d);
+          for (const door of doors) {
+            if (!door.edge.hidden || door.edge.kind !== 'secret') out.push('Geheimraum-Tuer sichtbar auf Etage ' + d);
+            if (door.target.type === 'boss' || door.target.type === 'secret') out.push('Geheimraum neben ' + door.target.type + ' auf Etage ' + d);
+          }
+          if (c.room.seen) out.push('Geheimraum schon gesehen auf Etage ' + d);
+        }
+      }
+    }
+    const wants = [[0.15, 0.25], [0.55, 0.65], [0.11, 0.19], [0.03, 0.07]];
+    counts.forEach((n, i) => {
+      const x = n / floors;
+      if (x < wants[i][0] || x > wants[i][1]) out.push(i + ' Geheimraeume auf ' + (100 * x).toFixed(1) + ' % der Etagen');
+    });
+    for (let i = 0; i < 30; i++) {
+      const sig = (f) => secretsOf(f).map((c) => c.x + ',' + c.y).join(' ');
+      if (sig(new BOTA.Floor(5, 'secdet' + i)) !== sig(new BOTA.Floor(5, 'secdet' + i))) { out.push('Geheimraeume nicht deterministisch'); break; }
+    }
+
+    // Im Spiel: eine Bombe oeffnet nur die Tuer, neben der sie liegt, und Deep Packet Inspection zeigt alle Raeume
+    const d0 = g.depth, p0 = g.player;
+    try {
+      let depth = 0;
+      for (let d = 1; d <= 22 && !depth; d++) {
+        if (secretsOf(new BOTA.Floor(d, BOTA.hashString(g.seed + ':floor:' + d))).length >= 2) depth = d;
+      }
+      if (!depth) out.push('Keine Etage mit 2 Geheimraeumen gefunden (Test ungueltig)');
+      else {
+        g.enterFloor(depth); g.setState('play');
+        const pl = new BOTA.Player(480, 290); pl.recalcStats(); g.player = pl;
+        const sec = secretsOf(g.floor);
+        if (sec.length < 2) out.push('Etage ' + depth + ' im Spiel anders als vorhergesagt');
+        pl.giveItem('deep_packet_inspection', g);
+        const marks = BOTA.HUD.scanMarks(g).filter((m) => m.type === 'secret');
+        if (marks.length !== sec.length) out.push('Deep Packet Inspection: ' + marks.length + ' von ' + sec.length + ' Geheimraeumen');
+        const door = Object.values(sec[0].room.doors)[0];
+        g.teleport(door.target.room);
+        for (let i = 0; i < 4; i++) BOTA.debug.killAll();
+        let found = 0;
+        const count = () => { found++; };
+        BOTA.bus.on('secretFound', count);
+        const dir = Object.keys(g.room.doors).find((k) => g.room.doors[k].edge === door.edge);
+        const tile = BOTA.C.DOOR_TILES[dir], at = g.room.tileCenter(tile.col, tile.row);
+        g.explode(at.x, at.y, 60, 0, null);
+        BOTA.bus.off('secretFound', count);
+        if (door.edge.hidden || found !== 1) out.push('Bombe oeffnet die Geheimtuer nicht: ' + found);
+        if (!sec[0].room.seen) out.push('Geoeffneter Geheimraum nicht auf der Karte');
+        if (sec.slice(1).some((c) => c.room.seen || Object.values(c.room.doors).some((x) => !x.edge.hidden))) out.push('Bombe oeffnet einen anderen Geheimraum');
+      }
+      // Ohne Geheimraum laeuft die Etage genauso (keine Marke, README funktioniert)
+      let empty = 0;
+      for (let d = 1; d <= 22 && !empty; d++) {
+        if (!secretsOf(new BOTA.Floor(d, BOTA.hashString(g.seed + ':floor:' + d))).length) empty = d;
+      }
+      if (empty) {
+        g.enterFloor(empty); g.setState('play');
+        g.floor.documentMap();
+        if ([...g.floor.cells.values()].some((c) => !c.room.seen)) out.push('README: Etage ohne Geheimraum nicht aufgedeckt');
+        if (BOTA.HUD.scanMarks(g).some((m) => m.type === 'secret')) out.push('Marke fuer einen Geheimraum, den es nicht gibt');
+      }
+    } finally {
+      g.player = p0;
+      g.enterFloor(d0); g.setState('play');
+    }
+    return out;
+  });
+  problems.push(...secretProblems);
 
   // --- Zwischenboss-Begegnungen live: jeder der vier Bosse durch eine Tuer betreten -> kein Intro, kein
   //     Boss-Raum-Zeug, HP x ENCOUNTER_HP, er agiert, raeumt beim Tod den Raum und hinterlaesst nichts ---
@@ -4937,8 +5137,9 @@ const URL = 'file://' + path.join(ROOT, 'index.html').replace(/\\/g, '/') + '?se
         home += k;
       }
       if (!(home > 40)) out.push(id + ': auf Etage ' + floor + ' nur ' + home + ' in 400 Raeumen');
-      // Spaeter: sickert ein, immer schwaecher als daheim; auf der naechsten Runde wieder volles Gewicht
-      const later = 12;
+      // Spaeter im Durchgang: sickert ein, schwaecher als daheim; Etage 12 beginnt von vorn; naechste Runde wieder volles Gewicht
+      const later = 11;
+      if (BOTA.enemyWeightAt(def, 12) !== 0) out.push(id + ': Gewicht auf Etage 12');
       const w = BOTA.enemyWeightAt(def, later);
       if (Math.abs(w - def.weight * BOTA.mixAt(later)) > 1e-9) out.push(id + ': Gewicht auf Etage ' + later + ': ' + w);
       if (BOTA.enemyWeightAt(def, floor + keys.length) !== def.weight) out.push(id + ': zweite Runde nicht auf vollem Gewicht');

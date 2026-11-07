@@ -13,8 +13,8 @@
  *  - Fairness wie ueberall: jeder Angriff mit Telegraph, Gegnerschuesse 165–260 px/s, Kontaktschaden 1 (2 fuer Ansturm).
  *
  * Die Familie gehoert der Etage 11: minFloor 11 haelt sie von den Etagen 8–10 fern, die eigene Gegner haben
- * (enemies-deep.js; bis 2026-11-05 sickerte sie dort ueber die Kakophonie ein). Ab Etage 12 taucht sie abgeschwaecht
- * auch auf anderen Etagen auf (Kakophonie, enemies.js).
+ * (enemies-deep.js; bis 2026-11-05 sickerte sie dort ueber die Kakophonie ein). Im naechsten Durchgang kommt sie
+ * erst auf Etage 22 wieder (B.spawnDepth, enemies.js).
  *
  * SICHERHEIT: reine Spiellogik/Canvas-Zeichnen, kein DOM, kein eval, keine Netzwerkzugriffe.
  */

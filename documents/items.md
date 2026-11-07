@@ -93,7 +93,7 @@ All items and pickups in the game.
 | ![Seed Funding](images/item_seed_funding.png) | **Seed Funding** `seed_funding` | +15 credits | Treasure, Boss, Secret | — | Pre-revenue. Pre-product. Pre-everything. Here, have some money. |
 | ![Rubber Duck](images/item_rubber_duck.png) | **Rubber Duck** `rubber_duck` | A duck follows you and shoots along with you: ⅓ of your damage, about half your fire rate | Treasure, Shop | 15¢ | Never says anything. Still the best senior engineer on the team. |
 | ![Unit Tests](images/item_unit_tests.png) | **Unit Tests** `unit_tests` | 2 orbiting shields that block enemy shots and deal 2 damage to enemies they touch | Treasure, Shop | 15¢ | They test nothing, but they're always around you. Coverage: 100 %. |
-| ![Deep Packet Inspection](images/item_deep_packet_inspection.png) | **Deep Packet Inspection** `deep_packet_inspection` | The boss room (red) and the secret room (blue) show on the minimap from the start of every floor, even undiscovered; off the map window, a dot on the edge points toward them. The secret room still has to be blown open | Treasure, Shop, Boss | 15¢ | We read everything. For quality assurance. |
+| ![Deep Packet Inspection](images/item_deep_packet_inspection.png) | **Deep Packet Inspection** `deep_packet_inspection` | The boss room (red) and any secret rooms (blue) show on the minimap from the start of every floor, even undiscovered; off the map window, a dot on the edge points toward them. The secret room still has to be blown open | Treasure, Shop, Boss | 15¢ | We read everything. For quality assurance. |
 
 ### Active items
 
@@ -131,7 +131,7 @@ happens (at luck 0). Luck raises the share of rare drops.
 | ![Approval](images/pickup_approval.png) | **Approval** | `approval` | +1 key. Opens locked doors (treasure and shop from floor 2) and locked chests. From floor 2, one combat room per floor always drops one | 10.2 % | 5¢ |
 | ![Chest](images/pickup_chest.png) | **Chest** | `chest` | Opens on touch and scatters a few random pickups | 4.5 % | — |
 | ![Locked Chest](images/pickup_chest_locked.png) | **Locked Chest** | `chest_locked` | Costs 1 Approval. Better loot, and a 15 % chance of an item instead (+2 % per luck, max 40 %) | 2.3 % | — |
-| ![README.md](images/pickup_readme.png) | **README.md** | `readme` | Reveals the map of the current floor, except the secret room. On about half of all floors one lies in a random normal room from the start | never dropped | — |
+| ![README.md](images/pickup_readme.png) | **README.md** | `readme` | Reveals the map of the current floor, except secret rooms. On about half of all floors one lies in a random normal room from the start | never dropped | — |
 
 All resources (credits, bombs, keys) are capped at 99. The shop sells 3 of the priced pickups above plus one item.
 

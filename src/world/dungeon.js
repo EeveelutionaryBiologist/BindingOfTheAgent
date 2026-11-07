@@ -8,7 +8,7 @@
  *     (haelt die Karte baumartig) und ein Muenzwurf zustimmt.
  *  4. Wiederholen, bis Anzahl erreicht und >= 3 Sackgassen existieren.
  *  5. Sackgassen -> Boss (am weitesten entfernt), Schatzraum, Shop.
- *  6. Geheimraum: leere Zelle mit >= 2 Nachbarraeumen, nicht neben dem Boss; Tueren versteckt.
+ *  6. Geheimraeume (0–3, meist 1): leere Zellen mit >= 2 Nachbarraeumen, nicht neben Boss oder Geheimraum; Tueren versteckt.
  *  7. Ab Tiefe 2 sind Schatzraum- und Shop-Tueren verschlossen (kosten ein Approval).
  *  8. Ab Tiefe 2 bekommt ein Kampfraum ein garantiertes Approval beim Clearing (assignKeyRoom).
  *  9. Manche Kampfraeume bekommen lose Pickups, die schon beim Betreten herumliegen (assignLooseLoot).
@@ -34,6 +34,8 @@
   const ENCOUNTER_TWO_CHANCE = 0.5; // ... mit dieser Chance (Etage 8–9: immer genau eine)
   const TERMS_FROM = 2;      // ab dieser Tiefe gibt es Terms-of-Service-Raeume (Etage 1 bleibt ohne Haken)
   const TERMS_CHANCE = 0.5;  // Anteil der Etagen; auf Etage 2 etwas weniger, dort fehlt oefter eine freie Sackgasse
+  // Geheimraeume pro Etage (2026-11-05, vorher immer genau einer). Im Schnitt 1.05, damit die Beute pro Etage gleich bleibt.
+  const SECRET_COUNTS = [{ n: 0, weight: 20 }, { n: 1, weight: 60 }, { n: 2, weight: 15 }, { n: 3, weight: 5 }];
   const DIRS = B.DIRS;
   const DIR_KEYS = ['up', 'down', 'left', 'right'];
 
@@ -52,7 +54,7 @@
       this.readmeRoom = null; // Zelle mit dem README.md (oder null, siehe assignReadme)
       this.encounterRooms = []; // Zellen mit Zwischenboss-Begegnung (ab Tiefe 8, siehe assignEncounters)
       this.termsRoom = null; // Zelle des Terms-of-Service-Raums (oder null, siehe assignTerms)
-      this.documented = false; // README.md eingesammelt -> Karte (ohne Geheimraum) sichtbar
+      this.documented = false; // README.md eingesammelt -> Karte (ohne Geheimraeume) sichtbar
       this.generate();
     }
 
@@ -106,7 +108,7 @@
       this.start = this.get(sx, sy);
       this.computeDistances();
       this.assignSpecialRooms();
-      this.placeSecretRoom();
+      this.placeSecretRooms();
       this.connectRooms();
 
       // Raeume bauen (Reihenfolge stabil halten -> deterministisch)
@@ -342,7 +344,7 @@
       this.readmeRoom = cell;
     }
 
-    /** README.md eingesammelt: alle Raeume ausser dem Geheimraum als "gesehen" markieren */
+    /** README.md eingesammelt: alle Raeume ausser den Geheimraeumen als "gesehen" markieren */
     documentMap() {
       this.documented = true;
       for (const c of this.cells.values()) if (c.type !== 'secret') c.room.seen = true;
@@ -427,23 +429,44 @@
       }
     }
 
-    placeSecretRoom() {
+    /** Freie Zellen fuer einen Geheimraum: mindestens 2 Raeume daneben, aber nicht neben Boss oder Geheimraum */
+    secretCandidates() {
       const candidates = [];
       for (let y = 0; y < MAP_H; y++) {
         for (let x = 0; x < MAP_W; x++) {
           if (this.cells.has(this.key(x, y))) continue;
-          let n = 0, nearBoss = false;
+          let n = 0, blocked = false;
           for (const d of DIR_KEYS) {
             const c = this.get(x + DIRS[d].dx, y + DIRS[d].dy);
-            if (c) { n++; if (c.type === 'boss') nearBoss = true; }
+            if (c) { n++; if (c.type === 'boss' || c.type === 'secret') blocked = true; }
           }
-          if (n >= 2 && !nearBoss) candidates.push({ x, y, n });
+          if (n >= 2 && !blocked) candidates.push({ x, y, n });
         }
       }
+      return candidates;
+    }
+
+    /**
+     * Geheimraeume: 0 bis 3 pro Etage laut SECRET_COUNTS. Die Anzahl und alle weiteren Raeume kommen aus einem
+     * eigenen Strom (':secret'). Der erste Raum wird dagegen immer ueber den Etagen-RNG gewaehlt, auch wenn die Etage
+     * gar keinen bekommt: So bleibt eine Etage mit genau einem Geheimraum so, wie sie bis 2026-11-05 war. Bei 0, 2 oder
+     * 3 verschieben sich die Layouts und Gegner, weil jeder Raum beim Bauen in Kartenreihenfolge aus dem Etagen-RNG zieht.
+     */
+    placeSecretRooms() {
+      const own = new B.RNG(B.hashString(String(this.seed) + ':secret'));
+      const count = own.weighted(SECRET_COUNTS, (c) => c.weight).n;
+      const byNeighbors = (c) => c.n * c.n;
+      const add = (pick) => this.cells.set(this.key(pick.x, pick.y), { x: pick.x, y: pick.y, type: 'secret', dist: 99 });
+      const candidates = this.secretCandidates();
       if (!candidates.length) return;
-      const pick = this.rng.weighted(candidates, (c) => c.n * c.n);
-      const cell = { x: pick.x, y: pick.y, type: 'secret', dist: 99 };
-      this.cells.set(this.key(pick.x, pick.y), cell);
+      const first = this.rng.weighted(candidates, byNeighbors);
+      if (!count) return;
+      add(first);
+      for (let i = 1; i < count; i++) {
+        const more = this.secretCandidates();
+        if (!more.length) return;
+        add(own.weighted(more, byNeighbors));
+      }
     }
 
     /** Erzeugt Raum-Objekte und gemeinsame Tuer-Kanten zwischen benachbarten Zellen */

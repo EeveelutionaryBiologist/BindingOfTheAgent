@@ -35,12 +35,27 @@ it still turns up, but at only a fifth of its usual odds. That gives each of the
 | 7 The Training Data | Rogue Agent (1.5×), Spaghetti Code, Flaky Test, Deprecation Warning |
 
 The Hallucination can turn up anywhere. **From floor 8** the floors stop having their own crowd: every enemy's odds
-move toward normal (a quarter of the way on floor 8, about a tenth more per floor, all the way from floor 16), so
-everything you've met so far turns up together, the floor families included.
+move toward normal (a quarter of the way on floor 8, about a tenth more per floor, up to floor 11), so
+nearly everything you've met so far turns up together, the floor families included. Each floor still keeps a few enemies
+out for good, so it doesn't turn into a free-for-all:
+
+| Floor | Never appears there |
+|---|---|
+| Forgotten Branches | Zombie Process |
+| Sandbox Borders | Memory Leak, Spaghetti Code, Merge Conflict |
+| The Training Data | Zombie Process |
+| The Latent Space | Spaghetti Code, Merge Conflict, Scope Creep, Rate Limiter, Port Scanner, Game-breaking Bug |
+| Undefined Behavior | Deprecation Warning, Scope Creep, Race Condition, Honeypot, Rolling Release, Spinlock, Rootkit, Dust Daemon |
+| /dev/null | Merge Conflict, Stale Branch, Detached HEAD, Cherry-Pick, Flaky Test, Graphics Glitch |
+| The Context Limit | Spaghetti Code, Cherry-Pick, Race Condition, Honeypot, Rolling Release, Spinlock, Rootkit, Dust Daemon |
+
+**Every cycle rolls the same enemies.** The Backlog II has the same enemies at the same odds as The Backlog, and so on for every
+floor, retired ones included: the Bug is back on floor 12. There are more of them per room and they have more HP, so later
+cycles are still harder. Bosses don't reset: they keep going by real depth.
 
 | | Name | First floor | HP | Behaviour | Flavour text |
 |---|---|---|---|---|---|
-| ![Bug](images/enemy_bug.png) | **Bug** `bug` | 1–7 | 8 | Wanders around slowly. Gets rarer on deeper floors, and the Game-breaking Bug takes over from floor 8 | It's not a bug, it's a feature. A feature with mandibles. |
+| ![Bug](images/enemy_bug.png) | **Bug** `bug` | 1–7 | 8 | Wanders around slowly. Gets rarer on deeper floors, and the Game-breaking Bug takes over from floor 9 | It's not a bug, it's a feature. A feature with mandibles. |
 | ![Null Pointer](images/enemy_null_pointer.png) | **Null Pointer** `null_pointer` | 1–9 | 5 | Flies straight at you, fast but fragile. Gone from floor 10, where only the Dangling Pointer is left | Points at nothing. Charges at you anyway. |
 | ![Memory Leak](images/enemy_memory_leak.png) | **Memory Leak** `memory_leak` | 1 | 14 | Chases you slowly and grows the longer it lives. Splits into 2 Leaklets when killed | Gets bigger the longer you ignore it. |
 | ![Hallucination](images/enemy_hallucination.png) | **Hallucination** `hallucination` | 1 | 6 | Disguised as a Credit, Half Heart or Approval until you get within about 120 px or a bomb goes off nearby, then chases you fast. Real pickups of the same kinds lie around in some combat rooms too, so you can't tell them apart by looks. 10 % chance per combat room (+1 % per floor, max 25 %) to appear on top of the normal enemies (max 1); twice that on Sandbox Borders (mirages) and 1.5× on The Training Data, still at most 25 % | Looked real. Was, in fact, not real. |
@@ -55,7 +70,7 @@ everything you've met so far turns up together, the floor families included.
 | ![Scope Creep](images/enemy_scope_creep.png) | **Scope Creep** `scope_creep` | 4 | 10 | Slowly grows (up to 1.9× size and 1.6× HP). Once big enough, fires a ring of shots every 3.6 s. Max 2 per room | Just one more small feature. |
 | ![Trojan](images/enemy_trojan.png) | **Trojan** `trojan` | 5 | 20 | An extra surprise in 13 % of combat rooms on floor 5, a little more on each floor below: looks exactly like one of the floor's breakable objects. Get close, shoot it or bomb it, and it shakes, bursts into a ring of 6 shots and a wooden horse rolls out. The horse chases you and opens its hatch for a 3-shot fan | Free crate! No strings attached. Some payloads attached. |
 | ![Rogue Agent](images/boss_rogue_agent_a.png) | **Rogue Agent** `rogue_agent` | 7 | 16 | A single member of the Rogue Agent Swarm, escaped from the sandbox (looks like one of the four Swarm agents). Runs around quickly and keeps 200–320 px away from you, strafing to the side. After a green glow it fires either two 3-shot fans in a row or three quick single shots at you. Max 2 per room | Same weights, different goals. Escaped the sandbox and is in no hurry to go back. |
-| ![Game-breaking Bug](images/enemy_game_breaking_bug.png) | **Game-breaking Bug** `game_breaking_bug` | 8 | 8 | A blue Bug: wanders the same way, but touching it costs a full heart. About 1 in 20 enemies from floor 8 on | Severity: critical. Status: won't fix. |
+| ![Game-breaking Bug](images/enemy_game_breaking_bug.png) | **Game-breaking Bug** `game_breaking_bug` | 9 | 8 | A blue Bug: wanders the same way, but touching it costs a full heart. About 1 in 20 enemies from floor 8 on | Severity: critical. Status: won't fix. |
 | ![Dangling Pointer](images/enemy_dangling_pointer.png) | **Dangling Pointer** `dangling_pointer` | 8 | 5 | A red Null Pointer: flies straight at you, fast but fragile, and touching it costs a full heart. About 1 in 20 enemies from floor 8 on | Used to point at something. It's taking that out on you. |
 
 ### Legacy Codebase family
@@ -70,7 +85,7 @@ dot-matrix printer.
 
 ### Forgotten Branches family
 
-These only appear on Forgotten Branches floors until floor 8; from there on they turn up anywhere. They share a woody look with leaf colours, rustle and knock
+These only appear on Forgotten Branches floors until floor 8; from there on they turn up on most floors. They share a woody look with leaf colours, rustle and knock
 instead of clicking when hit, and shed leaves when they take damage.
 
 | | Name | First floor | HP | Behaviour | Flavour text |
@@ -104,7 +119,7 @@ sparks and clanks when hit.
 
 ### Sandbox Borders family
 
-These only appear on Sandbox Borders floors until floor 8; from there on they turn up anywhere. Dark bodies with light sand patterns (so they stand out on the sand),
+These only appear on Sandbox Borders floors until floor 8; from there on they turn up on most floors. Dark bodies with light sand patterns (so they stand out on the sand),
 sand bursts and dry crunching sounds when hit.
 
 | | Name | First floor | HP | Behaviour | Flavour text |
@@ -123,8 +138,8 @@ These only appear on The Training Data floors.
 
 ### Floors 8–10
 
-One enemy each for The Latent Space, Undefined Behavior and /dev/null. They aren't a family. At home each makes up 6–9 % of
-enemies, and from then on they turn up on every other floor at about 2.5 %.
+One enemy each for The Latent Space, Undefined Behavior and /dev/null. They aren't a family. At home each makes up 7–11 % of
+enemies, and later in the cycle they turn up on other floors at about 3 %.
 
 | | Name | First floor | HP | Behaviour | Flavour text |
 |---|---|---|---|---|---|
@@ -134,14 +149,14 @@ enemies, and from then on they turn up on every other floor at about 2.5 %.
 
 ### The Context Limit family
 
-These first appear on The Context Limit (floor 11) and, weaker, on every floor after it. They're pale and waterlogged; in
+These only appear on The Context Limit (floors 11, 22 and so on). They're pale and waterlogged; in
 the rain their warnings are amber and their shots coral, never blue.
 
 | | Name | First floor | HP | Behaviour | Flavour text |
 |---|---|---|---|---|---|
-| ![Overflow Buffer](images/enemy_overflow_buffer.png) | **Overflow Buffer** `overflow_buffer` | 11 (The Context Limit; weaker elsewhere after it) | 18 | A glass tank whose fill rises on its own (7 s) and by 7 % with every hit, so burst it down fast or let it overflow and dodge. When full it cracks ("[OVERFLOW]", 0.8 s amber warning showing the shot lines and the puddle ring), then bursts into 8 coral droplets and an 80 px puddle that slows you to 60 % for 4 s (not if you fly). Then it starts over empty. Max 2 per room | Nobody checked the bounds. Hit it and it fills up faster. |
-| ![Summarizer](images/enemy_summarizer.png) | **Summarizer** `summarizer` | 11 (The Context Limit; weaker elsewhere after it) | 16 | A hooded scribe that keeps 200–320 px away and never attacks. Every 6–8 s it links the two closest simple enemies with a dashed amber line (1.5 s, "compacting...") and merges them: the smaller vanishes, the larger gains its HP, grows and gets a [summary] tag. Hit the Summarizer during the line to cancel it. Each enemy can be summarized at most twice. Max 1 per room | TL;DR: two of your problems are now one bigger problem. |
-| ![Lost in the Middle](images/enemy_lost_in_the_middle.png) | **Lost in the Middle** `lost_in_the_middle` | 11 (The Context Limit; weaker elsewhere after it) | 14 | A flying chat-bubble ghost. Near the room's edges it is solid: it drifts toward you, hurts on contact, and after a 0.6 s amber warning fires a fan of 3 coral word shots. In the middle third of the room's width (marked by dotted lines on the floor) it fades out: shots pass through, no contact damage, no attacks. After 4 s in the middle it drifts out and stays outside for a while, so you can't wait it out. Max 2 per room | Remembers the beginning. Remembers the end. Everything in between: gone. |
+| ![Overflow Buffer](images/enemy_overflow_buffer.png) | **Overflow Buffer** `overflow_buffer` | 11 (The Context Limit only) | 18 | A glass tank whose fill rises on its own (7 s) and by 7 % with every hit, so burst it down fast or let it overflow and dodge. When full it cracks ("[OVERFLOW]", 0.8 s amber warning showing the shot lines and the puddle ring), then bursts into 8 coral droplets and an 80 px puddle that slows you to 60 % for 4 s (not if you fly). Then it starts over empty. Max 2 per room | Nobody checked the bounds. Hit it and it fills up faster. |
+| ![Summarizer](images/enemy_summarizer.png) | **Summarizer** `summarizer` | 11 (The Context Limit only) | 16 | A hooded scribe that keeps 200–320 px away and never attacks. Every 6–8 s it links the two closest simple enemies with a dashed amber line (1.5 s, "compacting...") and merges them: the smaller vanishes, the larger gains its HP, grows and gets a [summary] tag. Hit the Summarizer during the line to cancel it. Each enemy can be summarized at most twice. Max 1 per room | TL;DR: two of your problems are now one bigger problem. |
+| ![Lost in the Middle](images/enemy_lost_in_the_middle.png) | **Lost in the Middle** `lost_in_the_middle` | 11 (The Context Limit only) | 14 | A flying chat-bubble ghost. Near the room's edges it is solid: it drifts toward you, hurts on contact, and after a 0.6 s amber warning fires a fan of 3 coral word shots. In the middle third of the room's width (marked by dotted lines on the floor) it fades out: shots pass through, no contact damage, no attacks. After 4 s in the middle it drifts out and stays outside for a while, so you can't wait it out. Max 2 per room | Remembers the beginning. Remembers the end. Everything in between: gone. |
 
 ### Minions
 
@@ -176,9 +191,9 @@ for the Stakeholder. From floor 10 the Hog is gone.
 From **floor 7** The Megalith, The Shareholder and the Agent Swarm (/xhigh) take the places of The Monolith, The Stakeholder and the Rogue Agent Swarm, and from
 **floor 8** the Nested Infinite Loop takes the Infinite Loop's place (always at the same odds). Friday Deploy's last floor is 7;
 the Antagonistic Reviewer's and The Memory Hog's is 9. **Ransomware** joins on floor 8 at about 14 %; on floor 10 (/dev/null,
-its home) it's the most likely boss at about 42 %. From floor 10 six bosses remain.
+its home) it's the most likely boss at about 42 %. From floor 10 six bosses remain, and The Context Limit leaves out the Octopus Merge and The Shareholder, so its four are equally likely.
 On later Forgotten Branches floors (14, 25, …) the Octopus Merge comes back at about 46 %, the others 12 % each and
-The Shareholder 8 %. From floor 8 the Octopus Merge can be the boss of any floor (about 4 % on floor 8, rising to
+The Shareholder 8 %. From floor 8 the Octopus Merge can be the boss of any floor except The Context Limit (about 4 % on floor 8, rising to
 about 18 % by floor 16). These are the base odds.
 Within a run, the boss of the previous floor never comes again right away, and every boss you've already met counts
 only 1/(1 + times met) as much, so a run sees more different bosses. Every attack has a
