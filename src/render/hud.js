@@ -413,7 +413,7 @@
   const SCAN_COLORS = { boss: '#ff5a5a', secret: '#5fa8ff' };
 
   /**
-   * Deep Packet Inspection: Boss- und Geheimraum, solange sie unbesucht sind, mit ihrer Lage im Kartenfenster.
+   * Deep Packet Inspection: Boss- und Geheimraeume, solange sie unbesucht sind, mit ihrer Lage im Kartenfenster.
    * off = liegt ausserhalb des Fensters (dann zeigt ein Punkt am Rand die Richtung). Nur Anzeige, aendert nichts.
    */
   function scanMarks(game) {

@@ -10,7 +10,7 @@
  *   Bit Bucket         wer von weitem schiesst, fuellt ihn nur
  *
  * Etagen: themeOnly + minFloor auf ihrer Etage. Vorher gibt es sie nie, danach sickern sie ueber die Kakophonie
- * (B.mixAt) auf die spaeteren Etagen des Durchgangs ein. Deshalb muessen alle drei auch auf fremden Etagen lesbar bleiben.
+ * (B.mixAt) auf alle spaeteren Etagen ein. Deshalb muessen alle drei auch auf fremden Etagen lesbar bleiben.
  *
  * Gefahrenfarben (Kontrast zur Heimat-Etage, siehe palette.js):
  *   gold  #ffd166  auf Indigo (Latent Space); Stern und Schuss sind komplementaer zum violetten Boden

@@ -69,7 +69,7 @@
 
   /**
    * README.md: liegt auf ~30 % der Etagen in einem normalen Raum (dungeon.js: assignReadme). Deckt die
-   * Karte der Etage auf — ausser dem Geheimraum (der ist ja gerade *nicht* dokumentiert). Kein Zufallsdrop
+   * Karte der Etage auf — ausser den Geheimraeumen (die sind ja gerade *nicht* dokumentiert). Kein Zufallsdrop
    * (weight 0), wird von "Regenerate Response" nicht umgewuerfelt.
    */
   PT.readme = { name: 'README.md', sprite: 'pickup_readme', color: '#f4f0e6', r: 13, weight: 0,

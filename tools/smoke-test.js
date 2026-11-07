@@ -70,6 +70,8 @@
  *     Determinismus (Begegnungen ziehen nicht aus dem Etagen-RNG)
  *   - Harte Ausschluesse (themes: 0) aus der Gewichts-Durchsicht: Tabelle BANS und BOSS_BANS stimmt mit den Daten ueberein,
  *     die Kakophonie hebt sie nie an, in beiden Durchgaengen wird nichts davon gewuerfelt, andere Faktoren bleiben
+ *   - Geheimraeume: 0–3 pro Etage, Anteile nahe 20/60/15/5 %, nie neben Boss oder Geheimraum, mindestens 2 versteckte
+ *     Tueren, deterministisch; eine Bombe oeffnet nur ihre Tuer; Deep Packet Inspection zeigt alle
  *   - Zwischenboss-Begegnungen ab 8: Anzahl je Tiefe, Platzierung, offene Arena, nie der Etagen-Boss; jeder der vier
  *     Bosse durch eine Tuer: kein Intro, HP x ENCOUNTER_HP, agiert, raeumt den Raum, keine Falltuer/Reste
  *   - Themen-Gegner und -Bosse "nur auf ihrer Etage" gilt vor Etage 8 (danach Kakophonie)
@@ -2500,12 +2502,12 @@ const URL = 'file://' + path.join(ROOT, 'index.html').replace(/\\/g, '/') + '?se
       if (BOTA.HUD.scanMarks(g).length) out.push('Deep Packet Inspection: Marken ohne Item');
       pl.giveItem('deep_packet_inspection', g);
       const cells = [...g.floor.cells.values()];
-      const bossCell = cells.find((c) => c.type === 'boss'), secretCell = cells.find((c) => c.type === 'secret');
+      const bossCell = cells.find((c) => c.type === 'boss'), secretCells = cells.filter((c) => c.type === 'secret');
       const seen0 = cells.map((c) => c.room.seen).join();
       let marks = BOTA.HUD.scanMarks(g);
       if (!marks.some((m) => m.type === 'boss' && m.color === '#ff5a5a')) out.push('Deep Packet Inspection: Boss fehlt');
-      if (secretCell && !marks.some((m) => m.type === 'secret' && m.color === '#5fa8ff')) out.push('Deep Packet Inspection: Geheimraum fehlt');
-      if (marks.length !== (secretCell ? 2 : 1)) out.push('Deep Packet Inspection: ' + marks.length + ' Marken');
+      if (marks.filter((m) => m.type === 'secret' && m.color === '#5fa8ff').length !== secretCells.length) out.push('Deep Packet Inspection: Geheimraum fehlt');
+      if (marks.length !== 1 + secretCells.length) out.push('Deep Packet Inspection: ' + marks.length + ' Marken');
       if (cells.map((c) => c.room.seen).join() !== seen0) out.push('Deep Packet Inspection: aendert room.seen');
       if (marks.some((m) => m.off !== (m.gx < 0 || m.gy < 0 || m.gx >= 7 || m.gy >= 5))) out.push('Deep Packet Inspection: Fensterlage falsch');
       const cvs = document.createElement('canvas').getContext('2d');
@@ -3804,6 +3806,89 @@ const URL = 'file://' + path.join(ROOT, 'index.html').replace(/\\/g, '/') + '?se
     return out;
   });
   problems.push(...banProblems);
+
+  // --- Geheimraeume: 0 bis 3 pro Etage, meist einer ---
+  const secretProblems = await page.evaluate(() => {
+    const out = [];
+    const g = BOTA.game;
+    const secretsOf = (f) => [...f.cells.values()].filter((c) => c.type === 'secret');
+    const counts = [0, 0, 0, 0];
+    let floors = 0;
+    for (let d = 1; d <= 22; d++) {
+      for (let i = 0; i < 150; i++) {
+        const f = new BOTA.Floor(d, 'sec' + d + ':' + i), sec = secretsOf(f);
+        floors++;
+        if (sec.length > 3) { out.push('Etage ' + d + ': ' + sec.length + ' Geheimraeume'); continue; }
+        counts[sec.length]++;
+        for (const c of sec) {
+          const doors = Object.values(c.room.doors);
+          if (doors.length < 2) out.push('Geheimraum mit ' + doors.length + ' Tueren auf Etage ' + d);
+          for (const door of doors) {
+            if (!door.edge.hidden || door.edge.kind !== 'secret') out.push('Geheimraum-Tuer sichtbar auf Etage ' + d);
+            if (door.target.type === 'boss' || door.target.type === 'secret') out.push('Geheimraum neben ' + door.target.type + ' auf Etage ' + d);
+          }
+          if (c.room.seen) out.push('Geheimraum schon gesehen auf Etage ' + d);
+        }
+      }
+    }
+    const wants = [[0.15, 0.25], [0.55, 0.65], [0.11, 0.19], [0.03, 0.07]];
+    counts.forEach((n, i) => {
+      const x = n / floors;
+      if (x < wants[i][0] || x > wants[i][1]) out.push(i + ' Geheimraeume auf ' + (100 * x).toFixed(1) + ' % der Etagen');
+    });
+    for (let i = 0; i < 30; i++) {
+      const sig = (f) => secretsOf(f).map((c) => c.x + ',' + c.y).join(' ');
+      if (sig(new BOTA.Floor(5, 'secdet' + i)) !== sig(new BOTA.Floor(5, 'secdet' + i))) { out.push('Geheimraeume nicht deterministisch'); break; }
+    }
+
+    // Im Spiel: eine Bombe oeffnet nur die Tuer, neben der sie liegt, und Deep Packet Inspection zeigt alle Raeume
+    const d0 = g.depth, p0 = g.player;
+    try {
+      let depth = 0;
+      for (let d = 1; d <= 22 && !depth; d++) {
+        if (secretsOf(new BOTA.Floor(d, BOTA.hashString(g.seed + ':floor:' + d))).length >= 2) depth = d;
+      }
+      if (!depth) out.push('Keine Etage mit 2 Geheimraeumen gefunden (Test ungueltig)');
+      else {
+        g.enterFloor(depth); g.setState('play');
+        const pl = new BOTA.Player(480, 290); pl.recalcStats(); g.player = pl;
+        const sec = secretsOf(g.floor);
+        if (sec.length < 2) out.push('Etage ' + depth + ' im Spiel anders als vorhergesagt');
+        pl.giveItem('deep_packet_inspection', g);
+        const marks = BOTA.HUD.scanMarks(g).filter((m) => m.type === 'secret');
+        if (marks.length !== sec.length) out.push('Deep Packet Inspection: ' + marks.length + ' von ' + sec.length + ' Geheimraeumen');
+        const door = Object.values(sec[0].room.doors)[0];
+        g.teleport(door.target.room);
+        for (let i = 0; i < 4; i++) BOTA.debug.killAll();
+        let found = 0;
+        const count = () => { found++; };
+        BOTA.bus.on('secretFound', count);
+        const dir = Object.keys(g.room.doors).find((k) => g.room.doors[k].edge === door.edge);
+        const tile = BOTA.C.DOOR_TILES[dir], at = g.room.tileCenter(tile.col, tile.row);
+        g.explode(at.x, at.y, 60, 0, null);
+        BOTA.bus.off('secretFound', count);
+        if (door.edge.hidden || found !== 1) out.push('Bombe oeffnet die Geheimtuer nicht: ' + found);
+        if (!sec[0].room.seen) out.push('Geoeffneter Geheimraum nicht auf der Karte');
+        if (sec.slice(1).some((c) => c.room.seen || Object.values(c.room.doors).some((x) => !x.edge.hidden))) out.push('Bombe oeffnet einen anderen Geheimraum');
+      }
+      // Ohne Geheimraum laeuft die Etage genauso (keine Marke, README funktioniert)
+      let empty = 0;
+      for (let d = 1; d <= 22 && !empty; d++) {
+        if (!secretsOf(new BOTA.Floor(d, BOTA.hashString(g.seed + ':floor:' + d))).length) empty = d;
+      }
+      if (empty) {
+        g.enterFloor(empty); g.setState('play');
+        g.floor.documentMap();
+        if ([...g.floor.cells.values()].some((c) => !c.room.seen)) out.push('README: Etage ohne Geheimraum nicht aufgedeckt');
+        if (BOTA.HUD.scanMarks(g).some((m) => m.type === 'secret')) out.push('Marke fuer einen Geheimraum, den es nicht gibt');
+      }
+    } finally {
+      g.player = p0;
+      g.enterFloor(d0); g.setState('play');
+    }
+    return out;
+  });
+  problems.push(...secretProblems);
 
   // --- Zwischenboss-Begegnungen live: jeder der vier Bosse durch eine Tuer betreten -> kein Intro, kein
   //     Boss-Raum-Zeug, HP x ENCOUNTER_HP, er agiert, raeumt beim Tod den Raum und hinterlaesst nichts ---

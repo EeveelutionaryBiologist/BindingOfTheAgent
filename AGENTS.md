@@ -103,7 +103,7 @@ Live state is under `BOTA.game` (`.player`, `.room`, `.floor`, `.depth`, `.state
 - the Rogue Agent Swarm spawns 4 members with one health bar, ghosts before dying, heals survivors by 10 %, goes solo
   for the last member and emits exactly one boss death;
 - bosses never repeat on consecutive floors (300 simulated runs plus a real floor sequence), and README.md appears on
-  about 50 % of floors, only in normal rooms, and reveals every room except the secret room;
+  about 50 % of floors, only in normal rooms, and reveals every room except secret rooms;
 - pipes appear in about 10 % of combat rooms after clearing (never by a door), never lead to the boss room, the
   secret room or the current room, and can't ping-pong during their cooldown;
 - floor names and themes have the same length, floor 3 is Forgotten Branches, and its maps have ≥ 7 dead ends;
@@ -138,7 +138,7 @@ Live state is under `BOTA.game` (`.player`, `.room`, `.floor`, `.depth`, `.state
   Sharp Left Turn shots turn exactly once, 90° left in every firing direction, after 140–200 px, at unchanged speed;
   the Calculator's result only depends on enemies × rooms, stays in its bounds with a small lean to the positive, never
   draws from `game.rng`, ignores disguised Hallucinations and doesn't change in empty rooms; Deep Packet Inspection
-  marks the boss and secret room without changing `room.seen` and drops a mark once visited; To the Moon ignores
+  marks the boss and all secret rooms without changing `room.seen` and drops a mark once visited; To the Moon ignores
   spikes, cacti and puddles (checked against a player without it) while cacti, pits and rocks stay solid;
 - retirement: the Bug and Friday Deploy end after floor 7, the Null Pointer and the Reviewer after floor 9, on every later cycle too,
   and every floor keeps at least two possible bosses;
@@ -272,6 +272,9 @@ Live state is under `BOTA.game` (`.player`, `.room`, `.floor`, `.depth`, `.state
 - hard exclusions (§4): the `BANS` and `BOSS_BANS` tables in the test match every `themes: 0` in the data; on floors 1–22 those
   enemies have weight 0 and never roll, those bosses are never eligible, rooms still hold ≥ 3 enemies on average, every floor
   keeps at least two possible bosses, and factors on other themes are unchanged;
+- secret rooms: 0–3 per floor at about 20/60/15/5 %, never next to the boss room or another secret room, at least two doors, all
+  hidden, deterministic per seed; a bomb opens only the door it lands by; Deep Packet Inspection marks all of them; a floor
+  without one still documents and scans cleanly;
 - the door transition, special rooms, pause screen and death screen work.
 
 Screenshots go to `tools/out/` (scratch; don't commit or ship). One-time setup without admin rights:
@@ -391,12 +394,15 @@ game.score · game.cycles`
 2. Rooms are added by randomised BFS. A cell is accepted only if it is empty, has ≤ 1 filled neighbour, and a coin flip
    agrees. Generation retries (up to 500 times) until the target count is reached with ≥ 3 dead ends. A floor theme can
    raise that with `gen.minDeadEnds` (Forgotten Branches: 7, so its maps branch more); other floors are unaffected.
-3. Dead ends become the **boss** room (farthest BFS distance), the **treasure** room and the **shop**. The **secret**
-   room is an empty cell with ≥ 2 room neighbours that isn't next to the boss; its door edges are `hidden`.
+3. Dead ends become the **boss** room (farthest BFS distance), the **treasure** room and the **shop**. `placeSecretRooms`
+   adds 0–3 **secret** rooms (`SECRET_COUNTS`: 20/60/15/5 %, mean 1.05, so the loot per floor stays about the same): empty
+   cells with ≥ 2 room neighbours, not next to the boss or another secret room; their door edges are `hidden`. Count and
+   extra rooms come from their own stream (`':secret'`). The first pick always uses the floor RNG, even on a floor that
+   then gets none, so a floor with exactly one is unchanged from before. With 0, 2 or 3, later rooms in map order roll
+   differently, because each room's `build` draws from the floor RNG.
 4. Edges are shared objects `{kind, locked, hidden}` between the two rooms' `doors[dir]`. Kind priority is
    boss > secret > treasure > shop. Treasure and shop edges are `locked` from depth 2.
-   Every floor gets a secret room whenever a candidate cell exists, which in practice is always (100 % of 10,000
-   sampled floors). It can only be opened by an explosion within about 140 px of the hidden door tile.
+   A secret room can only be opened by an explosion within about 140 px of the hidden door tile.
 5. Each room's `build(rng)` stamps walls, a layout (`'normal'` tag for combat rooms, `'special'` for everything else),
    door tiles, and **pre-rolls** `plannedEnemies` / `bossId` with the floor RNG.
 6. From depth 2, `assignKeyRoom` marks one combat room `guaranteedKey` (stored as `floor.keyRoom`). It uses its own RNG
@@ -407,8 +413,8 @@ game.score · game.cycles`
    The table `B.LOOSE_LOOT` (in `pickup.js`) is shared with the Hallucination's disguises, so that real and fake
    loot always have the same types and odds. Change both together, or the fake becomes obvious again.
 8. `assignReadme` puts a `readme` pickup (README.md) into one random normal room on 50 % of floors (30 % until 2026-11-03) (`room.hasReadme`,
-   `floor.readmeRoom`, own stream `':readme'`). Collecting it calls `floor.documentMap()`: every room except the secret
-   room becomes `seen`, and `floor.documented` makes the minimap draw connections between unvisited rooms too.
+   `floor.readmeRoom`, own stream `':readme'`). Collecting it calls `floor.documentMap()`: every room except secret
+   rooms becomes `seen`, and `floor.documented` makes the minimap draw connections between unvisited rooms too.
 9. `assignPipes` marks about 10 % of combat rooms `hasPipe` (own stream `':pipe'`). `game.onRoomClear` →
    `placePipe` drops a `B.Pipe` (in `room.pickups`, not near doors or the centre). Walking onto it calls
    `game.pipeWarp`, which teleports to a random room other than boss, secret and the current one (via `game.rng`).
@@ -1166,6 +1172,8 @@ modules rely on these implicitly through the bus.
 - **Debug teleport placement.** `teleport()` places the player near the room centre or bottom, not at a door.
 - **Stakeholder pacing.** It's set in `STAKE_PACE` / `STAKE_SPIRAL_GAP` in `boss.js`. The breaks go through
   `AI.cooldown` (unchanged on floor 1, up to −25 % deeper); the spiral gap deliberately doesn't scale with depth.
+- **A floor may have no secret room.** There's no hint either way, so bombing walls can come up empty. Use `cells` or
+  `findType` with that in mind: `gotoRoom('secret')` returns `false` on such a floor, and it only goes to the first one.
 - **Secret rooms are deliberately subtle.** The only hint is a small dark crack on the wall next to the hidden door
   (in the background bake, `renderer.js`), and the minimap hides the room until it's opened. On 2026-10-31 the crack
   was made a little more visible after players reported never finding one; before that it was practically invisible.
