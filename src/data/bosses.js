@@ -20,6 +20,7 @@
  * (Octopus Merge) sickert also ab Etage 8 auch in andere Etagen. Damit sein hohes Heimat-Gewicht (12) dort nicht
  * dominiert, zaehlt er ausserhalb seiner Heimat hoechstens mit BOSS_LEAK_WEIGHT (3, wie ein normaler Boss) mal
  * angehobenem Faktor: Etage 8 0.75, Etage 12 ~2, ab Etage 16 3. Die Abwechslungs-Regeln bleiben unveraendert.
+ * Eine explizite 0 in themes bleibt auch hier 0: Octopus Merge und Shareholder kommen auf The Context Limit nie.
  *
  * Zwischenboss-Begegnungen (ab Etage 8, siehe dungeon.js assignEncounters): ENCOUNTER_BOSSES duerfen als
  * normaler Kampfraum auftauchen (ohne Intro-Karte, Falltuer und Boss-Podest, HP x ENCOUNTER_HP).
@@ -107,7 +108,7 @@
     subtitle: 'Eight branches. One merge commit. Zero survivors.',
     hp: 300, r: 38, speed: 35, contactDamage: 2, flying: true,
     behavior: 'octopus_merge', sprite: 'boss_octopus_merge', color: '#a3602c',
-    minFloor: 3, weight: 12, themeOnly: ['branches'], family: 'branches',
+    minFloor: 3, weight: 12, themeOnly: ['branches'], themes: { context: 0 }, family: 'branches',
     desc: 'A tangle of roots around one huge merge commit. Every branch it absorbs makes the rest angrier.',
   };
 
@@ -146,7 +147,7 @@
     subtitle: 'Has some concerns about the quarter.',
     hp: 380, r: 34, speed: 85, contactDamage: 2, flying: true,
     behavior: 'shareholder', sprite: 'boss_shareholder', color: '#c9a227',
-    minFloor: 7, weight: 2, replaces: 'stakeholder',
+    minFloor: 7, weight: 2, replaces: 'stakeholder', themes: { context: 0 },
     desc: 'Owns 0.4 % of you. Would like to discuss the quarter. Monocle included.',
   };
 

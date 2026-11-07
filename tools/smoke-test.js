@@ -68,6 +68,8 @@
  *   - Etagen-Besetzung (home/AWAY) auf 1–7: Heimat-Gegner wie in ROSTER, Auswaerts-Faktor genau AWAY, Raeume voll,
  *     Auswaerts-Anteil 5–45 %; Kakophonie ab 8 (mixAt, Anhebung, Familien ueberall, Octopus Merge gedeckelt);
  *     Determinismus (Begegnungen ziehen nicht aus dem Etagen-RNG)
+ *   - Harte Ausschluesse (themes: 0) aus der Gewichts-Durchsicht: Tabelle BANS und BOSS_BANS stimmt mit den Daten ueberein,
+ *     die Kakophonie hebt sie nie an, in beiden Durchgaengen wird nichts davon gewuerfelt, andere Faktoren bleiben
  *   - Zwischenboss-Begegnungen ab 8: Anzahl je Tiefe, Platzierung, offene Arena, nie der Etagen-Boss; jeder der vier
  *     Bosse durch eine Tuer: kein Intro, HP x ENCOUNTER_HP, agiert, raeumt den Raum, keine Falltuer/Reste
  *   - Themen-Gegner und -Bosse "nur auf ihrer Etage" gilt vor Etage 8 (danach Kakophonie)
@@ -355,10 +357,10 @@ const URL = 'file://' + path.join(ROOT, 'index.html').replace(/\\/g, '/') + '?se
           // Bosse: themeOnly-Boss nur (und mit Gewicht 1000 praktisch immer) auf seinem Thema
           if (branches !== (boss === '__boss')) out.push('Boss themeOnly: ' + boss + ' auf Etage ' + d);
         } else {
-          // Kakophonie: Ausschluss (themeOnly, Faktor 0) wird angehoben -> taucht ueberall auf
+          // Kakophonie: der themeOnly-Ausschluss wird angehoben -> taucht ueberall auf; eine explizite 0 bleibt 0
           if (!(only > 0)) out.push('Kakophonie: themeOnly fehlt auf Etage ' + d);
           if (!(bonus > 0)) out.push('Kakophonie: themeOnly-Bonus fehlt auf Etage ' + d);
-          if (!(zero > 0)) out.push('Kakophonie: themes 0 fehlt auf Etage ' + d);
+          if (branches && zero > 0) out.push('Kakophonie hebt themes 0 an: Etage ' + d);
           // Themen-Boss: auf seiner Etage praktisch immer, sonst hoechstens mit Gewicht 3 x Mischungsgrad
           if (branches && boss !== '__boss') out.push('Boss themeOnly fehlt auf seiner Etage ' + d);
           const bw = BOTA.bossWeightAt(BS.__boss, BOTA.themeKeyAt(d), d);
@@ -2577,7 +2579,13 @@ const URL = 'file://' + path.join(ROOT, 'index.html').replace(/\\/g, '/') + '?se
       return pairs.map(([id]) => (n[id] || 0) / all);
     };
     for (let d = 1; d <= 7; d++) if (share(d).some((x) => x > 0)) out.push('Verschaerfte Gegner schon auf Etage ' + d);
-    for (let d = 8; d <= 22; d++) for (const x of share(d)) if (x < 0.025 || x > 0.09) out.push('Verschaerfte Gegner auf Etage ' + d + ': Anteil ' + x.toFixed(3));
+    for (let d = 8; d <= 22; d++) {
+      share(d).forEach((x, i) => {
+        // Der Game-breaking Bug ist auf The Latent Space ausgeschlossen (harte Ausschluesse, siehe BANS)
+        const banned = BOTA.themeWeight(E[pairs[i][0]], BOTA.themeKeyAt(d), d) === 0;
+        if (banned ? x > 0 : (x < 0.025 || x > 0.09)) out.push('Verschaerfte Gegner auf Etage ' + d + ': ' + pairs[i][0] + ' Anteil ' + x.toFixed(3));
+      });
+    }
 
     // Ein Treffer kostet wirklich ein volles Herz (Grundgegner: ein halbes)
     const d0 = g.depth, p0 = g.player;
@@ -3741,6 +3749,61 @@ const URL = 'file://' + path.join(ROOT, 'index.html').replace(/\\/g, '/') + '?se
     return out;
   });
   problems.push(...spawnProblems);
+
+  // --- Harte Ausschluesse aus der Gewichts-Durchsicht (2026-11-05): themes: 0 gilt auch in der Kakophonie und in beiden
+  //     Durchgaengen. Die Tabellen sind die Quelle der Wahrheit; eine neue Sperre gehoert auch hier hinein. ---
+  const banProblems = await page.evaluate(() => {
+    const out = [];
+    const E = BOTA.ENEMIES, BO = BOTA.BOSSES;
+    const BANS = {
+      branches: ['zombie_process'],
+      sandbox: ['memory_leak', 'merge_conflict', 'spaghetti_code'],
+      training: ['zombie_process'],
+      latent: ['game_breaking_bug', 'merge_conflict', 'port_scanner', 'rate_limiter', 'scope_creep', 'spaghetti_code'],
+      undefined: ['deprecation_warning', 'dust_daemon', 'honeypot', 'race_condition', 'rolling_release', 'rootkit', 'scope_creep', 'spinlock'],
+      devnull: ['cherry_pick', 'detached_head', 'flaky_test', 'graphics_glitch', 'merge_conflict', 'stale_branch'],
+      context: ['cherry_pick', 'dust_daemon', 'honeypot', 'race_condition', 'rolling_release', 'rootkit', 'spaghetti_code', 'spinlock'],
+    };
+    const BOSS_BANS = { context: ['octopus_merge', 'shareholder'] };
+    const zeros = (defs) => {
+      const z = {};
+      for (const [id, def] of Object.entries(defs)) {
+        for (const [th, f] of Object.entries(def.themes || {})) if (f === 0) (z[th] = z[th] || []).push(id);
+      }
+      for (const th of Object.keys(z)) z[th].sort();
+      return z;
+    };
+    const same = (a, b) => JSON.stringify(Object.keys(a).sort().map((k) => [k, a[k]])) === JSON.stringify(Object.keys(b).sort().map((k) => [k, b[k]]));
+    if (!same(zeros(E), BANS)) out.push('Gegner-Sperren weichen von BANS ab: ' + JSON.stringify(zeros(E)));
+    if (!same(zeros(BO), BOSS_BANS)) out.push('Boss-Sperren weichen von BOSS_BANS ab: ' + JSON.stringify(zeros(BO)));
+
+    for (let d = 1; d <= 22; d++) {
+      const th = BOTA.themeKeyAt(d), banned = BANS[th] || [], bossBanned = BOSS_BANS[th] || [];
+      for (const id of banned) {
+        if (BOTA.themeWeight(E[id], th, d) !== 0 || BOTA.enemyWeightAt(E[id], d) !== 0) out.push(id + ': Gewicht auf Etage ' + d);
+      }
+      let n = 0, rooms = 0;
+      for (let i = 0; i < 300; i++) {
+        const list = BOTA.rollRoomEnemies(new BOTA.RNG(BOTA.hashString('ban' + d + ':' + i)), d);
+        rooms++; n += list.length;
+        const hit = list.find((id) => banned.includes(id));
+        if (hit) { out.push(hit + ' gewuerfelt auf Etage ' + d); break; }
+      }
+      if (n / rooms < 3) out.push('Etage ' + d + ': nur ' + (n / rooms).toFixed(2) + ' Gegner pro Raum');
+      for (const id of bossBanned) if (BOTA.bossEligible(BO[id], d, th)) out.push(id + ': Boss auf Etage ' + d);
+      for (let i = 0; i < 200; i++) {
+        const boss = BOTA.rollBossVaried(new BOTA.RNG(BOTA.hashString('banboss' + d + ':' + i)), d, []);
+        if (bossBanned.includes(boss)) { out.push(boss + ' als Boss auf Etage ' + d); break; }
+      }
+      const possible = Object.keys(BO).filter((id) => BOTA.bossEligible(BO[id], d, th));
+      if (possible.length < 2) out.push('Etage ' + d + ': nur ' + possible.length + ' moegliche Bosse');
+    }
+    // Eine Sperre gilt nur fuer ihr Thema: ohne sie bleibt die Kakophonie, wie sie ist
+    if (Math.abs(BOTA.themeWeight(E.stale_branch, 'latent', 8) - 0.25) > 1e-9) out.push('Sperre wirkt auf fremdes Thema');
+    if (Math.abs(BOTA.bossWeightAt(BO.octopus_merge, 'devnull', 10) - 3 * BOTA.mixAt(10)) > 1e-9) out.push('Boss-Sperre wirkt auf fremdes Thema');
+    return out;
+  });
+  problems.push(...banProblems);
 
   // --- Zwischenboss-Begegnungen live: jeder der vier Bosse durch eine Tuer betreten -> kein Intro, kein
   //     Boss-Raum-Zeug, HP x ENCOUNTER_HP, er agiert, raeumt beim Tod den Raum und hinterlaesst nichts ---

@@ -436,6 +436,8 @@ All milestones done. What shipped, compared with this doc:
     15 % fewer shots per second in both phases. The breaks shrink with depth, back to roughly the old pace.
   - Guaranteed Approval per floor from depth 2 (see §6, step 8). Before this, 55–80 % of floors had no
     Approval drop at all.
+- **Weights review (2026-11-05):** each floor from 3 on now keeps some enemies out for good (`themes: 0`, not lifted by the
+  cacophony), which takes floors 8–11 from 30–34 possible enemies to 23–26. Details in AGENTS.md.
 - **Surprise round (2026-11-05):** own enemies for floors 8–10 (Cosine Similarity, Heisenbug, Bit Bucket), Terms of Service
   rooms, seed entry, a daily run with today's best score, same-seed retry and an incident timeline on the post-mortem.
   `rm -rf` and the On-Call Pager now scale with depth. Details in AGENTS.md.

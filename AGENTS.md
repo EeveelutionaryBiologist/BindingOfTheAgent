@@ -112,7 +112,7 @@ Live state is under `BOTA.game` (`.player`, `.room`, `.floor`, `.depth`, `.state
   and explosions break it;
 - `themes` / `themeOnly` on enemies and bosses only name existing theme keys with factors ≥ 0, every floor of two full
   theme cycles fills its rooms with allowed enemies and has an allowed boss, and temporary test entries confirm
-  that exclusion (before floor 8), the lift from floor 8, weight factors, bonus chances and the no-repeat boss rule
+  that exclusion (before floor 8), the lift from floor 8, that an explicit `themes: 0` is never lifted, weight factors, bonus chances and the no-repeat boss rule
   all respect the floor theme;
 - floor rosters (§4): on floors 1–7 the generic enemies at home match the roster table in the test, enemies away from
   home count exactly `AWAY`, rooms still hold ≥ 3 enemies on average, and the away share stays at 5–45 %;
@@ -143,7 +143,7 @@ Live state is under `BOTA.game` (`.player`, `.room`, `.floor`, `.depth`, `.state
 - retirement: the Bug and Friday Deploy end after floor 7, the Null Pointer and the Reviewer after floor 9, on every later cycle too,
   and every floor keeps at least two possible bosses;
 - the Game-breaking Bug and Dangling Pointer match the Bug and Null Pointer except for 2 contact damage, never roll
-  before floor 8, stay at 2.5–9 % of enemies on floors 8–22, and one touch costs a full heart;
+  before floor 8, stay at 2.5–9 % of enemies on floors 8–22 (the Game-breaking Bug at 0 on The Latent Space), and one touch costs a full heart;
 - the Off-Brand GPU turns about 12 % of shots into duds that deal no damage, and the GPU prices are 30¢ / 20¢;
 - the Forgotten Branches family (see §4):
   - **Stale Branch** appears only on its floor (before floor 8), ages through its leaf stages, speeds up, counts up its counter,
@@ -269,6 +269,9 @@ Live state is under `BOTA.game` (`.player`, `.room`, `.floor`, `.depth`, `.state
   empties on a new run, survives "keep going" and never draws from `game.rng`;
 - the wobble phase is the same for identical shots, differs across a fan, is well spread over 0–2π, and uses neither
   `Math.random` nor `game.rng`; `rm -rf` and the On-Call Pager deal 25/10 on floor 1 and 51.25/20.5 on floor 8;
+- hard exclusions (§4): the `BANS` and `BOSS_BANS` tables in the test match every `themes: 0` in the data; on floors 1–22 those
+  enemies have weight 0 and never roll, those bosses are never eligible, rooms still hold ≥ 3 enemies on average, every floor
+  keeps at least two possible bosses, and factors on other themes are unchanged;
 - the door transition, special rooms, pause screen and death screen work.
 
 Screenshots go to `tools/out/` (scratch; don't commit or ship). One-time setup without admin rights:
@@ -874,7 +877,7 @@ shared palette `B.CONTEXT_COLORS`); because the rain is light blue, **danger is 
   when none are left.
 
 The **floor 8–10 enemies** (2026-11-05, `entities/enemies-deep.js`, weight 6, cost 1.8, `themeOnly` + `minFloor`) are one per
-floor and deliberately not a family: no `family` field and no shared look. At home each is 6–9 % of enemies, about 2.5 % on
+floor and deliberately not a family: no `family` field and no shared look. At home each is 7–11 % of enemies, about 3 % on
 any other floor from then on (the cacophony). They stay off the Summarizer's whitelist. `enemyWeightAt` ignores `minFloor`
 (only `rollRoomEnemies` enforces it), so anything reading weights directly shows them on earlier cacophony floors.
 - **Cosine Similarity** (gold `#ffd166`, flying) wants to stand at the player's position point-reflected through the room
@@ -912,7 +915,8 @@ Room spawning (`rollRoomEnemies`) works on a **budget**:
 
 **Floor themes** (spawn weights per floor theme, since 2026-11-02). Enemies and bosses can carry two optional fields,
 both keyed by the theme `key` from `B.FLOOR_THEMES` (`B.themeKeyAt(depth)`):
-- `themes: { branches: 3, devnull: 0 }` multiplies the weight on floors with that theme; 0 excludes it there.
+- `themes: { branches: 3, devnull: 0 }` multiplies the weight on floors with that theme; 0 excludes it there at every depth
+  (see Hard exclusions below).
 - `themeOnly: ['branches']` limits it to those themes. `minFloor` still applies on top.
 
 `B.themeWeight(def, theme)` computes the factor (0 = excluded, otherwise the `themes` value or 1). It applies after
@@ -944,15 +948,31 @@ the thinnest home crowd and the highest away share; the themed enemies planned f
 enemy that can appear before floor 8 needs a `home` and an entry in the smoke test's `ROSTER` table.
 
 **Cacophony from floor 8** (`B.MIX_FROM`): `B.mixAt(depth)` is 0 before 8, then 0.25, +0.1 per floor, 1 from 16.
-`B.themeWeight(def, theme, depth)` lifts any factor below 1 (AWAY, `themeOnly` exclusion, explicit 0) to
-`f + (1 − f) · mix`; factors ≥ 1 stay. Without `depth` it returns the raw factor (old behaviour, used by tests).
+`B.themeWeight(def, theme, depth)` lifts any factor below 1 (AWAY, `themeOnly` exclusion) to
+`f + (1 − f) · mix`; factors ≥ 1 and an explicit 0 in `themes` stay. Without `depth` it returns the raw factor (old behaviour, used by tests).
 `enemyWeightAt`, `rollRoomEnemies` (pool, exclusion and bonus chance) and the boss functions pass the depth, so the
-families show up on every floor from 8 (away from home about 31 % of enemies on floor 8, 40 % on 12; the Orphan Commit too; the
+families show up on most floors from 8 (away from home about 26–36 % of enemies on floors 8–11, 46 % on 12; the Orphan Commit too; the
 Context Limit family only from 11) and
 generic enemies return to equal odds. Floors 8–11 have no home crowd at all. Bosses use the same lift, but a boss
 away from home weighs at most 3 (`BOSS_LEAK_WEIGHT` in `bosses.js`): the Octopus Merge is about 5 % on floor 8 and
 16 % on floor 16 instead of dominating. Check that themed content reads on any floor: dark floors are fine for both
 families (screenshots 2026-11-03); cacti stay a Sandbox Borders floor feature.
+
+**Hard exclusions** (2026-11-05, from the weights review, to thin out the late floors): `themes: { x: 0 }` keeps an enemy or boss off
+that theme at every depth, so the cacophony doesn't lift it. It goes by theme, so it applies on the second cycle too (floor 19 is The
+Latent Space again). Floors 8–11 went from 30–34 possible enemies to 23–26. Themes with no exclusions (backlog, legacy, dephell,
+production) are unchanged, so floors 12, 13, 15 and 16 still roll about 34 types. A new exclusion also goes into `BANS` or `BOSS_BANS`
+in the smoke test.
+
+| Theme | Never rolls there |
+|---|---|
+| branches | Zombie Process |
+| sandbox | Memory Leak, Spaghetti Code, Merge Conflict |
+| training | Zombie Process |
+| latent | Spaghetti Code, Merge Conflict, Scope Creep, Rate Limiter, Port Scanner, Game-breaking Bug |
+| undefined | Deprecation Warning, Scope Creep, Race Condition, Honeypot, Rolling Release, Spinlock, Rootkit, Dust Daemon |
+| devnull | Merge Conflict, Stale Branch, Detached HEAD, Cherry-Pick, Flaky Test, Graphics Glitch |
+| context | Spaghetti Code, Cherry-Pick, Race Condition, Honeypot, Rolling Release, Spinlock, Rootkit, Dust Daemon; bosses: Octopus Merge, The Shareholder |
 
 **Bosses** (base HP): `monolith` 360 (floors 1–6), `stakeholder` 250 (floors 1–6), `friday_deploy` 240 (floors 4–7),
 `infinite_loop` 300 (floors 2–7), `memory_hog` 300 (floors 4–9, ×2 on Dependency Hell), `megalith` 460 (floor 7+, replaces the Monolith), `shareholder` 380 (floor 7+,

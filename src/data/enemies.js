@@ -54,9 +54,13 @@
  *   Die Hallucination hat kein home (Bonus-Spawn ueberall; x2 auf sandbox, x1.5 auf training).
  *
  * Kakophonie ab Etage B.MIX_FROM (8): Die Etagen-Identitaet verblasst. Jeder Faktor f < 1 (AWAY, themeOnly-
- * Ausschluss = 0, explizite 0) wird Richtung 1 angehoben: f' = f + (1 - f) * B.mixAt(Tiefe), mixAt = 0.25 auf
- * Etage 8, +0.1 pro Etage, ab 16 = 1. Verstaerkungen (f > 1) bleiben. So tauchen ab Etage 8 die Familien und
- * alle anderen Themen-Gegner ueberall auf, immer haeufiger ("alles, was vorher kam, durcheinander").
+ * Ausschluss = 0) wird Richtung 1 angehoben: f' = f + (1 - f) * B.mixAt(Tiefe), mixAt = 0.25 auf Etage 8, +0.1 pro
+ * Etage, ab 16 = 1. Verstaerkungen (f > 1) bleiben. So tauchen ab Etage 8 die Familien und alle anderen
+ * Themen-Gegner fast ueberall auf, immer haeufiger ("alles, was vorher kam, durcheinander").
+ *
+ * Nur eine explizite 0 in themes bleibt auch in der Kakophonie 0 (auf jeder Tiefe mit diesem Thema). Damit hat jede
+ * Etage eine eigene Liste von Gegnern, die dort nie auftauchen. Die Eintraege stammen aus der Gewichts-Durchsicht vom
+ * 2026-11-05 (Ziel: weniger verschiedene Gegner auf spaeten Etagen, eigenere Etagen).
  *
  * Etagen-Freischaltung (DESIGN.md §7): Etage 1 ist sanft (Bug, Null Pointer, Memory Leak, selten eine
  * Hallucination), ab 2 kommen Fernkaempfer, Charger, der Graphics Glitch und (fuer Legacy Codebase) Orbiter und
@@ -96,6 +100,7 @@
     name: 'Game-breaking Bug', hp: 8, r: 18, speed: 70, contactDamage: 2,
     behavior: 'wander', sprite: 'enemy_game_breaking_bug', color: '#3f8cf0',
     minFloor: 8, weight: 3, weightPerFloor: 1, maxWeight: 12, cost: 1.5, tags: ['melee'],
+    themes: { latent: 0 },
     desc: 'Severity: critical. Status: won\'t fix.',
   };
 
@@ -112,6 +117,7 @@
     sprite: 'enemy_memory_leak', color: '#8e5bd6',
     minFloor: 1, weight: 6, cost: 1.6, tags: ['melee'],
     home: ['backlog', 'dephell'],
+    themes: { sandbox: 0 },
     desc: 'Gets bigger the longer you ignore it.',
   };
 
@@ -130,6 +136,7 @@
     sprite: 'enemy_flaky_test', color: '#7bc96f', noFlip: true,
     minFloor: 2, weight: 5, weightPerFloor: 0.3, maxWeight: 7, cost: 1.5, tags: ['ranged'],
     home: ['production', 'training'],
+    themes: { devnull: 0 },
     desc: 'Passes on my machine.',
   };
 
@@ -139,6 +146,7 @@
     sprite: 'enemy_merge_conflict', color: '#4a86d8', noFlip: true,
     minFloor: 2, weight: 5, weightPerFloor: 0.3, maxWeight: 7, cost: 2, maxPerRoom: 3, tags: ['charge'],
     home: ['branches', 'production'],
+    themes: { sandbox: 0, latent: 0, devnull: 0 },
     desc: '<<<<<<< HEAD',
   };
 
@@ -157,7 +165,7 @@
     sprite: 'enemy_deprecation_warning', color: '#f2c14e', noFlip: true,
     minFloor: 2, weight: 5, weightPerFloor: 0.3, maxWeight: 7, cost: 1.5, maxPerRoom: 3, tags: ['fly', 'ranged'],
     home: ['legacy', 'training'],  // Altlasten im Code und veraltete Doku in den Trainingsdaten
-    themes: { sandbox: 2.5 },   // Sandbox Borders: veraltete Warnungen schwirren an der Grenze besonders gern herum
+    themes: { sandbox: 2.5, undefined: 0 },   // Sandbox Borders: veraltete Warnungen schwirren an der Grenze besonders gern herum
     desc: 'Will be removed in a future release. Not this one.',
   };
 
@@ -167,6 +175,7 @@
     sprite: 'enemy_spaghetti_code', color: '#e8c36a',
     minFloor: 2, weight: 5, weightPerFloor: 0.2, maxWeight: 7, cost: 1.5, tags: ['ranged'],
     home: ['legacy', 'training'],
+    themes: { sandbox: 0, latent: 0, context: 0 },
     desc: 'Nobody knows where it starts. Or ends.',
   };
 
@@ -176,6 +185,7 @@
     sprite: 'enemy_zombie_process', color: '#9aa3a8',
     minFloor: 2, weight: 5, weightPerFloor: 0.3, maxWeight: 7, cost: 2, tags: ['melee'],
     home: ['legacy', 'dephell'],
+    themes: { branches: 0, training: 0 },
     desc: '`kill -9` recommended.',
   };
 
@@ -185,6 +195,7 @@
     sprite: 'enemy_scope_creep', color: '#6f9a3a',
     minFloor: 4, weight: 4, weightPerFloor: 0.3, maxWeight: 6, cost: 2, maxPerRoom: 2, tags: ['melee'],
     home: ['dephell'],
+    themes: { latent: 0, undefined: 0 },
     desc: 'Just one more small feature.',
   };
 
@@ -207,6 +218,7 @@
     sprite: 'enemy_graphics_glitch', color: '#e040c0',
     minFloor: 2, weight: 4, weightPerFloor: 0.2, maxWeight: 6, cost: 1, maxPerRoom: 2, tags: ['melee'],
     home: ['production'],
+    themes: { devnull: 0 },
     desc: 'Is it supposed to look like this...?',
   };
 
@@ -216,6 +228,7 @@
     sprite: 'enemy_race_condition', color: '#e0603a',
     minFloor: 2, weight: 4, weightPerFloor: 0.2, maxWeight: 6, cost: 0.8, pack: 2, maxPerRoom: 4, tags: ['melee'],
     home: ['dephell', 'production'],
+    themes: { undefined: 0, context: 0 },
     desc: 'Sometimes it hits first. Sometimes you do. Sometimes both.',
   };
 
@@ -243,6 +256,7 @@
     sprite: 'enemy_stale_branch', color: '#a3602c',
     minFloor: 3, weight: 6, cost: 1.5, maxPerRoom: 3, tags: ['melee', 'charge'],
     themeOnly: ['branches'], family: 'branches',
+    themes: { devnull: 0 },
     desc: 'This branch is 47 commits behind main. And counting.',
   };
 
@@ -260,6 +274,7 @@
     sprite: 'enemy_detached_head', color: '#a3602c',
     minFloor: 3, weight: 6, cost: 2, maxPerRoom: 2, tags: ['melee'],
     themeOnly: ['branches'], family: 'branches',
+    themes: { devnull: 0 },
     desc: "You are in 'detached HEAD' state. The body did not get the memo.",
   };
 
@@ -297,6 +312,7 @@
     sprite: 'enemy_cherry_pick', color: '#d64545',
     minFloor: 3, weight: 6, cost: 0.9, pack: 2, maxPerRoom: 4, tags: ['melee'],
     themeOnly: ['branches'], family: 'branches',
+    themes: { devnull: 0, context: 0 },
     desc: 'Hand-picked from another branch. Comes as a pair; hurt one and the other takes it personally.',
   };
 
@@ -364,6 +380,7 @@
     sprite: 'enemy_spinlock', color: '#c9a466', noFlip: true,
     minFloor: 5, weight: 6, cost: 2.5, maxPerRoom: 2, tags: ['melee', 'charge'],
     themeOnly: ['sandbox'], family: 'sandbox',
+    themes: { undefined: 0, context: 0 },
     desc: 'Busy-waits in a circle until you are close enough. Then it stops waiting.',
   };
 
@@ -385,6 +402,7 @@
     sprite: 'enemy_rootkit', color: '#8a6a44', noFlip: true,
     minFloor: 5, weight: 6, cost: 1.5, maxPerRoom: 2, tags: ['ranged'],
     themeOnly: ['sandbox'], family: 'sandbox',
+    themes: { undefined: 0, context: 0 },
     desc: 'Lives below the surface. Has root. Comes up only to ruin your day.',
   };
 
@@ -417,6 +435,7 @@
     sprite: 'enemy_dust_daemon', color: '#5a4028', noFlip: true,
     minFloor: 5, weight: 5, cost: 1.8, maxPerRoom: 2, tags: ['fly', 'ranged'],
     themeOnly: ['sandbox'], family: 'sandbox',
+    themes: { undefined: 0, context: 0 },
     desc: 'A background process that kicks up dust. Your shots now run in circles.',
   };
 
@@ -518,6 +537,7 @@
     sprite: 'enemy_honeypot', color: '#f0b030', noFlip: true,
     minFloor: 4, weight: 5, cost: 2, maxPerRoom: 1, tags: ['turret'],
     themeOnly: ['dephell'], family: 'dephell',
+    themes: { undefined: 0, context: 0 },
     desc: '0 dependencies*, 99k stars, MIT licensed. *Terms and conditions apply.',
   };
 
@@ -546,7 +566,7 @@
     },
     sprite: 'enemy_rolling_release', color: '#c98a4a', noFlip: true,
     minFloor: 4, weight: 6, cost: 1.5, maxPerRoom: 2, tags: ['melee', 'charge'],
-    themeOnly: ['dephell', 'sandbox'], themes: { sandbox: 0.6 }, family: 'dephell',
+    themeOnly: ['dephell', 'sandbox'], themes: { sandbox: 0.6, undefined: 0, context: 0 }, family: 'dephell',
     desc: 'Never stable, always latest. Picks up speed with every bump.',
   };
 
@@ -580,6 +600,7 @@
     sprite: 'enemy_rate_limiter', color: '#9aa3ad', noFlip: true,
     minFloor: 5, weight: 6, cost: 2, maxPerRoom: 2, tags: ['ranged'],
     themeOnly: ['production', 'context'], family: 'production',
+    themes: { latent: 0 },
     desc: 'Three requests per window. After that: 429, and a mandatory coffee break.',
   };
 
@@ -608,6 +629,7 @@
     sprite: 'enemy_port_scanner', color: '#6f7c8a', noFlip: true,
     minFloor: 5, weight: 5, cost: 1.8, maxPerRoom: 1, tags: ['ranged'],
     themeOnly: ['production'], family: 'production',
+    themes: { latent: 0 },
     desc: 'Knocks on every port, in order. Politely. Repeatedly. With bullets.',
   };
 
@@ -915,11 +937,13 @@
   /**
    * Etagen-Faktor einer Gegner- ODER Boss-Definition (bosses.js nutzt dieselbe Funktion).
    * depth: optional. Ohne Tiefe gilt der rohe Faktor (B.themeFactor); mit Tiefe wird ein Faktor < 1 ab
-   * B.MIX_FROM Richtung 1 angehoben: f + (1 - f) * B.mixAt(depth). Faktoren >= 1 bleiben unveraendert.
+   * B.MIX_FROM Richtung 1 angehoben: f + (1 - f) * B.mixAt(depth). Faktoren >= 1 bleiben unveraendert, eine
+   * explizite 0 in themes auch: Das ist ein harter Ausschluss, im Gegensatz zum themeOnly-Ausschluss.
    */
   B.themeWeight = function (def, theme, depth) {
     const f = B.themeFactor(def, theme);
     if (f >= 1 || depth === undefined) return f;
+    if (f === 0 && def.themes && theme && Object.prototype.hasOwnProperty.call(def.themes, theme)) return 0;
     return f + (1 - f) * B.mixAt(depth);
   };
 
