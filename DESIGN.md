@@ -436,6 +436,8 @@ All milestones done. What shipped, compared with this doc:
     15 % fewer shots per second in both phases. The breaks shrink with depth, back to roughly the old pace.
   - Guaranteed Approval per floor from depth 2 (see §6, step 8). Before this, 55–80 % of floors had no
     Approval drop at all.
+- **Same enemies every cycle (2026-11-06):** enemy spawns go by the floor within its cycle, so The Backlog II has the same
+  enemies as The Backlog. Room budget, HP and bosses stay on the real depth. Details in AGENTS.md.
 - **Weights review and secret rooms (2026-11-05):** each floor from 3 on now keeps some enemies out for good (`themes: 0`, not
   lifted by the cacophony), which takes floors 8–11 from 30–34 possible enemies to 23–26. A floor has 0–3 secret rooms
   instead of exactly one. Details in AGENTS.md.

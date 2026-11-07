@@ -35,7 +35,7 @@ it still turns up, but at only a fifth of its usual odds. That gives each of the
 | 7 The Training Data | Rogue Agent (1.5×), Spaghetti Code, Flaky Test, Deprecation Warning |
 
 The Hallucination can turn up anywhere. **From floor 8** the floors stop having their own crowd: every enemy's odds
-move toward normal (a quarter of the way on floor 8, about a tenth more per floor, all the way from floor 16), so
+move toward normal (a quarter of the way on floor 8, about a tenth more per floor, up to floor 11), so
 nearly everything you've met so far turns up together, the floor families included. Each floor still keeps a few enemies
 out for good, so it doesn't turn into a free-for-all:
 
@@ -49,7 +49,9 @@ out for good, so it doesn't turn into a free-for-all:
 | /dev/null | Merge Conflict, Stale Branch, Detached HEAD, Cherry-Pick, Flaky Test, Graphics Glitch |
 | The Context Limit | Spaghetti Code, Cherry-Pick, Race Condition, Honeypot, Rolling Release, Spinlock, Rootkit, Dust Daemon |
 
-This goes by floor theme, so it also applies when a theme comes back on the second cycle.
+**Every cycle rolls the same enemies.** The Backlog II has the same enemies at the same odds as The Backlog, and so on for every
+floor, retired ones included: the Bug is back on floor 12. There are more of them per room and they have more HP, so later
+cycles are still harder. Bosses don't reset: they keep going by real depth.
 
 | | Name | First floor | HP | Behaviour | Flavour text |
 |---|---|---|---|---|---|
@@ -137,7 +139,7 @@ These only appear on The Training Data floors.
 ### Floors 8–10
 
 One enemy each for The Latent Space, Undefined Behavior and /dev/null. They aren't a family. At home each makes up 7–11 % of
-enemies, and from then on they turn up on every other floor at about 3 %.
+enemies, and later in the cycle they turn up on other floors at about 3 %.
 
 | | Name | First floor | HP | Behaviour | Flavour text |
 |---|---|---|---|---|---|
@@ -147,14 +149,14 @@ enemies, and from then on they turn up on every other floor at about 3 %.
 
 ### The Context Limit family
 
-These first appear on The Context Limit (floor 11) and, weaker, on every floor after it. They're pale and waterlogged; in
+These only appear on The Context Limit (floors 11, 22 and so on). They're pale and waterlogged; in
 the rain their warnings are amber and their shots coral, never blue.
 
 | | Name | First floor | HP | Behaviour | Flavour text |
 |---|---|---|---|---|---|
-| ![Overflow Buffer](images/enemy_overflow_buffer.png) | **Overflow Buffer** `overflow_buffer` | 11 (The Context Limit; weaker elsewhere after it) | 18 | A glass tank whose fill rises on its own (7 s) and by 7 % with every hit, so burst it down fast or let it overflow and dodge. When full it cracks ("[OVERFLOW]", 0.8 s amber warning showing the shot lines and the puddle ring), then bursts into 8 coral droplets and an 80 px puddle that slows you to 60 % for 4 s (not if you fly). Then it starts over empty. Max 2 per room | Nobody checked the bounds. Hit it and it fills up faster. |
-| ![Summarizer](images/enemy_summarizer.png) | **Summarizer** `summarizer` | 11 (The Context Limit; weaker elsewhere after it) | 16 | A hooded scribe that keeps 200–320 px away and never attacks. Every 6–8 s it links the two closest simple enemies with a dashed amber line (1.5 s, "compacting...") and merges them: the smaller vanishes, the larger gains its HP, grows and gets a [summary] tag. Hit the Summarizer during the line to cancel it. Each enemy can be summarized at most twice. Max 1 per room | TL;DR: two of your problems are now one bigger problem. |
-| ![Lost in the Middle](images/enemy_lost_in_the_middle.png) | **Lost in the Middle** `lost_in_the_middle` | 11 (The Context Limit; weaker elsewhere after it) | 14 | A flying chat-bubble ghost. Near the room's edges it is solid: it drifts toward you, hurts on contact, and after a 0.6 s amber warning fires a fan of 3 coral word shots. In the middle third of the room's width (marked by dotted lines on the floor) it fades out: shots pass through, no contact damage, no attacks. After 4 s in the middle it drifts out and stays outside for a while, so you can't wait it out. Max 2 per room | Remembers the beginning. Remembers the end. Everything in between: gone. |
+| ![Overflow Buffer](images/enemy_overflow_buffer.png) | **Overflow Buffer** `overflow_buffer` | 11 (The Context Limit only) | 18 | A glass tank whose fill rises on its own (7 s) and by 7 % with every hit, so burst it down fast or let it overflow and dodge. When full it cracks ("[OVERFLOW]", 0.8 s amber warning showing the shot lines and the puddle ring), then bursts into 8 coral droplets and an 80 px puddle that slows you to 60 % for 4 s (not if you fly). Then it starts over empty. Max 2 per room | Nobody checked the bounds. Hit it and it fills up faster. |
+| ![Summarizer](images/enemy_summarizer.png) | **Summarizer** `summarizer` | 11 (The Context Limit only) | 16 | A hooded scribe that keeps 200–320 px away and never attacks. Every 6–8 s it links the two closest simple enemies with a dashed amber line (1.5 s, "compacting...") and merges them: the smaller vanishes, the larger gains its HP, grows and gets a [summary] tag. Hit the Summarizer during the line to cancel it. Each enemy can be summarized at most twice. Max 1 per room | TL;DR: two of your problems are now one bigger problem. |
+| ![Lost in the Middle](images/enemy_lost_in_the_middle.png) | **Lost in the Middle** `lost_in_the_middle` | 11 (The Context Limit only) | 14 | A flying chat-bubble ghost. Near the room's edges it is solid: it drifts toward you, hurts on contact, and after a 0.6 s amber warning fires a fan of 3 coral word shots. In the middle third of the room's width (marked by dotted lines on the floor) it fades out: shots pass through, no contact damage, no attacks. After 4 s in the middle it drifts out and stays outside for a while, so you can't wait it out. Max 2 per room | Remembers the beginning. Remembers the end. Everything in between: gone. |
 
 ### Minions
 

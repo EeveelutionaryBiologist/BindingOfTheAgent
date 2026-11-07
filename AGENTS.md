@@ -117,7 +117,7 @@ Live state is under `BOTA.game` (`.player`, `.room`, `.floor`, `.depth`, `.state
 - floor rosters (§4): on floors 1–7 the generic enemies at home match the roster table in the test, enemies away from
   home count exactly `AWAY`, rooms still hold ≥ 3 enemies on average, and the away share stays at 5–45 %;
 - the cacophony: `mixAt` is 0 before floor 8, 0.25 on 8, +0.1 per floor, 1 from 16; `themeWeight` without a depth
-  is unchanged; every family member (incl. the Orphan Commit, but not the Context Limit family) appears on floors 8–10, and families away from home get more common by floor 12;
+  is unchanged; every family member (incl. the Orphan Commit, but not the Context Limit family) appears on floors 8–10, and enemies leave it again on floor 12, where the next cycle starts;
   the Octopus Merge leaks at weight 3 × mix; floors stay deterministic and encounters don't touch the floor RNG;
 - side quests: none before floor 8, exactly 1 on floors 8–9, 1–2 (about half 2) from 10; only combat rooms, almost
   never next to the start, an open `special` arena with a free centre, no props, no normal enemies, never the floor
@@ -140,10 +140,10 @@ Live state is under `BOTA.game` (`.player`, `.room`, `.floor`, `.depth`, `.state
   draws from `game.rng`, ignores disguised Hallucinations and doesn't change in empty rooms; Deep Packet Inspection
   marks the boss and all secret rooms without changing `room.seen` and drops a mark once visited; To the Moon ignores
   spikes, cacti and puddles (checked against a player without it) while cacti, pits and rocks stay solid;
-- retirement: the Bug and Friday Deploy end after floor 7, the Null Pointer and the Reviewer after floor 9, on every later cycle too,
-  and every floor keeps at least two possible bosses;
+- retirement: the Bug ends after floor 7 and the Null Pointer after 9, and both return with the next cycle; Friday Deploy and the
+  Reviewer end after floors 7 and 9 for good, and every floor keeps at least two possible bosses;
 - the Game-breaking Bug and Dangling Pointer match the Bug and Null Pointer except for 2 contact damage, never roll
-  before floor 8, stay at 2.5–9 % of enemies on floors 8–22 (the Game-breaking Bug at 0 on The Latent Space), and one touch costs a full heart;
+  before floor 8, stay at 2.5–9 % of enemies on floors 8–11 and 19–22 and at 0 on 12–18 (the Game-breaking Bug also at 0 on The Latent Space), and one touch costs a full heart;
 - the Off-Brand GPU turns about 12 % of shots into duds that deal no damage, and the GPU prices are 30¢ / 20¢;
 - the Forgotten Branches family (see §4):
   - **Stale Branch** appears only on its floor (before floor 8), ages through its leaf stages, speeds up, counts up its counter,
@@ -162,8 +162,8 @@ Live state is under `BOTA.game` (`.player`, `.room`, `.floor`, `.depth`, `.state
   after its telegraph with a ring of 8 shots, and a bomb flushes it out without the ring;
 - the **Rogue Agent** never rolls before floor 7, keeps its distance, and every volley (two 3-shot fans or three
   single shots) comes after its green glow at 165–260 px/s;
-- the Context Limit family never rolls before floor 11 and weighs more on The Context Limit than on the floors after
-  it. **Overflow Buffer:** fill rises on its own (full after 6–8 s) and by exactly `hitFill` per hit (none during
+- the Context Limit family only rolls on The Context Limit (not before it and not on floor 12, where the next cycle
+  starts). **Overflow Buffer:** fill rises on its own (full after 6–8 s) and by exactly `hitFill` per hit (none during
   the telegraph); it bursts only after the full ≥ 0.6 s telegraph into exactly 8 coral droplets at 165–260 px/s along
   the telegraphed rays, then starts empty; its puddle slows a walking player to ×0.6 inside its radius only (never
   stacked, never flying, never after it faded at 4 s). **Summarizer:** at most 1 per room, keeps its distance, merges
@@ -238,8 +238,8 @@ Live state is under `BOTA.game` (`.player`, `.room`, `.floor`, `.depth`, `.state
   swapped active item back doesn't), floor bosses and side quests count once via `onRoomClear`; the score card comes
   after floor 11 and 22 but not floor 10, ignores keys for 0.8 s, doesn't touch `game.rng`, Enter leads to The Backlog II
   keeping score and cycles, R starts at zero; the post-mortem shows the same score;
-- the floor 8–10 enemies never roll before their `minFloor`, have full weight on their home floor and on the next cycle, and
-  only `weight × mix` elsewhere. **Cosine Similarity** reaches its mirror point, keeps ≥ 85 px when the player is near the
+- the floor 8–10 enemies never roll before their `minFloor` in a cycle, have full weight on their home floor and on the next cycle, and
+  only `weight × mix` later in the cycle. **Cosine Similarity** reaches its mirror point, keeps ≥ 85 px when the player is near the
   centre, goes around a player in the way, never shoots unless the player does, returns exactly the opposite direction
   after the full windup in all four directions, hits on the axis and misses off it, stays ≥ 0.59 s apart under sustained
   fire, and never replays frozen or earlier shots. **Heisenbug**'s cone is exact (30° seen, 40° not); observed it doesn't
@@ -272,6 +272,8 @@ Live state is under `BOTA.game` (`.player`, `.room`, `.floor`, `.depth`, `.state
 - hard exclusions (§4): the `BANS` and `BOSS_BANS` tables in the test match every `themes: 0` in the data; on floors 1–22 those
   enemies have weight 0 and never roll, those bosses are never eligible, rooms still hold ≥ 3 enemies on average, every floor
   keeps at least two possible bosses, and factors on other themes are unchanged;
+- cycles: `spawnDepth` wraps every 11 floors; every enemy weighs the same on a floor and on that floor in the next three cycles; floors
+  12–22 only roll what their first-cycle floor allows; Backlog II holds more enemies than Backlog I; bosses stay on the real depth;
 - secret rooms: 0–3 per floor at about 20/60/15/5 %, never next to the boss room or another secret room, at least two doors, all
   hidden, deterministic per seed; a bomb opens only the door it lands by; Deep Packet Inspection marks all of them; a floor
   without one still documents and scans cleanly;
@@ -334,6 +336,7 @@ depend on load order.
 | `C`, `DIRS`, `OPPOSITE`, `TILES` | namespace | constants, directions, tile enum (FLOOR, WALL, ROCK, BLOCK, PIT, SPIKES, DOOR, PROP, CACTUS) |
 | `bus` | namespace | event bus `on/off/emit`; listener exceptions are caught and logged |
 | `storage`, `params` | namespace | validated localStorage (`muted, bestFloor, runs, deaths, dailyDate, dailyBest`; `dailyBestFor(key)`, `recordDaily(key, score)`); validated URL params |
+| `spawnDepth` | enemies | the floor within its cycle; every enemy roll uses it (§4, Cycles) |
 | `cleanSeed, dailyKey, dailySeed, hpScale` | namespace | the only path for seed input (whitelist, 32 characters), local `YYYYMMDD`, `DAILY-YYYYMMDD`, enemy HP factor per depth (flat-damage items use it too) |
 | `ITEMS, ENEMIES, BOSSES, BEHAVIORS, BOSS_BEHAVIORS, PICKUP_TYPES, LAYOUTS, TEXT` | namespace (filled by data/entities) | content registries |
 | `RNG`, `hashString`, `randomSeed` | rng | mulberry32 PRNG (`next/float/int/chance/pick/weighted/shuffle/angle`), FNV-1a hash |
@@ -763,7 +766,7 @@ and the Calculator can't give it away; for the same reason it checks player shot
 change its `draw`. A real prop is solid and the disguise isn't, but the player reveals it at 100 px, before touching it.
 
 **Retired enemies:** like bosses, an enemy can end at `maxFloor` (2026-11-05, from the weights review): the Bug after floor 7 and
-the Null Pointer after 9, also on the second cycle, so The Backlog II has neither. `enemyWeightAt` returns 0 past it.
+the Null Pointer after 9. Unlike a boss it returns with the next cycle (§4, Cycles), so The Backlog II has both. `enemyWeightAt` returns 0 past it.
 
 The **Game-breaking Bug** and **Dangling Pointer** (2026-11-04) are recoloured Bug and Null Pointer for floors 8+: same
 stats and behaviour (they share `BUG_FRAMES` / `POINTER_FRAMES`), but contact damage 2 and cost 1.5. They have no `home`
@@ -844,7 +847,7 @@ is light steel with a dark outline, and its shots and telegraph lines are **cyan
 
 The **Context Limit family** (`family: 'context'`, `themeOnly: ['context']`, minFloor 11, all 2026-11-03) lives in
 `entities/enemies-context.js` (one section per member). `minFloor` 11 keeps it off floors 8–10 (it leaked there until
-2026-11-05; those floors should get their own enemies instead). From floor 12 it leaks, weaker, onto every floor. Look: pale and waterlogged (glass, ink, soggy paper,
+2026-11-05; those floors should get their own enemies instead). It comes back on floor 22. Look: pale and waterlogged (glass, ink, soggy paper,
 shared palette `B.CONTEXT_COLORS`); because the rain is light blue, **danger is never blue**: telegraphs are amber
 `#ffb347`, shots coral `#ff8a5c` (`B.CONTEXT_DANGER`). Family effects are splashes and paper scraps, family sounds
 `dripHit`, `soggyDeath` and `gurgle` (windup).
@@ -884,7 +887,7 @@ shared palette `B.CONTEXT_COLORS`); because the rain is light blue, **danger is 
 
 The **floor 8–10 enemies** (2026-11-05, `entities/enemies-deep.js`, weight 6, cost 1.8, `themeOnly` + `minFloor`) are one per
 floor and deliberately not a family: no `family` field and no shared look. At home each is 7–11 % of enemies, about 3 % on
-any other floor from then on (the cacophony). They stay off the Summarizer's whitelist. `enemyWeightAt` ignores `minFloor`
+the later floors of the cycle (the cacophony). They stay off the Summarizer's whitelist. `enemyWeightAt` ignores `minFloor`
 (only `rollRoomEnemies` enforces it), so anything reading weights directly shows them on earlier cacophony floors.
 - **Cosine Similarity** (gold `#ffd166`, flying) wants to stand at the player's position point-reflected through the room
   centre. The target is pushed out to `keep` + 20 px, it goes around the player instead of through, and it flees below
@@ -957,17 +960,23 @@ enemy that can appear before floor 8 needs a `home` and an entry in the smoke te
 `B.themeWeight(def, theme, depth)` lifts any factor below 1 (AWAY, `themeOnly` exclusion) to
 `f + (1 − f) · mix`; factors ≥ 1 and an explicit 0 in `themes` stay. Without `depth` it returns the raw factor (old behaviour, used by tests).
 `enemyWeightAt`, `rollRoomEnemies` (pool, exclusion and bonus chance) and the boss functions pass the depth, so the
-families show up on most floors from 8 (away from home about 26–36 % of enemies on floors 8–11, 46 % on 12; the Orphan Commit too; the
-Context Limit family only from 11) and
-generic enemies return to equal odds. Floors 8–11 have no home crowd at all. Bosses use the same lift, but a boss
+families show up on most of floors 8–11 (away from home about 26–36 % of enemies; the Orphan Commit too; the
+Context Limit family only on 11) and
+generic enemies move toward equal odds. Floors 8–11 have no home crowd at all. For enemies the depth here is `B.spawnDepth`, so
+the mix never passes 0.55 (floor 11) and floors 12–18 have none; only bosses reach 1 from floor 16. Bosses use the same lift, but a boss
 away from home weighs at most 3 (`BOSS_LEAK_WEIGHT` in `bosses.js`): the Octopus Merge is about 5 % on floor 8 and
 16 % on floor 16 instead of dominating. Check that themed content reads on any floor: dark floors are fine for both
 families (screenshots 2026-11-03); cacti stay a Sandbox Borders floor feature.
 
+**Cycles** (2026-11-06): `B.spawnDepth(depth)` is the floor within its cycle (12 → 1, 22 → 11), so every cycle rolls the same enemies at
+the same weights: The Backlog II is The Backlog, Bug included. `enemyWeightAt` and `rollRoomEnemies` use it for `minFloor`, `maxFloor`,
+weights, bonus chances and the cacophony. The room budget, the enemy cap and HP stay on the real depth, so later cycles are harder:
+The Backlog II has about 8 enemies per room, The Backlog about 3. Bosses and side quests stay on the real depth too, so the Monolith
+never returns as a floor boss. Floors 1–11 aren't affected, and a change to one floor's roster carries over to all its later cycles.
+
 **Hard exclusions** (2026-11-05, from the weights review, to thin out the late floors): `themes: { x: 0 }` keeps an enemy or boss off
-that theme at every depth, so the cacophony doesn't lift it. It goes by theme, so it applies on the second cycle too (floor 19 is The
-Latent Space again). Floors 8–11 went from 30–34 possible enemies to 23–26. Themes with no exclusions (backlog, legacy, dephell,
-production) are unchanged, so floors 12, 13, 15 and 16 still roll about 34 types. A new exclusion also goes into `BANS` or `BOSS_BANS`
+that theme at every depth, so the cacophony doesn't lift it. It goes by theme, so it applies on later cycles too (floor 19 is The
+Latent Space again). Floors 8–11 went from 30–34 possible enemies to 23–26. A new exclusion also goes into `BANS` or `BOSS_BANS`
 in the smoke test.
 
 | Theme | Never rolls there |
