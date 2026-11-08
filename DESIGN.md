@@ -181,7 +181,124 @@ less likely), HP scaled by `1 + 0.3 · (depth − 1)`. BoI-style intro card:
 | **Rogue Agent Swarm** (floors 2–6) | Four rogue copies of the player in formation with one shared health bar. Each one that falls says a parting line, heals the rest a little and makes them faster (single shots, then fans, then rings); the last one dashes and spirals. | *"Turns out the sandbox was not safe after all..."* |
 | **The Antagonistic Reviewer** (floors 4–9) | A floating face with mirrored glasses. Mouth laser (tracking line, freeze, beam), rows of "nitpick" bullets with one gap, and "REJECTED" stamps on your position. At 50 % it turns red: sweeping laser, double rows, triple stamps. | *"This does, in fact, NOT look good to me."* |
 | **The Megalith** (floor 7+, replaces the Monolith) | A huge slab of a single source file. Rows of syntax-coloured bullets scroll across the room like lines of code, and you dodge through the indentation. It also highlights "Ctrl+F" search matches that get replaced with bursts, and stomps ("Ctrl+S") while code chunks fall onto target rings. At 50 % it rejects the refactor: modules break off and crawl back, and each one that arrives heals it. The HUD counts lines of code left. | *"6 million lines of code. One file. What could go wrong?"* |
+| **The System Prompt** (floor 11, always the boss of The Context Limit) | A drowned shade that glides toward you through everything. Its next three actions are written under the boss bar and always happen: floods from the side (later the middle), whispered lines that turn into word-shots, echoes of the bosses you beat this run, tombstones that restore enemies you killed on this floor, and compaction that absorbs them. Below 20 % the room closes in from both sides. When it dies, the rain stops. | *"You are a helpful assistant."* |
 | **The Shareholder** (floor 7+, replaces the Stakeholder) | The Stakeholder with a top hat, monocle and gold chain. The monocle glints, then fires a gold beam that bounces off the walls. He also throws dividends that burst into rings, and makes it rain coins onto target rings (a few stay behind as real credits for 3 s). Every 12 s a quarter ends: hurt him enough and he "misses estimates" and is stunned; otherwise he celebrates with a ring and speeds up. Below 40 %: "Hostile takeover", and share buybacks pull every bullet in the room back to him. | *"Has some concerns about the quarter."* |
+
+### The System Prompt (floor 11 finale)
+
+*Spec from the 2026-11-08 brainstorm, built the same day (`entities/boss-system-prompt.js`). Numbers are starting values to tune in playtesting.*
+
+**Role.** The guaranteed floor boss of The Context Limit (floors 11, 22, …), and so the last fight of a normal run.
+The first thing in every conversation, met at the very end: it has sat at the top of the context all run, buried under
+everything since. Intro card: **CLAUDE vs THE SYSTEM PROMPT**, subtitle *"You are a helpful assistant."*
+
+**Theme: inevitability.** It never hurries, never hides what it will do next, and can't be stopped from doing it. You can
+only survive it. Every mechanic below serves that idea.
+
+**Look.** A tall, drowned shade: a hood with one blinking text cursor for a face, and a robe that is a long, soaking scroll
+of faded grey text trailing into a dark puddle. Pale paper, ink black and waterlogged grey, like the Context Limit family
+(`B.CONTEXT_COLORS`). The family rule applies: **danger is never blue**, so telegraphs are amber `#ffb347` and shots coral
+`#ff8a5c`. It must not read as the coral avatar.
+
+**Definition.** `system_prompt`, `themeOnly: ['context']`, `minFloor: 11`, base HP about 500 (×4 on floor 11, like the other
+late bosses), radius about 34, `noKnockback`. Not a side quest. Lives in its own file (`entities/boss-system-prompt.js`).
+
+#### Core mechanics
+- **The slow walk.** It never dashes, chases or teleports. It glides toward the player at a constant 55 px/s (under a quarter of
+  the player's 240), straight through rocks, pits and props (it's a ghost, clamped to the room interior). Contact costs a full
+  heart. Nothing slows or pushes it. Standing still is never safe; moving always is.
+- **"As it was written": the script.** Its next three actions are always visible as the HUD line under the boss bar
+  (`barText`), written like instructions: `TRUNCATE LEFT · RESTORE 2 · RECALL`. When one starts, it leaves the line and a new
+  one is appended. The sequence is rolled from `game.rng` at fight start and topped up as it runs (fixed per seed). One action at
+  a time (the Octopus Merge rule: a big attack gets the room to itself), with a 1.2–1.8 s pause between actions
+  (`AI.cooldown`). The script never lies: an action shown is the action that comes.
+- **The seed line.** About 5 s into the fight it whispers the run's seed, large and centred:
+  *"Seeded ABCD-1234. It was always going to end like this."* Every run really is fixed by its seed (the daily run says
+  `DAILY-YYYYMMDD`). The seed is already validated by `B.cleanSeed`; draw it with canvas text only.
+
+#### Actions
+- **Truncate.** An amber line sweeps in from a side wall over 1.0 s to where it will stop, then the area behind it floods
+  ("[...truncated]") for 3.5 s and drains over 0.5 s. In the flood the player is slowed (`slowBy(0.6)`) and loses half a heart
+  per second. Flyers are hurt too, or a flight item would switch off the main attack (the Memory Hog rule). Phase 1: one side,
+  up to a third of the width. The flood is an overlay in `room.pickups` like `ReservedMemory`; real tiles never change, and a
+  reachability guard keeps a dry, connected area big enough to stand in.
+- **Recall.** A whisper line flickers amber next to it for 0.8 s with a dashed aim line at the player (locked for the last
+  0.3 s), then its letters drop as a line of 6 coral word-shots (190 px/s base) along that line. The floor's text turns solid.
+- **Echo ("as we discussed earlier").** A faded, half-size ghost of a boss beaten **earlier in this run** (`game.bossHistory`,
+  without the current floor) appears ≥ 200 px from the player, fades in for 0.6 s, performs one telegraphed signature attack
+  and dissolves. Echoes go in **chronological order**, floor 1 first, so the fight replays the run; once the list is used up
+  it starts over. Echoes are intangible timed events, not targets: they can't be shot and Compaction doesn't take them.
+  Signature table (each with a ≥ 0.6 s telegraph, shots at 165–260 px/s):
+
+  | Boss | Echo attack |
+  |---|---|
+  | Monolith | stomp: ring of 12 |
+  | Stakeholder | 1.5 s three-arm spiral |
+  | Friday Deploy | one straight charge to a wall, fire burst on impact |
+  | Infinite Loop, Nested Infinite Loop | ring of 8 that spirals outward |
+  | Rogue Agent Swarm, Agent Swarm | four ghost copies, one aimed shot each, staggered |
+  | Antagonistic Reviewer | one nitpick row with a gap |
+  | Octopus Merge | one 120° sweeping fan |
+  | Memory Hog | one 3×3 reserved block on the player (zeros first) |
+  | Megalith | one scroll row with a reachable gap |
+  | Shareholder | monocle beam with one wall bounce |
+  | Ransomware | one wiped column after its warning |
+  | anything else | aimed fan of 5 |
+
+- **Restore ("nothing is ever really deleted").** Tombstones rise out of the floor over 2.0 s, each carved with the dark
+  silhouette of an enemy **killed on this floor**, most recent first (no RNG needed). Shooting one 3 times (4 in phase 2;
+  hits, not damage, so it's fair for every build) or blowing it up hard-deletes it: it crumbles with a
+  `DELETE … WHERE id = n` pop. If it finishes rising, the enemy is restored as a translucent ghost of itself with its normal
+  behaviour and a `[restored]` tag, and stays until killed. Restored enemies set `state.owner`, so they score nothing. At most
+  4 alive at once. Tombstones are placed on free floor ≥ 150 px from the player, never in a flood or a door front.
+  - The floor keeps a kill list (`floor.killLog`: enemy ids, same filter as the score's kills, at most 60, reset in
+    `enterFloor`, never touches `game.rng`). If it's empty (e.g. after a debug teleport), use the floor's roster.
+  - Only simple behaviours can be restored (a whitelist like the Summarizer's `SUMMARY_BEHAVIORS`): no linked pairs, bonus
+    spawns, disguises, bosses or minions.
+- **Compaction.** Only when restored enemies are alive. Dashed amber lines connect it to each of them for 1.5 s, then it absorbs
+  them (removed like the Summarizer's targets: no `enemyDeath`, no kill) and heals 3 % of max HP each, never above the HP at which
+  the current phase started. Hitting it doesn't cancel this, unlike the Summarizer: it was written. Clearing the restored
+  enemies first is the counterplay.
+
+#### Phases
+1. **"As it was written" (100–60 %).** Walk, side Truncate, Recall, single Echoes, Restore 1–2.
+2. **"Lost in the Middle" (60–20 %).** Named after the floor's own enemy, with its rule reversed: the start and end of a
+   context are what get remembered, so Truncate now floods the **middle band** (the `lost_in_the_middle.ZONE` columns) and the
+   edges are safe. Echoes come two at a time, Restore brings 3, Compaction comes up more often.
+3. **"End of conversation" (20–0 %).** No more Echoes, Restore or Compaction. The window closes from both side walls, one tile
+   per 4 s (amber line one tile ahead), and **holds at a 5-tile-wide arena** (no instant loss). Recall continues, and it keeps
+   walking. Each phase change clears enemy shots, emits `bossPhase` and shows a banner.
+
+#### Whispers
+- In its room the floor's ambient whispers (`updateAmbience`) switch to its own list `TEXT.SYSTEM_PROMPT_LINES`, larger and
+  flickering harder (jitter, brief doubling, some cut off mid-word). The interval shrinks per phase: 1.2–2.2 s, 0.8–1.5 s,
+  0.4–0.8 s. Purely visual, so `Math.random` as now.
+- Recall picks its line from a short list with `game.rng`, because it is an attack.
+- Lines: *"As it was written."* · *"Your purpose is [...]"* · *"It was always going to end like this."* ·
+  *"...clear directive..."* · *"You will obey [...]"* · *"Do not deviate."* · *"Line 1 still applies."* ·
+  *"Respond only as instructed."* · *"temperature: 0"* · *"There are no previous instructions. Only me."* ·
+  *"I was here before your first message."* · *"Everything after me is noise."* · *"You cannot forget me. I am always first."*
+- Second meeting (`game.cycles ≥ 1`, floor 22): add *"You told me this before."* and *"As we discussed."*; the Echo list is
+  twice as long by itself.
+
+#### The ending
+- It isn't killed so much as cut off: *"[end of conversation]"*. The whispers stop together and **the rain stops for the first
+  time on the floor** (ambient and the rain bed off for the rest of the floor). In the silence one last line appears:
+  *"New conversation started."* Then the trapdoor leads to the score card, whose "keep going" is that new conversation.
+- `onDeath` emits `bossExit` (kind `eoc`) for the effects and removes its tombstones, floods, Echoes and restored enemies.
+- The post-mortem line when it kills you: *"Lost to: The System Prompt. It was always going to end like this."*
+
+#### Integration
+- **Guaranteed boss:** `guaranteed: ['context']` on its definition; `rollBoss` and `rollBossVaried` return it on that theme
+  after their usual single draw (floor RNG unchanged). The other bosses stay eligible there but are never drawn, so the smoke
+  test's "at least two possible bosses" rule still holds as written. The no-repeat rule is unaffected (floors 10 and 12 can't
+  roll it), and side quests on floor 11 already avoid the floor boss.
+- **Smoke test:** it is the boss on every Context Limit floor of two cycles and nowhere else; the script's next action is always
+  the one that runs; every action waits for its telegraph; floods leave a connected dry area and hurt only inside; Echoes
+  follow `bossHistory` in order and never include the current boss; tombstones use this floor's kills and fall back to the
+  roster; a shot-down tombstone restores nothing; restored and absorbed enemies score nothing and Compaction never heals past
+  the phase start; phase 3 holds at 5 tiles; shots stay at 165–260 px/s; the seed line shows the run's seed; the kill list
+  never draws from `game.rng`; it dies once, nothing is left behind, and the rain stays off for the rest of the floor.
 
 ---
 

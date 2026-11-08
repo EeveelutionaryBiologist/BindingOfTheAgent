@@ -475,6 +475,31 @@
   });
   Object.assign(RATE, { whisper: 1, thunder: 5 });
 
+  // The System Prompt (Boss, Etage 11): Wasser schiesst herein (Truncate), Stein schabt aus dem Boden (Grabstein),
+  // dumpfer Bruch (endgueltig geloescht), hohler Rueckwaerts-Ton (Echo erscheint) und ein leiser Schlussakkord in der Stille
+  Object.assign(SOUNDS, {
+    truncate() {
+      noise({ dur: 0.9, vol: 0.06, filter: 'lowpass', f: 900, f2: 260 });
+      noise({ dur: 0.5, vol: 0.03, filter: 'bandpass', f: 1800, f2: 700, q: 1.5, delay: 0.1 });
+    },
+    tombRise() {
+      noise({ dur: 0.7, vol: 0.05, filter: 'lowpass', f: 420, f2: 160 });
+      voice({ f: 70, f2: 95, dur: 0.6, type: 'triangle', vol: 0.05 });
+    },
+    hardDelete() {
+      noise({ dur: 0.18, vol: 0.08, filter: 'lowpass', f: 1300, f2: 300 });
+      voice({ f: 180, f2: 60, dur: 0.16, type: 'square', vol: 0.04 });
+    },
+    echoIn() {
+      voice({ f: 330, f2: 660, dur: 0.5, type: 'sine', vol: 0.035 });
+      voice({ f: 494, f2: 988, dur: 0.5, type: 'sine', vol: 0.02, delay: 0.06 });
+    },
+    endConversation() {
+      arp([69, 72, 76, 81], 0.32, 'sine', 0.04, 1.6);
+    },
+  });
+  Object.assign(RATE, { truncate: 0.3, tombRise: 0.15, hardDelete: 0.08, echoIn: 0.3 });
+
   // Overflow Buffer (Context-Familie): Glas springt (heller Knack) und ein Schwall Wasser klatscht auf den Boden
   Object.assign(SOUNDS, {
     overflowBurst() {
@@ -613,7 +638,8 @@
       }
     },
   };
-  const rainyFloor = (depth) => !!(B.themeFor && depth > 0 && B.themeFor(depth).ambient === 'rain');
+  // Regnet es auf dieser Etage? Nach dem System Prompt (game.calm) nicht mehr, auch wenn die Musik neu startet.
+  const rainyFloor = (depth) => !!(B.themeFor && depth > 0 && B.themeFor(depth).ambient === 'rain' && !(B.game && B.game.calm));
 
   const music = {
     song: null, step: 0, nextT: 0, depth: 0, boss: false, timer: null,
@@ -853,6 +879,20 @@
   on('bossGc', (e) => {                       // Memory Hog: Warnung, Stop-the-World
     if (e.kind === 'warn') p('denied');
     else if (e.kind === 'start') p('gcSweep');
+  });
+  on('bossTruncate', (e) => p(e.kind === 'flood' ? 'truncate' : 'denied'));   // System Prompt: Warnung, dann Wasser
+  on('bossTomb', (e) => {                      // System Prompt: Grabstein steigt, wird geloescht oder stellt her
+    if (e.kind === 'rise') p('tombRise');
+    else if (e.kind === 'hit') p('hit');
+    else if (e.kind === 'delete') p('hardDelete');
+    else if (e.kind === 'restore') p('charged');
+  });
+  on('bossEcho', () => p('echoIn'));          // System Prompt: ein frueherer Boss kehrt als Echo zurueck
+  on('bossCompact', (e) => { if (e.n) p('merge'); });   // ... und nimmt Wiederhergestellte in sich auf
+  on('bossExit', (e) => {                      // ... und das Gespraech endet: Regen aus, ein leiser Akkord
+    if (e.kind !== 'eoc') return;
+    try { rain.set(false); } catch (err) { /* Regen ist optional */ }
+    p('endConversation');
   });
   on('bossSearch', () => p('search'));         // Megalith: Ctrl+F
   on('bossReplace', () => p('replace'));       // Megalith: Suchtreffer ersetzt

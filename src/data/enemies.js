@@ -779,6 +779,16 @@
     desc: 'It was told to spawn a subagent. It was not told to stop.',
   };
 
+  // Grabstein des System Prompt (Boss, Etage 11): steigt auf und stellt einen auf dieser Etage getoeteten Gegner wieder
+  // her, wenn man ihn nicht vorher mit genug Treffern loescht (entities/boss-system-prompt.js). Zaehlt Treffer statt
+  // Schaden; hp ist nur ein Platzhalter. Harmlos, haelt den Raum nicht zu.
+  E.sp_tombstone = {
+    name: 'Tombstone', hp: 99, r: 22, speed: 0, contactDamage: 0,
+    behavior: 'sp_tombstone', sprite: 'enemy_sp_tombstone', color: '#7d889a', noFlip: true,
+    spawn: false, cost: 0,
+    desc: 'Soft-deleted. Pending restore.',
+  };
+
   // Modul des Megalith (Boss, ab 50 %): kriecht zurueck zum Boss und heilt ihn, wenn es ankommt
   // ("Refactor rejected" — alles wandert zurueck in die eine Datei). Ohne Besitzer jagt es den Spieler.
   E.megalith_module = {

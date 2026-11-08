@@ -333,38 +333,60 @@
    * Fluestern (The Context Limit): ein Satzfetzen tippt sich blass ins Bild, flackert, verliert dann Buchstabe fuer
    * Buchstabe (abgeschnittener Kontext) und verblasst, waehrend er langsam mit dem Wind treibt. Rein optisch.
    */
+  /**
+   * Fluestern (The Context Limit): tippt sich ein, Buchstaben fallen weg. intense 0–3 (The System Prompt, je Phase):
+   * groesser, deutlicher, staerkeres Flackern, Zittern, kurze Doppelbilder, manche Zeilen brechen mitten im Wort ab.
+   * big: eine einzelne, grosse, ruhige Zeile in der Raummitte (der Seed). Alles Zufaellige ist reine Optik.
+   */
   class Whisper {
-    constructor(x, y, text) {
-      this.x = x; this.y = y; this.text = String(text).slice(0, 40);
-      this.life = 2.8; this.max = this.life; this.dead = false; this.important = false;
+    constructor(x, y, text, opts) {
+      const o = opts || {};
+      this.x = x; this.y = y;
+      this.lvl = Math.max(0, Math.min(3, o.intense | 0));
+      this.big = !!o.big;
+      let t = String(text).slice(0, this.big ? 48 : 40);
+      // Im Kampf brechen manche Zeilen mitten im Wort ab (abgeschnittener Kontext)
+      if (this.lvl && !this.big && t.length > 8 && Math.random() < 0.15 + 0.1 * this.lvl) {
+        t = t.slice(0, 4 + Math.floor(Math.random() * (t.length - 6))) + '[...]';
+      }
+      this.text = t;
+      this.life = this.big ? 4.2 : 2.8 - 0.2 * this.lvl; this.max = this.life; this.dead = false; this.important = this.big;
       // Reihenfolge, in der die Buchstaben wegfallen (zufaellig, nur Optik)
       this.order = this.text.split('').map((_, i) => [Math.random(), i]).sort((a, b) => a[0] - b[0]).map((p) => p[1]);
-      this.italic = Math.random() < 0.6;
+      this.italic = !this.big && Math.random() < 0.6;
     }
     update(dt) {
       this.life -= dt;
       if (this.life <= 0) { this.dead = true; return; }
+      if (this.big) return;
       this.x += 7 * dt;
       this.y += 2 * dt;
     }
     draw(ctx) {
-      const age = this.max - this.life, n = this.text.length;
-      const shown = Math.min(n, Math.floor(age / 0.035));               // eintippen
-      const lost = Math.max(0, Math.floor((age - 1.1) / (1.5 / n)));    // dann wegfallen
+      const age = this.max - this.life, n = this.text.length, L = this.lvl;
+      const shown = Math.min(n, Math.floor(age / (this.big ? 0.05 : 0.035)));   // eintippen
+      const hold = this.big ? 2.6 : 1.1;
+      const lost = Math.max(0, Math.floor((age - hold) / (1.5 / n)));           // dann wegfallen
       const gone = new Set(this.order.slice(0, Math.min(n, lost)));
       let s = '';
       for (let i = 0; i < shown; i++) s += gone.has(i) ? ' ' : this.text[i];
       const fade = Math.min(1, age / 0.3) * Math.min(1, this.life / 0.6);
-      const flicker = Math.random() < 0.08 ? 0.35 : 0.85 + 0.15 * Math.sin(age * 37);
+      const flicker = Math.random() < 0.08 + 0.07 * L ? 0.3 : 0.85 + 0.15 * Math.sin(age * (37 + 10 * L));
+      const jx = L ? (Math.random() - 0.5) * L * 1.6 : 0, jy = L ? (Math.random() - 0.5) * L * 1.2 : 0;
       ctx.save();
-      ctx.globalAlpha = 0.42 * fade * flicker;
-      ctx.font = (this.italic ? 'italic ' : '') + '15px ' + (B.FONT || 'monospace');
+      ctx.globalAlpha = (this.big ? 0.85 : 0.42 + 0.1 * L) * fade * flicker;
+      ctx.font = (this.italic ? 'italic ' : '') + (this.big ? 'bold 22' : String(15 + 2 * L)) + 'px ' + (B.FONT || 'monospace');
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       ctx.fillStyle = '#0a0f18';
-      ctx.fillText(s, this.x + 1, this.y + 1);
+      ctx.fillText(s, this.x + 1 + jx, this.y + 1 + jy);
       ctx.fillStyle = '#d6e4ff';
-      ctx.fillText(s, this.x, this.y);
+      ctx.fillText(s, this.x + jx, this.y + jy);
+      // Doppelbild: kurz eine zweite, versetzte Kopie
+      if (L && Math.random() < 0.06 * L) {
+        ctx.globalAlpha *= 0.45;
+        ctx.fillText(s, this.x + jx + 4 + L, this.y + jy - 2);
+      }
       ctx.restore();
     }
   }
@@ -687,7 +709,7 @@
   });
 
   // The Context Limit: Fluestern und fernes Wetterleuchten (zwei kurze, schwache Aufheller; bewusst sanft)
-  on('ambientWhisper', (e) => { add(e.game, new Whisper(e.x, e.y, e.text)); });
+  on('ambientWhisper', (e) => { add(e.game, new Whisper(e.x, e.y, e.text, { intense: e.intense, big: e.big })); });
   on('ambientThunder', (e) => {
     FX.tint(e.game, '200,215,255', 0.09, 0.35);
     FX.later(e.game, 0.16, (g) => FX.tint(g, '200,215,255', 0.06, 0.5));
@@ -777,10 +799,35 @@
         FX.text(gg, e.x, e.y - 40, 'KILLED', '#ff7a6a', { life: 2.2, vy: -20 });
         FX.text(gg, e.x, e.y - 12, '(out of memory)', '#c8ccd2', { life: 2.2, vy: -20, scale: 1 });
       });
+    } else if (e.kind === 'eoc') {
+      // The System Prompt: abgeschnitten statt getoetet. Erst die Zeile, dann Stille und ein blasser Lichtschein,
+      // dann der Anfang des naechsten Gespraechs
+      FX.burst(g, e.x, e.y, '#d6e4ff', 30, 220, { vary: true, lifeMin: 0.4, lifeMax: 1.0 });
+      FX.text(g, e.x, e.y - 30, '[end of conversation]', '#d6e4ff', { life: 2.6, vy: -14 });
+      FX.later(g, 0.6, (gg) => FX.tint(gg, '255,244,222', 0.12, 3.2));
+      FX.later(g, 2.6, (gg) => FX.text(gg, 480, 140, 'New conversation started.', '#ffe9c9', { life: 3.2, vy: -6 }));
     } else if (e.kind === 'parachute') {
       FX.later(g, 0.8, (gg) => add(gg, new Parachute(e.x, e.y + 20)));
     }
   });
+
+  // The System Prompt: Wasser bricht herein, Grabsteine steigen auf / werden geloescht / stellen her, Echos erscheinen
+  on('bossTruncate', (e) => {
+    if (e.kind === 'flood') FX.tint(e.game, '120,150,200', 0.08, 0.5);
+  });
+  on('bossTomb', (e) => {
+    const g = e.game;
+    if (e.kind === 'rise') FX.debris(g, e.x, e.y + 20, 8, ['#3d4654', '#2a3140', '#5d6878'], 5);
+    else if (e.kind === 'delete') {
+      FX.debris(g, e.x, e.y, 14, ['#5d6878', '#7d889a', '#3d4654'], 8);
+      FX.text(g, e.x, e.y - 34, 'DELETE ... WHERE id = ' + (e.n || 0), '#ffb347', { scale: 1, life: 1.4 });
+    } else if (e.kind === 'restore') {
+      FX.ring(g, e.x, e.y, 40, '#d6e4ff', 0.4, 3);
+      FX.text(g, e.x, e.y - 34, 'restored', '#d6e4ff', { scale: 1, life: 1.2 });
+    }
+  });
+  on('bossEcho', (e) => { FX.ring(e.game, e.x, e.y, 50, '#d6e4ff', 0.6, 2); });
+  on('bossCompact', (e) => { if (e.n) FX.ring(e.game, e.x, e.y, 90, '#ffb347', 0.5, 4); });
 
   // Orphan Commit gefangen: goldenes Funkeln und ein kurzer Text (die Credits fliegen ohnehin heraus)
   on('orphanCaught', (e) => {
