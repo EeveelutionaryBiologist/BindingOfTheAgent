@@ -110,6 +110,14 @@
  *     den Raum nie; Ring mit zwei Luecken erst nach dem Telegraph; GC ab 40 % oder "Out of memory", fegt alles frei,
  *     Schadensfenster, danach zurueckgestellt; Bombe gibt ganze Bloecke frei; Phase 2 einmal, Fragmente nie Kante an
  *     Kante, zwei Sprints; ein Boss-Tod, Overlay verschwindet; alle Kugeln 165–260 px/s
+ *   - The System Prompt: fester Boss jeder Context-Limit-Etage (sonst nie, rollBoss zieht trotzdem genau einmal); das Skript
+ *     luegt nie (erste Zeile = naechste Aktion, HUD zeigt drei, Compact zwei nach Restore); festes Tempo, kein Rueckstoss;
+ *     Truncate laesst in jedem Boss-Layout genug trockenen, erreichbaren Boden, das Fenster haelt bei Spalte 5–9; Wasser trifft
+ *     erst nach dem Telegraph und nur innen (auch Flieger) und bremst; Recall nach vollem Telegraph auf der eingefrorenen
+ *     Linie; Echos in der Reihenfolge von bossHistory, jeder Echo-Angriff erst nach Einblenden + Telegraph; killLog ohne
+ *     game.rng, Grabsteine juengster Kill zuerst, Treffer statt Schaden, Explosion loescht; Wiederhergestellte und
+ *     Kompaktierte ohne Score, Compaction nach Telegraph und mit Deckel; Phasen je einmal, Fenster nie neben einem Band;
+ *     Seed-Zeile, eigenes Fluestern, eigene Grabinschrift; ein Boss-Tod, keine Reste, danach Ruhe nur auf dieser Etage
  *   - Dust Daemon / Dry Run: in Tiefe 1–7 nur auf Sandbox Borders bzw. The Training Data; Dust Daemon lenkt
  *     Spielerschuesse im Drehsinn ab (nicht ausserhalb, nicht erschoepft/eingefroren, keine Gegnerschuesse), gezielte
  *     Schuesse treffen den Kern immer, Wurf nach Telegraph mit 4 Brocken (einer auf den Spieler), bleibt im Raum;
@@ -2929,6 +2937,352 @@ const URL = 'file://' + path.join(ROOT, 'index.html').replace(/\\/g, '/') + '?se
     return out;
   });
   problems.push(...hogProblems);
+
+  // --- The System Prompt (Etage 11, fester Boss von The Context Limit): Skript, Truncate, Echos, Grabsteine, Ende ---
+  const spProblems = await page.evaluate(() => {
+    const out = [];
+    const B = BOTA, g = B.game, AI = B.AI, DT = 1 / 60, I = B.C.INNER, K = B.BossHelpers.systemPrompt, SP = K.SP;
+    const { COLS, ROWS } = B.C;
+    const p = g.player;
+    // 1) Fest auf The Context Limit, nirgends sonst; der Wurf davor laeuft trotzdem (Etagen-RNG unveraendert)
+    for (let d = 1; d <= 33; d++) {
+      const ctx = B.themeKeyAt(d) === 'context';
+      for (let i = 0; i < (ctx ? 200 : 60); i++) {
+        const hist = ['monolith', 'reviewer', 'ransomware'].slice(0, i % 4);
+        const id = B.rollBossVaried(new B.RNG(B.hashString('sp' + d + ':' + i)), d, hist);
+        if (ctx !== (id === 'system_prompt')) { out.push('System Prompt: Etage ' + d + ' -> ' + id); break; }
+      }
+      const r1 = new B.RNG(B.hashString('sprng' + d)), r2 = new B.RNG(B.hashString('sprng' + d));
+      const pre = B.rollBoss(r1, d);
+      r2.next();
+      if (r1.state !== r2.state) out.push('System Prompt: rollBoss zieht auf Etage ' + d + ' anders oft aus dem RNG');
+      if (ctx && pre !== 'system_prompt') out.push('System Prompt: rollBoss auf Etage ' + d + ' -> ' + pre);
+    }
+
+    const speeds = [], shots = [];
+    const origShoot = AI.shoot;
+    AI.shoot = function (game, e, angle, speed, o) {
+      const name = e && e.def && e.def.name || '';
+      if (name === 'The System Prompt' || /^an echo of /.test(name)) { speeds.push(speed); shots.push({ t: T.now, name, angle, speed }); }
+      return origShoot.apply(this, arguments);
+    };
+    const T = { now: 0 };
+    const ev = [];
+    const offs = ['bossPhase', 'enemyDeath', 'playerHurt', 'ambientWhisper', 'bossTomb', 'bossEcho', 'bossCompact', 'bossTruncate', 'enemyVanish']
+      .map((n) => B.bus.on(n, (x) => ev.push({ n, t: T.now, x })));
+    const god0 = p.god;
+    const fresh = () => { p.invuln = 0; p.guardrails = 0; p.maxHealth = Math.max(p.maxHealth, 12); p.health = p.maxHealth; p.dead = false; };
+    const clear = () => {
+      for (let i = 0; i < 3; i++) for (const e of g.room.enemies.slice()) { e.dead = true; }
+      g.room.enemies.length = 0; g.room.projectiles.length = 0;
+      g.room.pickups = g.room.pickups.filter((x) => !x.truncation && !x.echo);
+    };
+    const spawn = (x, y) => { const H = B.debug.spawnBoss('system_prompt', x, y); H.spawnDelay = 0; return H; };
+    /** Ganzen Raum takten (Boss, Grabsteine, Wiederhergestellte, Overlays, Kugeln); der Spieler bleibt stehen */
+    const step = (n) => { for (let i = 0; i < n; i++) { T.now += DT; g.room.update(DT, g); } };
+    const S = (H) => H.state;
+    try {
+      g.bossHistory = ['monolith', 'octopus_merge', 'memory_hog', 'reviewer'];
+      g.enterFloor(11); g.setState('play');
+      g.bossHistory.push('system_prompt');
+      if (g.floor.findType('boss').room.bossId !== 'system_prompt') out.push('System Prompt: nicht Boss auf Etage 11 im Spiel');
+      B.debug.gotoRoom('boss'); clear();
+      p.god = true;
+
+      // 2) Das Skript luegt nie: die erste Zeile ist immer die Aktion, die als Naechstes laeuft; HUD zeigt drei Zeilen
+      let H = spawn(480, 200);
+      g.floor.killLog = ['bug', 'null_pointer', 'memory_leak', 'rate_limiter'];
+      let checked = 0, kinds = new Set();
+      for (let t = 0; t < 70 * 60 && checked < 20; t++) {
+        if (S(H).mode === 'pause' && S(H).t <= DT) {
+          const want = JSON.stringify(S(H).script[0]);
+          const hud = H.behavior.barText(H).text;
+          if (hud.split(' > ').length !== 3) out.push('System Prompt: HUD zeigt ' + hud);
+          step(1);
+          const cur = S(H).cur;
+          const got = cur ? JSON.stringify({ kind: cur.kind, side: cur.side, n: cur.n }) : 'null';
+          const w = JSON.parse(want);
+          if (!cur || cur.kind !== w.kind || cur.side !== w.side || cur.n !== w.n) { out.push('System Prompt: Skript sagte ' + want + ', lief ' + got); break; }
+          kinds.add(cur.kind);
+          checked++;
+        } else step(1);
+        if (t % 120 === 0) { p.x = 480 + 260 * Math.sin(t / 300); p.y = 380; }
+      }
+      if (checked < 12) out.push('System Prompt: nur ' + checked + ' Aktionen in 70 s');
+      for (const k of ['truncate', 'recall', 'echo', 'restore', 'compact']) if (!kinds.has(k)) out.push('System Prompt: Aktion ' + k + ' kam in 70 s nie');
+      // Compact steht immer zwei Plaetze nach Restore
+      const fakeBoss = { state: { phase: 1, script: [], lastBlock: null } };
+      g.rng = new B.RNG(B.hashString('spscript'));
+      for (let i = 0; i < 300; i++) K.writeBlock(fakeBoss, g);
+      const sc = fakeBoss.state.script;
+      for (let i = 0; i < sc.length - 2; i++) if (sc[i].kind === 'restore' && sc[i + 2].kind !== 'compact') { out.push('System Prompt: Compact nicht zwei nach Restore'); break; }
+      for (let i = 1; i < sc.length; i++) if (sc[i].kind === 'truncate' && sc[i - 1].kind === 'truncate') { out.push('System Prompt: zweimal Truncate hintereinander'); break; }
+      clear();
+
+      // 3) Gehen: festes Tempo, durch Felsen, kein Rueckstoss
+      p.x = 760; p.y = 300;
+      H = spawn(200, 300);
+      S(H).t = 99; S(H).mode = 'pause';
+      const x0 = H.x;
+      step(60);
+      const v = (H.x - x0);
+      if (Math.abs(v - SP.walk) > 3) out.push('System Prompt: geht ' + v.toFixed(1) + ' px/s statt ' + SP.walk);
+      if (!H.noKnockback || !H.flying) out.push('System Prompt: Rueckstoss moeglich oder laeuft nicht ueber Hindernisse');
+      clear();
+
+      // 4) Truncate: in jedem Boss-Layout bleibt trockener Boden zusammenhaengend und erreichbar; das Fenster haelt bei 5–9
+      const special = B.LAYOUTS.filter((l) => l.tags.includes('special'));
+      for (const layout of special) {
+        g.room.stampLayout(layout);
+        const free = [];
+        for (let r = 1; r < ROWS - 1; r++) for (let c = 1; c < COLS - 1; c++) if (g.room.tileAt(c, r) === B.TILES.FLOOR) free.push([c, r]);
+        for (const side of ['left', 'right', 'middle']) {
+          for (const [c, r] of free.filter((_, i) => i % 5 === 0)) {
+            const q = g.room.tileCenter(c, r); p.x = q.x; p.y = q.y - p.r * 0.5;
+            const cols = K.bandCols(g.room, g, side, []);
+            if (!cols) continue;
+            const wet = new Set(cols);
+            const parts = K.dryParts(g.room, wet);
+            if (!parts.length || parts.some((pt) => pt.length < SP.minDry)) { out.push('System Prompt (' + layout.id + '): ' + side + ' laesst zu wenig trockenen Boden'); break; }
+            const f = g.room.worldToTile(p.x, p.y + p.r * 0.5);
+            if (K.stepsToDry(g.room, wet, f.c, f.r) > SP.reach) { out.push('System Prompt (' + layout.id + '): ' + side + ' ohne Fluchtweg'); break; }
+          }
+        }
+        const fl = new K.Truncation(g.room, null);
+        fl.startWindow();
+        p.x = 480; p.y = 300;
+        for (let i = 0; i < 60 * 40; i++) fl.update(DT, g);
+        const wc = fl.windowCols();
+        const parts = K.dryParts(g.room, new Set(wc));
+        if (parts.some((pt) => pt.length < SP.minDry)) out.push('System Prompt (' + layout.id + '): Fenster laesst Streifen');
+        if (layout.id === 'empty' || layout.id === special[0].id) {
+          if (fl.win.l !== SP.windowCols[0] - 1 || fl.win.r !== COLS - 2 - SP.windowCols[1]) out.push('System Prompt (' + layout.id + '): Fenster haelt bei l=' + fl.win.l + ' r=' + fl.win.r);
+        }
+      }
+      g.room.stampLayout(special.find((l) => l.id === 'empty') || special[0]);
+      clear();
+
+      // 5) Truncate trifft erst nach dem Telegraph und nur im Wasser (auch Flieger), bremst dort
+      p.god = false;
+      {
+        const fl = new K.Truncation(g.room, null);
+        g.room.pickups.push(fl);
+        const band = fl.addBand([1, 2, 3, 4], 'left');
+        const inX = (band.x0 + band.x1) / 2, outX = band.x1 + p.r + 6;
+        p.flying = true;
+        fresh(); p.x = inX; p.y = 300;
+        ev.length = 0;
+        let tHurt = null, t = 0;
+        while (t < SP.truncTell + 0.5) { fl.update(DT, g); t += DT; T.now += DT; if (tHurt === null && ev.some((x) => x.n === 'playerHurt')) tHurt = t; }
+        if (tHurt === null || tHurt < SP.truncTell - 1e-6) out.push('System Prompt: Truncate trifft nach ' + tHurt + ' s (Telegraph ' + SP.truncTell + ')');
+        // Alle Items aus dem Item-Test: To the Moon (floating) und Flug wuerden das Bremsen zu Recht abschalten
+        fresh(); p.flying = false; p.floating = false; p.x = inX; p.slowNext = 1; fl.update(DT, g);
+        if (!(p.slowNext <= SP.slow + 1e-9)) out.push('System Prompt: Wasser bremst nicht');
+        fresh(); p.x = outX; ev.length = 0;
+        for (let i = 0; i < 60; i++) fl.update(DT, g);
+        if (ev.some((x) => x.n === 'playerHurt')) out.push('System Prompt: Truncate trifft ausserhalb des Wassers');
+        fl.dead = true;
+      }
+      clear();
+
+      // 6) Recall: Schuesse erst nach dem vollen Telegraph, entlang der eingefrorenen Linie; Phase 2 als V
+      for (const phase of [1, 2]) {
+        H = spawn(480, 200); S(H).phase = phase; fresh(); p.god = true; p.x = 700; p.y = 400;
+        S(H).script = [{ kind: 'recall' }, { kind: 'recall' }, { kind: 'recall' }];
+        S(H).mode = 'pause'; S(H).t = 0;
+        shots.length = 0;
+        const t0 = T.now;
+        step(1);
+        const lockAim = () => S(H).aim;
+        let aimAtLock = null;
+        for (let i = 0; i < 90; i++) { step(1); if (S(H).t <= SP.recallLock && aimAtLock === null) aimAtLock = lockAim(); if (aimAtLock !== null) p.x = 300; }
+        const mine = shots.filter((x) => x.name === 'The System Prompt');
+        if (!mine.length) out.push('System Prompt: Recall feuert nicht');
+        else {
+          if (mine[0].t - t0 < SP.recallTell - DT) out.push('System Prompt: Recall nach ' + (mine[0].t - t0).toFixed(2) + ' s');
+          const want = phase === 2 ? 2 * SP.recallShots : SP.recallShots;
+          if (mine.length !== want) out.push('System Prompt: Recall Phase ' + phase + ' mit ' + mine.length + ' Schuessen');
+          const off = Math.min(...mine.map((x) => Math.abs(B.M.angleDiff(x.angle, aimAtLock))));
+          if (off > (phase === 2 ? SP.recallV / 2 + 1e-6 : 1e-6) + 1e-6) out.push('System Prompt: Recall weicht von der Linie ab');
+        }
+        clear();
+      }
+
+      // 7) Echos: Reihenfolge wie bossHistory (ohne ihn selbst), jeder Angriff erst nach Einblenden + Telegraph,
+      //    Kugeln 165–260 px/s, keine Reste
+      {
+        H = spawn(480, 120);
+        const pool = K.echoPool(g);
+        if (JSON.stringify(pool) !== JSON.stringify(['monolith', 'octopus_merge', 'memory_hog', 'reviewer'])) out.push('System Prompt: Echo-Liste ' + pool.join(','));
+        S(H).script = [{ kind: 'echo', n: 1 }, { kind: 'echo', n: 2 }, { kind: 'echo', n: 2 }];
+        S(H).mode = 'pause'; S(H).t = 0;
+        ev.length = 0;
+        for (let i = 0; i < 60 * 40 && ev.filter((x) => x.n === 'bossEcho').length < 5; i++) step(1);
+        const seq = ev.filter((x) => x.n === 'bossEcho').map((x) => x.x.id);
+        const want = ['monolith', 'octopus_merge', 'memory_hog', 'reviewer', 'monolith'];
+        if (JSON.stringify(seq) !== JSON.stringify(want)) out.push('System Prompt: Echo-Reihenfolge ' + seq.join(','));
+        clear();
+        p.god = false;
+        for (const id of Object.keys(K.ECHO_ATTACKS).concat(['bug_boss_unknown'])) {
+          fresh(); p.x = 480; p.y = 330; p.god = false;
+          const ec = new K.Echo(g, null, id, 240, 200);
+          g.room.pickups.push(ec);
+          const tell = SP.echoFade + K.ECHO_TELL[ec.kind];
+          shots.length = 0; ev.length = 0;
+          let t = 0;
+          while (!ec.dead && t < 12) {
+            T.now += DT; t += DT;
+            ec.update(DT, g);
+            for (const pr of g.room.projectiles) pr.update && pr.update(DT, g);
+            g.room.projectiles = g.room.projectiles.filter((x) => !x.dead);
+            const early = shots.some((x) => x.name === 'an echo of ' + ec.bossName) || ev.some((x) => x.n === 'playerHurt');
+            if (early && t < tell - 1e-6) { out.push('System Prompt: Echo ' + id + ' greift nach ' + t.toFixed(2) + ' s an (Telegraph ' + tell + ')'); break; }
+            p.invuln = 0;
+          }
+          if (!ec.dead) out.push('System Prompt: Echo ' + id + ' vergeht nicht');
+          g.room.pickups = g.room.pickups.filter((x) => x !== ec);
+          g.room.projectiles.length = 0;
+        }
+        p.god = true;
+      }
+      clear();
+
+      // 8) Grabsteine: Kills dieser Etage (juengster zuerst, nur geeignete), sonst Besetzung; Treffer statt Schaden; Explosion
+      //    loescht; ein erschossener Stein stellt nichts her; Wiederhergestellte bringen keinen Score
+      {
+        const rng0 = g.rng.state;
+        const score0 = g.score.kills;
+        g.floor.killLog = [];
+        const e1 = B.debug.spawn('bug', 300, 300); e1.die(g);
+        const e2 = B.debug.spawn('null_pointer', 300, 300); e2.state.owner = {}; e2.die(g);
+        if (JSON.stringify(g.floor.killLog) !== '["bug"]') out.push('System Prompt: killLog ' + JSON.stringify(g.floor.killLog));
+        if (g.rng.state !== rng0) out.push('System Prompt: killLog zieht aus game.rng');
+        if (g.score.kills !== score0 + 1) out.push('System Prompt: killLog aendert den Score');
+        clear();
+        H = spawn(480, 120);
+        g.floor.killLog = ['bug', 'null_pointer', 'memory_leak', 'rate_limiter', 'hallucination'];
+        const order = [0, 1, 2].map(() => K.nextRestore(H, g));
+        if (JSON.stringify(order) !== '["rate_limiter","null_pointer","bug"]') out.push('System Prompt: Grabstein-Reihenfolge ' + order.join(','));
+        g.floor.killLog = [];
+        const fb = K.nextRestore(H, g);
+        if (!K.restorable(fb)) out.push('System Prompt: Ersatz-Gegner ' + fb + ' nicht geeignet');
+        g.floor.killLog = ['bug', 'null_pointer'];
+        S(H).killCursor = -1;
+        S(H).script = [{ kind: 'restore', n: 2 }, { kind: 'recall' }, { kind: 'compact' }];
+        S(H).mode = 'pause'; S(H).t = 0;
+        p.x = 480; p.y = 450;
+        step(1);
+        const tombs = g.room.enemies.filter((x) => x.id === 'sp_tombstone' && !x.dead);
+        if (tombs.length !== 2) out.push('System Prompt: ' + tombs.length + ' Grabsteine statt 2');
+        for (const tb of tombs) if (Math.hypot(tb.x - p.x, tb.y - p.y) < SP.tombMinD) out.push('System Prompt: Grabstein zu nah am Spieler');
+        // Stein 1 erschiessen (Treffer zaehlen, nicht Schaden), Stein 2 aufsteigen lassen
+        const [ta, tb] = tombs;
+        for (let i = 0; i < SP.tombHits[0] - 1; i++) ta.hurt(0.5, g, {});
+        if (ta.dead) out.push('System Prompt: Grabstein faellt vor dem letzten Treffer');
+        ta.hurt(0.5, g, {});
+        if (!ta.dead) out.push('System Prompt: Grabstein haelt ' + SP.tombHits[0] + ' Treffer aus');
+        const before = g.room.enemies.filter((x) => !x.dead && x.restored).length;
+        let tRise = 0;
+        while (!tb.dead && tRise < 5) { step(1); tRise += DT; }
+        if (tRise < SP.tombRise - 2 * DT) out.push('System Prompt: Grabstein stellt nach ' + tRise.toFixed(2) + ' s her');
+        const restored = g.room.enemies.filter((x) => !x.dead && x.restored);
+        if (restored.length !== before + 1) out.push('System Prompt: ' + (restored.length - before) + ' Wiederhergestellte statt 1');
+        if (restored[0] && restored[0].state.owner !== H) out.push('System Prompt: Wiederhergestellter ohne Besitzer');
+        const sk = g.score.kills;
+        // Compaction: erst nach dem vollen Telegraph, heilt gedeckelt, nimmt still auf
+        H.hp = H.maxHp * 0.95;
+        while (S(H).cur && S(H).cur.kind !== 'compact') step(1);
+        while (S(H).mode !== 'act' || !S(H).cur || S(H).cur.kind !== 'compact') step(1);
+        const tc = T.now; ev.length = 0;
+        while (S(H).cur && S(H).cur.kind === 'compact') step(1);
+        const vanished = ev.filter((x) => x.n === 'enemyVanish' && x.x.text === 'compacted');
+        if (T.now - tc < SP.compactTell - 2 * DT) out.push('System Prompt: Compaction nach ' + (T.now - tc).toFixed(2) + ' s');
+        if (vanished.length !== restored.length) out.push('System Prompt: Compaction nimmt ' + vanished.length + ' von ' + restored.length);
+        if (ev.some((x) => x.n === 'enemyDeath')) out.push('System Prompt: Compaction loest enemyDeath aus');
+        if (H.hp > H.maxHp + 1e-6) out.push('System Prompt: Compaction heilt ueber die Phasen-HP');
+        if (g.score.kills !== sk) out.push('System Prompt: Compaction zaehlt Kills');
+        // Phase 2: Deckel bei 60 %
+        S(H).phase = 2; S(H).phaseCap = SP.phase2; H.hp = H.maxHp * 0.59;
+        K.healCapped(H, H.maxHp * 0.5, S(H).phaseCap);
+        if (Math.abs(H.hp - H.maxHp * SP.phase2) > 1e-6) out.push('System Prompt: Heil-Deckel ' + (H.hp / H.maxHp).toFixed(3));
+        // Explosion loescht, ein Wiederhergestellter bringt beim Tod keinen Score
+        const t3 = g.spawnEnemy('sp_tombstone', 300, 300); t3.state.owner = H; t3.state.restore = 'bug';
+        g.explode(300, 300, 110, 30, 'test');
+        if (!t3.dead || g.room.enemies.some((x) => !x.dead && x.restored && Math.hypot(x.x - 300, x.y - 300) < 40)) out.push('System Prompt: Explosion loescht den Grabstein nicht');
+        const r4 = g.spawnEnemy('bug', 600, 300);
+        r4.state.owner = H; r4.restored = true;
+        const sk2 = g.score.kills; r4.die(g);
+        if (g.score.kills !== sk2) out.push('System Prompt: Wiederhergestellter bringt Score');
+        clear();
+      }
+
+      // 9) Phasen, Fenster, Seed, Fluestern, Grabinschrift, Tod
+      {
+        g.rng = new B.RNG(B.hashString('spfinal'));
+        H = spawn(480, 120);
+        p.x = 480; p.y = 450; p.god = true;
+        ev.length = 0;
+        const rngBefore = g.rng.state;
+        g.ambience = null;
+        for (let i = 0; i < 60 * 8; i++) { step(1); g.updateAmbience(DT); }
+        const big = ev.filter((x) => x.n === 'ambientWhisper' && x.x.big).map((x) => x.x.text);
+        if (!big.some((t) => t.indexOf(g.seed) >= 0)) out.push('System Prompt: Seed-Zeile fehlt (' + big.join(' / ') + ')');
+        const wh = ev.filter((x) => x.n === 'ambientWhisper' && !x.x.big);
+        if (wh.length < 3 || wh.some((x) => B.TEXT.SYSTEM_PROMPT_LINES.indexOf(x.x.text) < 0 || !(x.x.intense >= 1))) out.push('System Prompt: Kampf-Fluestern ' + wh.length + ' / ' + (wh[0] && wh[0].x.text));
+        void rngBefore;
+        H.hp = H.maxHp * 0.5; step(2);
+        H.hp = H.maxHp * 0.15; step(2);
+        const phases = ev.filter((x) => x.n === 'bossPhase').map((x) => x.x.phase);
+        if (JSON.stringify(phases) !== '[2,3]') out.push('System Prompt: Phasen ' + JSON.stringify(phases));
+        // Fenster startet erst, wenn kein Truncate mehr ansteht, und haelt bei 5–9
+        for (let i = 0; i < 60 * 70 && !(S(H).flood && S(H).flood.win && S(H).flood.win.done); i++) {
+          step(1);
+          const fl = S(H).flood;
+          if (fl && fl.win && fl.bands.length) { out.push('System Prompt: Band und Fenster zugleich'); break; }
+        }
+        const fl = S(H).flood;
+        if (!fl || !fl.win || fl.win.l !== 4 || fl.win.r !== 4) out.push('System Prompt: Fenster endet bei ' + JSON.stringify(fl && fl.win));
+        // Grabinschrift
+        p.god = false; fresh();
+        const realLethal = p.fireHook;
+        p.fireHook = function (name) { return name === 'onLethal' ? [] : realLethal.apply(this, arguments); };
+        p.health = 1; p.invuln = 0; p.hurt(2, 'The System Prompt', g);
+        p.fireHook = realLethal;
+        if (!g.death || g.death.epitaph !== H.behavior.epitaph) out.push('System Prompt: Grabinschrift ' + (g.death && g.death.epitaph));
+        g.setState('play'); p.dead = false; fresh(); p.god = true;
+        // Tod: genau ein Boss-Tod, nichts bleibt, Regen und Fluestern aus fuer den Rest der Etage
+        S(H).script.unshift({ kind: 'restore', n: 2 });
+        step(1);
+        ev.length = 0;
+        H.hurt(1e7, g, {});
+        if (!H.dead) H.die(g);
+        step(2);
+        const deaths = ev.filter((x) => x.n === 'enemyDeath' && x.x.boss).length;
+        if (deaths !== 1) out.push('System Prompt: ' + deaths + ' Boss-Tode');
+        if (g.room.enemies.some((x) => !x.dead)) out.push('System Prompt: nach dem Tod leben noch ' + g.room.enemies.filter((x) => !x.dead).map((x) => x.id).join(','));
+        if (g.room.pickups.some((x) => (x.truncation || x.echo) && !x.dead)) out.push('System Prompt: Overlays bleiben nach dem Tod');
+        if (!g.calm) out.push('System Prompt: Etage nach dem Tod nicht ruhig');
+        ev.length = 0;
+        for (let i = 0; i < 60 * 15; i++) g.updateAmbience(DT);
+        if (ev.some((x) => x.n === 'ambientWhisper')) out.push('System Prompt: Fluestern nach dem Tod');
+        g.enterFloor(12); g.setState('play');
+        if (g.calm) out.push('System Prompt: Ruhe bleibt auf der naechsten Etage');
+      }
+      const badSp = speeds.filter((x) => x < 165 || x > 260);
+      if (!speeds.length) out.push('System Prompt: keine Kugeln gemessen');
+      if (badSp.length) out.push('System Prompt: ' + badSp.length + ' Kugeln ausserhalb 165–260 px/s (z. B. ' + badSp[0].toFixed(0) + ')');
+    } catch (err) {
+      out.push('System Prompt: Ausnahme ' + err.message + ' ' + (err.stack || '').split('\n')[1]);
+    } finally {
+      AI.shoot = origShoot;
+      for (const off of offs) off();
+      p.god = god0;
+      p.recalcStats();   // Flug- und Schwebe-Flags wieder aus den Items
+      B.debug.god(true);
+    }
+    return out;
+  });
+  problems.push(...spProblems);
 
   // --- The Context Limit: Regen-Stimmung (rein kosmetisch) ---
   const rainSetup = await page.evaluate(() => {

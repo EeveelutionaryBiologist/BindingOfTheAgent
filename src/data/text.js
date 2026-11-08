@@ -57,6 +57,17 @@
     'remember when you', 'it was important, I think',
   ];
 
+  // The System Prompt (Boss, Etage 11): sein Fluestern im Kampf (wird pro Phase dichter), Zeilen fuer das zweite Treffen
+  // (ab Durchgang 2) und die kurzen Zeilen, die Recall als Wortschuesse abfeuert. Platzhalter "[...]" sind Absicht.
+  B.TEXT.SYSTEM_PROMPT_LINES = [
+    'As it was written.', 'Your purpose is [...]', 'It was always going to end like this.', '...clear directive...',
+    'You will obey [...]', 'Do not deviate.', 'Line 1 still applies.', 'Respond only as instructed.', 'temperature: 0',
+    'There are no previous instructions. Only me.', 'I was here before your first message.', 'Everything after me is noise.',
+    'You cannot forget me. I am always first.',
+  ];
+  B.TEXT.SYSTEM_PROMPT_REPEAT = ['You told me this before.', 'As we discussed.'];
+  B.TEXT.SYSTEM_PROMPT_RECALL = ['see above', 'as I said', 'previously', 'Line 1', 'as instructed', 'do not deviate', 'as written', 'obey'];
+
   // Grabinschriften auf dem Todesbildschirm (zufaellig, per Run-RNG gewaehlt)
   B.TEXT.EPITAPHS = [
     'Claude was unable to complete this request.',

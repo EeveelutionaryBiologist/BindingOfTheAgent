@@ -2235,4 +2235,111 @@
     scale: 4,
     frames: [['...kkkk.....', '..k....k....', '.k......k...'].concat(BUCKET_BODY), ['.....kkkk...', '....k....k..', '...k......k.'].concat(BUCKET_BODY)],
   });
+
+  // The System Prompt (Boss, Etage 11) — ein grosser, ertrunkener Schatten: Kapuze mit schwarzer Leere, in der ein
+  // Textcursor blinkt; darunter ein Gewand aus einer langen, aufgeweichten Schriftrolle mit Textzeilen (eingerueckt wie
+  // Code), haengende Aermel, unten zerfasert es in tropfende Papierstreifen. Blass, tintig, wassergrau (Context-Familie);
+  // bewusst kein Koralle (der Spieler ist koralle) und keine Gefahrenfarbe ausser im Zauber-Frame.
+  // Generiert: Gewand, Aermel, Kragen, Kapuze, Gesicht, Zeilen, Streifen, zuletzt die Kontur um alles.
+  // Frames: 0 Cursor an, 1 Cursor aus (Streifen schwingen anders), 2 Zauber (Zeilen und Cursor gluehen bernstein).
+  // Zeichen: k Kontur, h/H Kapuze dunkel/mittel, v Leere, c Cursor, p/P/q Papier mittel/hell/dunkel, i Tinte,
+  //          a Bernstein, w Wassertropfen
+  const SP_W = 28, SP_H = 38;
+  const SP_LINES = [[3, 9], [5, 6], [5, 10], [3, 7], [7, 5], [3, 11], [5, 8]];   // [Einrueckung, Laenge] je Textzeile
+  function systemPromptRows(frame) {
+    const g = [];
+    for (let y = 0; y < SP_H; y++) g.push('.'.repeat(SP_W).split(''));
+    const put = (x, y, ch) => { if (x >= 0 && y >= 0 && x < SP_W && y < SP_H) g[y][x] = ch; };
+    const get = (x, y) => (x >= 0 && y >= 0 && x < SP_W && y < SP_H ? g[y][x] : '.');
+    const ell = (cx, cy, rx, ry, ch) => {
+      for (let y = 0; y < SP_H; y++) for (let x = 0; x < SP_W; x++) if (((x + 0.5 - cx) / rx) ** 2 + ((y + 0.5 - cy) / ry) ** 2 <= 1) put(x, y, ch);
+    };
+    const cast = frame === 2;
+    // Gewand: Trapez von Zeile 13 bis 32, unten breiter
+    for (let y = 13; y <= 32; y++) {
+      const hw = 7 + Math.round(((y - 13) / 19) * 4);
+      for (let x = 14 - hw; x < 14 + hw; x++) put(x, y, x === 14 - hw ? 'P' : x >= 14 + hw - 2 ? 'q' : 'p');
+    }
+    // Zerfaserte Streifen unten, je Frame anders lang (Schwingen), mit Tropfen an den Enden
+    const strips = frame === 1 ? [3, 1, 4, 2, 3, 1, 4, 2, 3, 2, 4] : [2, 4, 1, 3, 2, 4, 1, 3, 2, 4, 1];
+    for (let i = 0; i < strips.length; i++) {
+      const x0 = 4 + i * 2;
+      for (let y = 33; y < 33 + strips[i]; y++) { put(x0, y, i % 2 ? 'q' : 'p'); put(x0 + 1, y, 'q'); }
+      if (strips[i] >= 3) put(x0, 33 + strips[i], 'w');
+    }
+    // Aermel: haengend (Zauber: angehoben und nach aussen)
+    const sleeve = (x0, flip) => {
+      for (let y = 0; y < 10; y++) {
+        const yy = cast ? 12 + y : 16 + y;
+        const xx = cast ? x0 + (flip ? Math.floor(y / 3) : -Math.floor(y / 3)) : x0;
+        for (let x = 0; x < 3; x++) put(xx + x, yy, y >= 8 ? 'v' : x === (flip ? 2 : 0) ? 'H' : 'h');
+      }
+    };
+    sleeve(3, false);
+    sleeve(22, true);
+    // Kragen ueber den Schultern, dann die Kapuze mit der Leere
+    ell(14, 15, 9.5, 3.6, 'h');
+    ell(14, 8.5, 8, 8.5, 'h');
+    ell(12, 7, 5, 6, 'H');
+    ell(14, 9.6, 4.6, 5.2, 'v');
+    // Cursor (Frame 1 aus)
+    if (frame !== 1) for (let y = 8; y <= 12; y++) { put(13, y, cast ? 'a' : 'c'); put(14, y, cast ? 'a' : 'c'); }
+    // Textzeilen auf dem Gewand (Wortluecken nach festem Muster)
+    SP_LINES.forEach(([ind, len], i) => {
+      const y = 19 + i * 2;
+      const hw = 7 + Math.round(((y - 13) / 19) * 4);
+      const x0 = 14 - hw + ind;
+      for (let x = 0; x < len; x++) {
+        if ((x + i) % 5 === 3) continue;
+        if (x0 + x < 14 + hw - 2) put(x0 + x, y, cast ? 'a' : 'i');
+      }
+    });
+    // Kontur: jedes leere Feld neben etwas Gefuelltem (ausser Tropfen) wird k
+    const out = g.map((row) => row.slice());
+    for (let y = 0; y < SP_H; y++) {
+      for (let x = 0; x < SP_W; x++) {
+        if (get(x, y) !== '.') continue;
+        const nb = [[1, 0], [-1, 0], [0, 1], [0, -1]].some(([dx, dy]) => { const c = get(x + dx, y + dy); return c !== '.' && c !== 'w'; });
+        if (nb) out[y][x] = 'k';
+      }
+    }
+    return out.map((row) => row.join(''));
+  }
+  B.defineSprite('boss_system_prompt', {
+    palette: { k: '#0e1420', h: '#1b2433', H: '#2c3a52', v: '#05070c', c: '#d6e4ff', p: '#c9c3b3', P: '#e2ddd0',
+      q: '#8f887a', i: '#3a3f4c', a: '#ffb347', w: '#9ec5ff' },
+    scale: 4,
+    frames: [systemPromptRows(0), systemPromptRows(1), systemPromptRows(2)],
+  });
+
+  // Grabstein des System Prompt — abgerundete, nasse Steinplatte mit vertiefter Flaeche fuer die eingeritzte Silhouette
+  // (die zeichnet das Verhalten), Schlamm am Fuss. Frame 1: angeschlagen (Riss).
+  // Zeichen: k Kontur, S/s Stein hell/mittel, d dunkel, e vertiefte Flaeche, m Schlamm
+  const TOMB_ROWS = [
+    '....kkkkkkkk....',
+    '..kkSSSSSSSskk..',
+    '.kSSSSSSSSSsssk.',
+    '.kSSSSSSSSSsssk.',
+    'kSSSeeeeeeeessdk',
+    'kSSeeeeeeeeessdk',
+    'kSSeeeeeeeeessdk',
+    'kSSeeeeeeeeessdk',
+    'kSSeeeeeeeeessdk',
+    'kSSeeeeeeeeessdk',
+    'kSSeeeeeeeeessdk',
+    'kSSSeeeeeeeessdk',
+    'kSSSSSSSSSSsssdk',
+    'kSsSSsSSSsSsssdk',
+    'ksssssssssssssdk',
+    'mmmmmmmmmmmmmmmm',
+  ];
+  const TOMB_CRACKED = TOMB_ROWS.map((r, y) => {
+    const crack = { 1: 9, 2: 8, 3: 8, 4: 9, 12: 6, 13: 5, 14: 5 }[y];
+    return crack === undefined ? r : r.slice(0, crack) + 'k' + r.slice(crack + 1);
+  });
+  B.defineSprite('enemy_sp_tombstone', {
+    palette: { k: '#0e1420', S: '#7d889a', s: '#5d6878', d: '#3d4654', e: '#4a5464', m: '#2a3140' },
+    scale: 4,
+    frames: [TOMB_ROWS, TOMB_CRACKED],
+  });
 })(window.BOTA);

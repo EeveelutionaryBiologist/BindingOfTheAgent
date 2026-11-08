@@ -18,7 +18,7 @@ ideas live in `ENEMY_IDEAS.md`; remove an entry there once it's built.
   forever. It's an internal team distraction with no meta-progression. There's no real ending: after the 11th floor a
   score card offers to keep going (The Backlog II) or start over.
 - **Stack:** vanilla JavaScript (ES2020), Canvas 2D and Web Audio, with **zero dependencies and no build step**.
-  `index.html` loads 37 classic `<script>` files in a fixed order, and everything hangs off `window.BOTA`.
+  `index.html` loads 38 classic `<script>` files in a fixed order, and everything hangs off `window.BOTA`.
 - **Run:** open `index.html` directly from disk (`file://`). Use `?seed=ABCD-1234` for a fixed run and `?debug` for cheats.
 - **Verify:** `node tools/smoke-test.js` (needs Playwright with Chromium; see §2). Exit code 0 means no console errors and
   all content checks pass.
@@ -92,6 +92,18 @@ Live state is under `BOTA.game` (`.player`, `.room`, `.floor`, `.depth`, `.state
   (not spectral ones) and close through their 1-HP X or their timer; enough damage extends the deadline, otherwise the wipe
   waits for its telegraph, its safe columns are reachable and safe, phase 2 runs a second pass on other columns; shots
   stay at 165–260 px/s, he never jumps next to the player, and he leaves nothing behind;
+- **The System Prompt** is the boss of every Context Limit floor (two cycles and floor 33) and nowhere else, while `rollBoss` still
+  draws exactly once; the script never lies (the first line is always the next action, the HUD shows three, Compact sits two
+  after every Restore, never two Truncates in a row); it walks at exactly `SP.walk` and can't be knocked back; in every boss
+  layout each Truncate band leaves dry parts of ≥ `minDry` tiles within `reach` steps and the window holds at columns 5–9 without
+  strips; a flood hurts only after its telegraph and only inside (flyers too) and slows there; Recall fires only after its full
+  telegraph along the locked line (6 shots, 12 as a V); Echoes follow `bossHistory` in order without the current boss, and every
+  Echo attack waits for fade-in plus telegraph and fades away; the kill log takes only scored kills without `game.rng`; tombstones
+  restore the newest eligible kill first (else the roster), keep their distance, count hits, not damage, die to explosions, restore
+  only after `tombRise`; restored and compacted enemies score nothing, Compact waits for its telegraph, emits no `enemyDeath` and
+  heals within the phase cap; phases 2 and 3 come once each, the window never runs beside a band; the seed line shows the run's seed,
+  fight whispers come from its own list; dying in the fight gives its epitaph; it dies once, leaves nothing, the floor turns calm
+  (no whispers), and the next floor isn't; shots stay at 165–260 px/s;
 - the **Trojan** rolls as a bonus spawn from floor 5 (at most 1 per room), disguises itself as one of the floor's prop kinds
   on a tile centre, and gives nothing away; being close, a shot (absorbed like on a real prop) or an explosion reveals
   it, the ring of 6 and its contact damage wait for the telegraph, its fan waits for the hatch, it never locks a cleared
@@ -311,7 +323,7 @@ core/namespace → core/rng → core/math → core/input → core/sprites → co
 data/palette → data/text → data/sprites-core → data/sprites-enemies → data/sprites-items
 data/layouts → data/enemies → data/bosses → data/items
 world/room → world/dungeon
-entities/entity → projectile → player → enemy → enemies-context → enemies-deep → boss → bosses-late → boss-memory-hog → boss-agent-swarm → boss-ransomware → enemy-trojan → pickup → familiar → effects
+entities/entity → projectile → player → enemy → enemies-context → enemies-deep → boss → bosses-late → boss-memory-hog → boss-agent-swarm → boss-ransomware → boss-system-prompt → enemy-trojan → pickup → familiar → effects
 render/renderer → render/hud → render/screens
 game → main
 ```
@@ -617,7 +629,7 @@ The previous floor's boss is excluded, and bosses already met count `weight · t
     `prop_{crate,bush,package,carton}` (frame 1 = damaged)
   - `item_<id>`, `pickup_<type>`, `pedestal`, `trapdoor`, `bomb`, `familiar_duck`, `orbital_test`
   - `enemy_<id>`, `boss_<id>`
-  - **Count:** about 175 sprites. All of them are original pixel art written as ASCII in code.
+  - **Count:** about 177 sprites. All of them are original pixel art written as ASCII in code.
 
 ### 3.11 Event bus (who emits → who listens)
 Payloads usually include `game, x, y` and often `color`.
@@ -633,7 +645,7 @@ Payloads usually include `game, x, y` and often `color`.
 | `portScan` (`kind`: open/filtered) | Port Scanner | audio (`denied` when filtered), effects (cyan ring / "FILTERED") |
 | `orphanCaught` (`count`), `enemyVanish` (`color, text`) | Orphan Commit; Dry Run's ghost on death | audio (`rescue`, `gcSweep`), effects (sparkles / puff and text) |
 | `hudGlitch` (`kind`) | game (`glitchHud`) | audio |
-| `ambientWhisper` (`text, x, y`), `ambientThunder` | game (`updateAmbience`, only on themes with `ambient: 'rain'`; uses `Math.random`, never `game.rng`) | audio (`whisper`, `thunder`), effects (`Whisper` text, soft room tint) |
+| `ambientWhisper` (`text, x, y, intense?, big?`), `ambientThunder` | game (`updateAmbience`, only on themes with `ambient: 'rain'` and not `game.calm`; uses `Math.random`, never `game.rng`); the System Prompt also sends its `big` seed line | audio (`whisper`, `thunder`), effects (`Whisper` text, soft room tint) |
 | `pipeAppear`, `pipeWarp`, `pipeArrive` (`to`) | game | audio, effects |
 | `propHit`, `propBreak` (`kind, color`) | game | audio, effects |
 | `bossSpawn`, `bossIntro`, `bossPhase`, `bossStomp`, `bossBounce`, `bossBeam`, `bossMerge` (`left`) | game, boss | audio (boss music, `merge`), effects ("Merged!" pop) |
@@ -641,7 +653,8 @@ Payloads usually include `game, x, y` and often `color`.
 | `bossMoney` (`kind`: coin/expire/buyback/beat/missed) | Shareholder | audio (`coinDrop`, `cash`, `denied`), effects (gold sparkles, "vested elsewhere") |
 | `bossAlloc`, `bossReserve`, `bossFree`, `bossGc` (`kind`: warn/start/end) | Memory Hog (malloc starts, tiles flip to ones, a bomb frees memory, Stop-the-World) | audio (`malloc`, `reserve`, `freeMem`, `denied`, `gcSweep`), effects ("free()", green ring) |
 | `bossEncrypt` (`text`), `bossDecrypt` (`text`), `bossPopup`, `bossWipe` (`kind`: warn/hit) | Ransomware | audio (`encrypt`, `freeMem`, `popup`, `denied`, `wipe`), effects (lock text, sparkles) |
-| `bossExit` (`kind`: segfault/parachute/oom) | Megalith, Shareholder, Memory Hog (`onDeath`) | effects ("SEGMENTATION FAULT", golden parachute, "KILLED (out of memory)") |
+| `bossTruncate` (`kind`: warn/flood), `bossTomb` (`kind`: rise/hit/delete/restore, `n`), `bossEcho` (`id, name`), `bossCompact` (`n`) | The System Prompt | audio (`denied`, `truncate`, `tombRise`, `hit`, `hardDelete`, `charged`, `echoIn`, `merge`), effects (tint, debris, "DELETE … WHERE id = n", rings) |
+| `bossExit` (`kind`: segfault/parachute/oom/eoc) | Megalith, Shareholder, Memory Hog, System Prompt (`onDeath`) | effects ("SEGMENTATION FAULT", golden parachute, "KILLED (out of memory)", "[end of conversation]" and "New conversation started."), audio (`eoc`: rain bed off, `endConversation`) |
 | `playerHurt`, `playerDeath` | player, game | audio, effects, HUD |
 | `pickup` (`type`), `itemGet` (`id, def`), `purchase`, `chestOpen` | pickup, player | audio, effects, HUD |
 | `denied` (`reason`: credits/locked/bomb/charge/encrypted/terms) | various | audio, effects |
@@ -662,7 +675,7 @@ are game state. `game.js` listens too, for `game.runLog` only (block at the end 
 `sound` for the floor 8–10 enemies: `mirrorPing` (Cosine Similarity), `glitch` (Heisenbug), `gurgle` (Bit Bucket).
 
 ### 3.12 Audio (`core/audio.js`) and effects (`entities/effects.js`)
-- **Audio:** 89 synthesized SFX in total, plus a looping rain bed (two filtered noise layers) that `music.start` switches
+- **Audio:** 94 synthesized SFX in total, plus a looping rain bed (two filtered noise layers) that `music.start` switches
   on for themes with `ambient: 'rain'` and `music.stop` switches off. Every sound has a name; `audio.names()` lists them.
   - Bus routing: voices → sfx/music bus → master → compressor.
   - Per-name rate limits (`RATE`) and a 40-voice cap keep it from getting noisy.
@@ -910,7 +923,7 @@ the later floors of the cycle (the cacophony). They stay off the Summarizer's wh
   it stops, locks its aim, telegraphs for 0.8 s and flushes a 5-shot fan (`enemyFlush`), then rests 0.6 s empty. It keeps
   swallowing during the telegraph without filling. The disc is part of the enemy, so nothing is left behind.
 
-Minions (`spawn: false`): `leaklet`, `microservice`, `megalith_module` (Megalith phase 2; crawls back and heals it), `loop_segment`, `nested_loop_part`, `detached_head_tag` (Detached HEAD's head),
+Minions (`spawn: false`): `sp_tombstone` (System Prompt's tombstone; counts hits, restores a killed enemy), `leaklet`, `microservice`, `megalith_module` (Megalith phase 2; crawls back and heals it), `loop_segment`, `nested_loop_part`, `detached_head_tag` (Detached HEAD's head),
 `subagent` (Agent Swarm's small agents), `ransom_key` and `popup_close` (Ransomware's key fragments and window buttons), `octo_arm` (Octopus Merge arm segment), `spinlock_segment` (Spinlock body; invulnerable, shields the head),
 `port_scanner_port` (Port Scanner's port; intangible floor socket, doesn't count for clearing), `overflow_puddle` (Overflow
 Buffer's slowing puddle; static, intangible, harmless, doesn't count for clearing).
@@ -991,7 +1004,7 @@ in the smoke test.
 
 **Bosses** (base HP): `monolith` 360 (floors 1–6), `stakeholder` 250 (floors 1–6), `friday_deploy` 240 (floors 4–7),
 `infinite_loop` 300 (floors 2–7), `memory_hog` 300 (floors 4–9, ×2 on Dependency Hell), `megalith` 460 (floor 7+, replaces the Monolith), `shareholder` 380 (floor 7+,
-replaces the Stakeholder), `nested_loop` 450 (floor 8+, replaces the Infinite Loop), `rogue_swarm` 4 × 80 (floors 2–6), `agent_swarm` 4 × 115 (floor 7+, replaces the Rogue Agent Swarm), `ransomware` 460 (floor 8+, ×3 on /dev/null), `reviewer`
+replaces the Stakeholder), `nested_loop` 450 (floor 8+, replaces the Infinite Loop), `rogue_swarm` 4 × 80 (floors 2–6), `agent_swarm` 4 × 115 (floor 7+, replaces the Rogue Agent Swarm), `ransomware` 460 (floor 8+, ×3 on /dev/null), `system_prompt` 500 (floor 11+, Context Limit only, guaranteed there), `reviewer`
 340 (floors 4–9), `octopus_merge` 300 (330 until 2026-11-03; Forgotten Branches only, weight 12: about 52 % on
 floor 3, about 41 % on floors 14, 25, …). Each replacement has its predecessor's weight and a `replaces` field, so
 a floor never has the predecessor as a side quest (the side quests keep the retired bosses alive past their `maxFloor`). Friday Deploy and the Reviewer moved from floors 2 and 3 to floor 4 on
@@ -1060,6 +1073,21 @@ a floor never has the predecessor as a side quest (the side quests keep the reti
   it reaches, always the whole group. `canTake` guards every reservation, trail tiles included: **all new ways of
   reserving must go through it**, or the room can split (random 3×3 blocks did in 113 of 400 tries). He isn't a side
   quest.
+- **The System Prompt** (2026-11-08) lives in `entities/boss-system-prompt.js`; the header there lists everything, all numbers
+  are in `SP`, the spec is in `DESIGN.md` §8. It is the **guaranteed** boss of The Context Limit (`guaranteed: ['context']`,
+  honoured by `rollBoss` and `rollBossVaried` after their usual single draw, so floor RNG and maps stay the same; the other bosses
+  stay `bossEligible` there but are never drawn). Its theme is inevitability: a fixed slow walk through obstacles and a
+  **script** of the next three actions in `barText`. **Whatever is written must run as written**, also after a phase change, so
+  new logic must never drop or rewrite script lines; that's why the phase 3 window waits until every written Truncate has run.
+  Floods are the overlay class `Truncation` (`room.pickups`, like `ReservedMemory`), on whole tile columns; every flood goes
+  through `bandCols` / `floodOk` (dry parts ≥ `minDry`, dry floor within `reach` steps). Echoes (`Echo`, also an overlay) replay
+  one attack per earlier boss from `game.bossHistory` (`ECHO_ATTACKS`; a new boss without an entry gets an aimed fan, so give
+  it one). Tombstones are the minion `sp_tombstone` and restore ids from `floor.killLog` (filled in `game.onEnemyKilled` with
+  scored kills only); only `RESTORE_BEHAVIORS` come back, and **a new behaviour that spawns scoring children or has a partner
+  must stay off that list**. Restored enemies carry `state.owner`, so they score nothing. Two generic boss hooks came with it:
+  `behavior.ambience(e, game) → {lines, interval, intense}` takes over `updateAmbience`'s whispers while the boss lives, and
+  `behavior.epitaph` replaces the rolled epitaph when the player dies in its room (after the roll, so `game.rng` is unchanged).
+  Its death sets `game.calm` (reset in `enterFloor`): no rain, ripples, whispers or rain bed for the rest of the floor.
 - **Nested Infinite Loop:** the boss entity is an invisible, intangible controller at the centre that only holds the
   shared HP pool (so the HUD shows one bar). The three rings are `nested_loop_part` enemies with `proxy` to it,
   placed every tick in `afterMove`. Only the outermost living ring is tangible, fires and hurts on contact; the
@@ -1123,7 +1151,7 @@ and `CONTEXT_WHISPERS` (The Context Limit's floor fragments and whispers).
 4. Check fairness: enemy shots at 165–260 px/s (the player moves at 240), contact damage of 1 half heart (2 for charges/bosses).
 
 **Add a boss:** add a `B.BOSSES.id` entry with `name`, `subtitle` (shown on the intro card), `hp`, `r`, `behavior`, `sprite`
-and `color` (optionally `themes` / `themeOnly`, §4, `maxFloor` to retire it on deeper floors, and `replaces` on its successor), plus a `B.BOSS_BEHAVIORS.id` entry in `boss.js`. Give it ≥ 2 attacks and a phase change at a HP threshold
+and `color` (optionally `themes` / `themeOnly`, §4, `maxFloor` to retire it on deeper floors, `replaces` on its successor, and `guaranteed: [theme]` to make it the only boss drawn on that theme), plus a `B.BOSS_BEHAVIORS.id` entry in `boss.js`. Give it ≥ 2 attacks and a phase change at a HP threshold
 (emit `bossPhase`, show a `game.banner`), and place it with `BossHelpers.placeAwayFromPlayer`. Optional: `barText(e, game)`
 for a second HUD line under the boss bar. `boss.js` is long; new bosses can go into `bosses-late.js` or a new file.
 

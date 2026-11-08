@@ -1341,7 +1341,7 @@
     for (const dir of Object.keys(room.doors)) drawDoor(ctx, room, dir, room.doors[dir], theme, k);
 
     drawProps(ctx, room);
-    if (theme.ambient === 'rain') drawRipples(ctx, room);
+    if (theme.ambient === 'rain' && !(game && game.calm)) drawRipples(ctx, room);   // calm: nach dem System Prompt
 
     const list = [];
     for (const p of room.pickups) list.push(p);
@@ -1569,7 +1569,7 @@
       const theme = B.themeFor(game.depth);
       ctx.translate(0, HUD_H);
       if (game.state !== 'roomTransition') drawDarkness(ctx, game, theme);
-      if (theme.ambient === 'rain') drawRain(ctx);
+      if (theme.ambient === 'rain' && !game.calm) drawRain(ctx);   // calm: nach dem System Prompt hoert der Regen auf
       ctx.drawImage(getVignette(theme), 0, 0, ROOM_W, ROOM_H);
       ctx.restore();
 

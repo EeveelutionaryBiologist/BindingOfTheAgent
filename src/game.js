@@ -39,6 +39,7 @@
   ];
   const freshScore = () => ({ coins: 0, kills: 0, keys: 0, items: 0, bosses: 0, quests: 0, rooms: 0 });
   const RUN_LOG_MAX = 40; // Eintraege der Zeitleiste (game.runLog); deutlich mehr, als der Post-Mortem anzeigt
+  const KILL_LOG_MAX = 60; // Kills, die sich eine Etage merkt (floor.killLog, Grabsteine des System Prompt)
 
   class Game {
     constructor() {
@@ -59,6 +60,7 @@
       this.flowTimer = 0;
       this.restartHold = 0;
       this.hudGlitch = null; // { kind, t, dur } — verfremdeter HUD-Bereich (Graphics Glitch), siehe glitchHud
+      this.calm = false;     // Regen vorbei (nach dem System Prompt, bis zur naechsten Etage), siehe enterFloor
       this.bossHistory = []; // Boss-IDs der bisherigen Etagen dieses Runs (siehe assignFloorBoss)
       this.pipeCooldown = 0; // Sperrzeit fuer Rohre nach einem Sprung (siehe pipeWarp)
       this.pendingBossIntro = false;
@@ -104,6 +106,7 @@
     enterFloor(depth) {
       this.depth = depth;
       this.floor = new B.Floor(depth, B.hashString(this.seed + ':floor:' + depth));
+      this.calm = false;   // nach dem System Prompt: Regen und Fluestern fuer den Rest der Etage aus (updateAmbience)
       this.assignFloorBoss();
       const p = this.player;
       if (Object.keys(p.encrypted).length) { p.encrypted = {}; p.recalcStats(); }   // Ransomware gilt nur im Kampf
@@ -182,7 +185,7 @@
     onPlayerDeath(killer) {
       this.death = {
         killer,
-        epitaph: this.rng.pick(this.epitaphPool()),
+        epitaph: this.epitaphFor(this.rng.pick(this.epitaphPool())),
         depth: this.depth,
         kills: this.runStats.kills,
         items: this.player.items.length,
@@ -217,6 +220,16 @@
       this.bossHistory.push(cell.room.bossId);
       // Zwischenboss-Begegnungen (ab Etage 8) nie mit dem endgueltigen Etagen-Boss (dungeon.js)
       if (this.floor.pickEncounterBosses) this.floor.pickEncounterBosses(cell.room.bossId);
+    }
+
+    /**
+     * Grabinschrift fuer diesen Tod: Ein lebender Boss im Raum mit behavior.epitaph (The System Prompt) ersetzt die
+     * gewuerfelte. Der Wurf passiert trotzdem vorher, damit game.rng gleich viele Zuege macht.
+     */
+    epitaphFor(rolled) {
+      const room = this.room;
+      const host = room && room.enemies.find((e) => !e.dead && e.isBoss && e.behavior && typeof e.behavior.epitaph === 'string');
+      return host ? host.behavior.epitaph : rolled;
     }
 
     /** Grabinschriften: allgemeine Liste plus die der aktuellen Etage (B.TEXT.THEME_EPITAPHS) */
@@ -384,7 +397,15 @@
     onEnemyKilled(e) {
       this.runStats.kills++;
       // Fuer den Score nur echte Gegner (siehe B.SCORE_VALUES); Bosse zaehlen in onRoomClear
-      if (!B.BOSSES[e.id] && !e.proxy && !e.ignoreForClear && !(e.state && e.state.owner)) this.addScore('kills');
+      if (!B.BOSSES[e.id] && !e.proxy && !e.ignoreForClear && !(e.state && e.state.owner)) {
+        this.addScore('kills');
+        // Dieselben Kills merkt sich die Etage (Grabsteine des System Prompt, entities/boss-system-prompt.js)
+        const log = this.floor && this.floor.killLog;
+        if (log) {
+          log.push(e.id);
+          if (log.length > KILL_LOG_MAX) log.shift();
+        }
+      }
     }
 
     /** Wird aufgerufen, sobald der letzte Gegner eines Kampfraums faellt */
@@ -579,20 +600,26 @@
      */
     updateAmbience(dt) {
       const theme = B.themeFor ? B.themeFor(this.depth) : null;
-      if (!theme || theme.ambient !== 'rain') { this.ambience = null; return; }
+      if (!theme || theme.ambient !== 'rain' || this.calm) { this.ambience = null; return; }
       const a = this.ambience || (this.ambience = { whisper: 2 + Math.random() * 3, thunder: 15 + Math.random() * 20 });
+      // Ein Boss mit behavior.ambience (The System Prompt) uebernimmt das Fluestern: eigene Zeilen, eigener Takt,
+      // staerkeres Flackern ({ lines, interval: [min, max], intense })
+      const room = this.room;
+      const host = room && room.enemies.find((e) => !e.dead && e.behavior && typeof e.behavior.ambience === 'function');
+      const cfg = host ? host.behavior.ambience(host, this) : null;
+      if (cfg && a.whisper > cfg.interval[1]) a.whisper = cfg.interval[1];
       a.whisper -= dt;
       a.thunder -= dt;
       if (a.whisper <= 0) {
-        a.whisper = 4 + Math.random() * 5;
-        const list = (B.TEXT && B.TEXT.CONTEXT_WHISPERS) || [];
+        a.whisper = cfg ? cfg.interval[0] + Math.random() * (cfg.interval[1] - cfg.interval[0]) : 4 + Math.random() * 5;
+        const list = cfg ? cfg.lines : (B.TEXT && B.TEXT.CONTEXT_WHISPERS) || [];
         const text = list[Math.floor(Math.random() * list.length)];
         const I = B.C.INNER, p = this.player;
         let x = I.x0 + 110 + Math.random() * (I.x1 - I.x0 - 220);
         let y = I.y0 + 40 + Math.random() * (I.y1 - I.y0 - 80);
         // Nicht direkt auf den Spieler fluestern (dort lenkt es nur ab): an die Raummitte spiegeln
         if (p && Math.hypot(x - p.x, y - p.y) < 130) { x = ROOM_W - x; y = ROOM_H - y; }
-        if (text) B.bus.emit('ambientWhisper', { game: this, text, x, y });
+        if (text) B.bus.emit('ambientWhisper', { game: this, text, x, y, intense: cfg ? cfg.intense : 0 });
       }
       if (a.thunder <= 0) {
         a.thunder = 25 + Math.random() * 30;

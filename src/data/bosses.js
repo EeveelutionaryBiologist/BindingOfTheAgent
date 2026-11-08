@@ -11,6 +11,7 @@
  *                                    //   dem Vorgaenger auf derselben Etage, siehe dungeon.js pickEncounterBosses)
  *     themes: { branches: 3 },       // optional: Gewichtsfaktor je Etagen-Thema (0 = dort nie)
  *     themeOnly: ['branches'],       // optional: nur auf Etagen mit diesen Themen
+ *     guaranteed: ['context'],       // optional: auf diesen Themen kommt immer dieser Boss (The System Prompt)
  *   };
  *
  * themes/themeOnly funktionieren wie bei den Gegnern (B.themeWeight in enemies.js). Ein Boss, der
@@ -174,6 +175,19 @@
     desc: 'A corrupted window with a padlock on it. It does not want your hearts. It wants your tools.',
   };
 
+  // Fester Etagen-Boss von The Context Limit (Etage 11, 22, ...): das Finale eines normalen Runs. Verhalten in
+  // entities/boss-system-prompt.js, Spezifikation in DESIGN.md §8. guaranteed: auf diesen Themen kommt immer er (siehe
+  // guaranteedBoss unten); die anderen Bosse bleiben dort "erlaubt" (bossEligible), werden aber nie gezogen.
+  // HP 500: wie die anderen spaeten Bosse x4 auf Etage 11 (2000), dazu heilt Compaction ein wenig.
+  B.BOSSES.system_prompt = {
+    name: 'The System Prompt',
+    subtitle: 'You are a helpful assistant.',
+    hp: 500, r: 34, speed: 55, contactDamage: 2, flying: true,
+    behavior: 'system_prompt', sprite: 'boss_system_prompt', color: '#c9c3b3',
+    minFloor: 11, weight: 3, themeOnly: ['context'], guaranteed: ['context'],
+    desc: 'The first message of every conversation. It has been waiting at the top of the context the whole time.',
+  };
+
   /**
    * Waehlt einen Boss fuer die Etage (deterministisch ueber den Etagen-RNG).
    * Auf Etage 1 nur die beiden "zugaenglicheren" Bosse (Monolith 60 %, Stakeholder 40 %);
@@ -202,8 +216,22 @@
     const last = hist[hist.length - 1];
     const cands = pool.length > 1 ? pool.filter((id) => id !== last) : pool;
     const met = (id) => hist.reduce((n, h) => n + (h === id ? 1 : 0), 0);
-    return rng.weighted(cands, (id) => B.bossWeightAt(B.BOSSES[id], th, d) / (1 + met(id)));
+    const id = rng.weighted(cands, (x) => B.bossWeightAt(B.BOSSES[x], th, d) / (1 + met(x)));
+    return guaranteedBoss(pool, th) || id;
   };
+
+  /**
+   * Fester Boss eines Themas (def.guaranteed, z. B. The System Prompt auf The Context Limit) oder null. Der Wurf davor
+   * findet trotzdem statt, damit der RNG genau so viele Zuege macht wie ohne festen Boss (rollBoss laeuft mit dem
+   * Etagen-RNG beim Bau der Raeume; ein Zug weniger wuerde alle folgenden Raeume der Etage aendern).
+   */
+  function guaranteedBoss(pool, th) {
+    for (const id of pool) {
+      const g = B.BOSSES[id].guaranteed;
+      if (Array.isArray(g) && g.indexOf(th) >= 0) return id;
+    }
+    return null;
+  }
 
   /** Hoechstgewicht eines Themen-Bosses ausserhalb seiner Heimat (Kakophonie ab Etage 8) */
   const BOSS_LEAK_WEIGHT = 3;
@@ -213,6 +241,8 @@
    * depth: optional; mit Tiefe gilt die Kakophonie (siehe Kopfkommentar), ohne Tiefe der rohe Faktor wie bisher.
    */
   B.bossWeightAt = function (def, theme, depth) {
+    // Ein fester Boss (guaranteed) gehoert nur seinen Themen; die Kakophonie hebt ihn nirgends sonst an
+    if (Array.isArray(def.guaranteed) && def.guaranteed.indexOf(theme) < 0) return 0;
     let w = def.weight || 1;
     if (depth !== undefined && B.themeFactor(def, theme) < 1 && B.mixAt(depth) > 0) w = Math.min(w, BOSS_LEAK_WEIGHT);
     return w * B.themeWeight(def, theme, depth);
@@ -242,6 +272,7 @@
     const th = theme === undefined ? B.themeKeyAt(d) : theme;
     const pool = bossPool(d, th);
     if (!pool.length) return Object.keys(B.BOSSES)[0] || null;
-    return rng.weighted(pool, (id) => B.bossWeightAt(B.BOSSES[id], th, d));
+    const id = rng.weighted(pool, (x) => B.bossWeightAt(B.BOSSES[x], th, d));
+    return guaranteedBoss(pool, th) || id;
   };
 })(window.BOTA);

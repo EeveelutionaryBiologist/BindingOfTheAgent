@@ -55,6 +55,9 @@
       this.encounterRooms = []; // Zellen mit Zwischenboss-Begegnung (ab Tiefe 8, siehe assignEncounters)
       this.termsRoom = null; // Zelle des Terms-of-Service-Raums (oder null, siehe assignTerms)
       this.documented = false; // README.md eingesammelt -> Karte (ohne Geheimraeume) sichtbar
+      // Auf dieser Etage getoetete Gegner (IDs, aelteste zuerst, hoechstens KILL_LOG_MAX), fuer die Grabsteine des
+      // System Prompt; gefuellt in game.onEnemyKilled, ohne RNG
+      this.killLog = [];
       this.generate();
     }
 
