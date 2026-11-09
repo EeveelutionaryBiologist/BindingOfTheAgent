@@ -117,7 +117,8 @@ Live state is under `BOTA.game` (`.player`, `.room`, `.floor`, `.depth`, `.state
 - bosses never repeat on consecutive floors (300 simulated runs plus a real floor sequence), and README.md appears on
   about 50 % of floors, only in normal rooms, and reveals every room except secret rooms;
 - pipes appear in about 10 % of combat rooms after clearing (never by a door), never lead to the boss room, the
-  secret room or the current room, and can't ping-pong during their cooldown;
+  secret room, the current room or a room without an unlocked exit (a locked treasure room or shop, until it's
+  unlocked), and can't ping-pong during their cooldown;
 - floor names and themes have the same length, floor 3 is Forgotten Branches, and its maps have ≥ 7 dead ends;
 - floor 6 is Sandbox Borders; cacti appear only there, only where the layout had a rock, never in front of a door,
   at about the theme's `cacti` share; a cactus pricks once (then i-frames) with knockback, is solid like a rock,
@@ -433,6 +434,8 @@ game.score · game.cycles`
 9. `assignPipes` marks about 10 % of combat rooms `hasPipe` (own stream `':pipe'`). `game.onRoomClear` →
    `placePipe` drops a `B.Pipe` (in `room.pickups`, not near doors or the centre). Walking onto it calls
    `game.pipeWarp`, which teleports to a random room other than boss, secret and the current one (via `game.rng`).
+   `game.pipeExitOk` also skips rooms whose only visible doors are locked (a treasure room or shop from floor 2 until
+   its door is unlocked): landing there without an Approval was a soft-lock.
    Pipes only trigger on the step *onto* them, and `game.pipeCooldown` (1 s) blocks all pipes after a jump.
 10. `assignEncounters` (floor 8+, own stream `':encounter'`, runs after `assignPipes` and before `assignProps`) turns
    1 combat room (floors 8–9) or 1–2 (from 10, 50 %) into a **side quest**: preferably not next to the start room

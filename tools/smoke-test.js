@@ -579,7 +579,30 @@ const URL = 'file://' + path.join(ROOT, 'index.html').replace(/\\/g, '/') + '?se
       g.pipeCooldown = 0;
       g.pipeWarp({ x: g.player.x, y: g.player.y });
       if (g.room === before || g.room.type === 'boss' || g.room.type === 'secret') { out.push('Rohr-Ziel unzulaessig: ' + g.room.type); break; }
+      if (!Object.values(g.room.doors).some((dr) => !dr.edge.locked && !dr.edge.hidden)) { out.push('Rohr fuehrt in einen Raum ohne freien Ausgang: ' + g.room.type); break; }
       BOTA.debug.killAll();
+    }
+    // Verschlossener Schatzraum (ab Etage 2): nie Ziel, solange er zu ist (sonst Softlock ohne Approval);
+    // aufgeschlossen ist er wieder erreichbar
+    const tre = g.floor.findType('treasure');
+    const treEdges = tre ? Object.values(tre.room.doors).filter((dr) => dr.edge.locked) : [];
+    if (!treEdges.length) out.push('Rohr-Test: Schatzraum ist auf Etage ' + g.depth + ' nicht verschlossen');
+    else {
+      let reached = false;
+      for (let i = 0; i < 300 && !reached; i++) {
+        g.pipeCooldown = 0;
+        g.pipeWarp({ x: g.player.x, y: g.player.y });
+        reached = g.room === tre.room;
+      }
+      if (reached) out.push('Rohr fuehrt in den verschlossenen Schatzraum');
+      for (const dr of treEdges) dr.edge.locked = false;
+      reached = false;
+      for (let i = 0; i < 300 && !reached; i++) {
+        g.pipeCooldown = 0;
+        g.pipeWarp({ x: g.player.x, y: g.player.y });
+        reached = g.room === tre.room;
+      }
+      if (!reached) out.push('Rohr erreicht den aufgeschlossenen Schatzraum nie');
     }
     return out;
   });
