@@ -25,6 +25,8 @@
  *   - Zerstoerbare Objekte: richtige Arten je Etage, erlaubte Plaetze, Raeume bleiben begehbar; Spielerschuss und
  *     Explosion zerbrechen sie, Gegnerschuss nicht
  *   - Off-Brand GPU: ~12 % Blindgaenger ohne Schaden; GPU-Preise 30/20
+ *   - Benchmark Overfitting: +60 % gegen Bosse, auch ueber Koerperteile (mit deren proxyMult), auch zweimal im selben
+ *     Tick; normale Gegner bekommen nichts
  *   - The Context Limit: nur dieses Thema hat ambient 'rain'; dort kommen Fluestern und Wetterleuchten als Events
  *     (Fluestern landet als Effekt im Raum), das Run-RNG bleibt dabei unberuehrt; auf anderen Etagen nichts davon;
  *     Raeume backen Pfuetzen, Regen/Ringe zeichnen ohne Konsolenfehler (Screenshot 08-context-rain)
@@ -702,6 +704,39 @@ const URL = 'file://' + path.join(ROOT, 'index.html').replace(/\\/g, '/') + '?se
     return out;
   });
   problems.push(...gpuProblems);
+
+  // --- Benchmark Overfitting: +60 % auch ueber Boss-Koerperteile (proxy), nicht bei normalen Gegnern ---
+  const benchProblems = await page.evaluate(async () => {
+    const out = [];
+    const g = BOTA.game, def = BOTA.ITEMS.benchmark_overfitting;
+    BOTA.debug.gotoRoom('start'); BOTA.debug.god(true);
+    const bonusOn = (target, host) => {
+      const before = host.hp;
+      def.onHitEnemy(g.player, target, { damage: 10 }, g);
+      return before - host.hp;
+    };
+    for (const id of ['monolith', 'infinite_loop', 'octopus_merge', 'nested_loop']) {
+      BOTA.debug.killAll();
+      const boss = BOTA.debug.spawnBoss(id);
+      await new Promise((r) => setTimeout(r, 120));   // Teile platzieren sich in afterMove
+      const part = id === 'monolith' ? boss
+        : g.room.enemies.find((x) => !x.dead && x.proxy === boss && !x.intangible && !x.invulnerable);
+      if (!part) { out.push('Benchmark: kein treffbares Teil fuer ' + id); continue; }
+      boss.invulnerable = false; boss.damageTakenMult = undefined;
+      const want = 10 * 0.6 * (part === boss ? 1 : (part.proxyMult !== undefined ? part.proxyMult : 1));
+      const got = bonusOn(part, boss);
+      if (Math.abs(got - want) > 0.01) out.push('Benchmark: Bonus gegen ' + id + ' = ' + got.toFixed(2) + ' statt ' + want.toFixed(2));
+      // Zweiter Treffer im selben Tick zaehlt auch (kein aoeDedupe-Verschlucken)
+      const again = bonusOn(part, boss);
+      if (Math.abs(again - want) > 0.01) out.push('Benchmark: zweiter Bonus im selben Tick gegen ' + id + ' = ' + again.toFixed(2));
+    }
+    BOTA.debug.killAll();
+    const bug = BOTA.debug.spawn('bug', 600, 300);
+    if (bonusOn(bug, bug) !== 0) out.push('Benchmark: Bonus gegen einen normalen Gegner');
+    BOTA.debug.killAll();
+    return out;
+  });
+  problems.push(...benchProblems);
 
   // --- Herz-Items (2026-11-03): an einem frischen Spieler, damit die vorher vergebenen Items nicht mitspielen ---
   const heartProblems = await page.evaluate(() => {

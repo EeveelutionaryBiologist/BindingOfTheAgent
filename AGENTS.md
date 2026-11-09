@@ -158,6 +158,8 @@ Live state is under `BOTA.game` (`.player`, `.room`, `.floor`, `.depth`, `.state
 - the Game-breaking Bug and Dangling Pointer match the Bug and Null Pointer except for 2 contact damage, never roll
   before floor 8, stay at 2.5–9 % of enemies on floors 8–11 and 19–22 and at 0 on 12–18 (the Game-breaking Bug also at 0 on The Latent Space), and one touch costs a full heart;
 - the Off-Brand GPU turns about 12 % of shots into duds that deal no damage, and the GPU prices are 30¢ / 20¢;
+- Benchmark Overfitting adds 60 % against bosses, also through boss segments, arms and rings (times their
+  `proxyMult`) and twice in one tick, and nothing against normal enemies;
 - the Forgotten Branches family (see §4):
   - **Stale Branch** appears only on its floor (before floor 8), ages through its leaf stages, speeds up, counts up its counter,
     and lunges only after the windup (2 damage, then back to 1); leaf effects and family sounds fire on hit and death;

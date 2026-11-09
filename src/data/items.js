@@ -752,9 +752,15 @@
     pools: ['treasure', 'boss'], sprite: 'item_benchmark_overfitting',
     mult: { damage: 0.9 }, // "struggles with everything else"
     onHitEnemy(player, enemy, proj, game) {
-      // Bosse bekommen +60 % Zusatzschaden pro Treffer
-      if (!enemy || enemy.dead || !enemy.isBoss) return;
-      enemy.hurt((proj ? proj.damage : player.stats.damage) * 0.6, G(game), null);
+      // Bosse bekommen +60 % Zusatzschaden pro Treffer. Auch ueber Boss-Koerperteile (proxy: Segmente der Infinite
+      // Loop, Arme der Octopus Merge, Ringe der Nested Infinite Loop, deren Boss selbst gar nicht treffbar ist): Der
+      // Bonus geht wie der Schuss ueber das getroffene Teil und damit mit dessen proxyMult an den Boss.
+      // Quelle = das Projektil, damit aoeDedupe (Flaechenschaden einmal pro Tick) den Bonus nicht verschluckt,
+      // wenn mehrere Schuesse eines Faechers im selben Tick treffen.
+      if (!enemy || enemy.dead) return;
+      const boss = enemy.isBoss ? enemy : (enemy.proxy && enemy.proxy.isBoss ? enemy.proxy : null);
+      if (!boss || boss.dead) return;
+      enemy.hurt((proj ? proj.damage : player.stats.damage) * 0.6, G(game), proj || null);
     },
   };
 

@@ -61,7 +61,7 @@ All items and pickups in the game.
 | ![Vibe Coding](images/item_vibe_coding.png) | **Vibe Coding** `vibe_coding` | Each shot gets random damage ×0.5 to ×2; size and colour vary with it | Treasure, Secret | — | Accept all. Don't read the diff. Feel the vibes. |
 | ![Ctrl+C Ctrl+V](images/item_copy_paste.png) | **Ctrl+C Ctrl+V** `copy_paste` | Each shot has a 25 % chance to fire a copy at a slight angle | Treasure, Shop | 15¢ | Why write it twice when you can paste it four times? DRY is a suggestion. |
 | ![Feature Flag](images/item_feature_flag.png) | **Feature Flag** `feature_flag` | In each new room, 50 % chance to be ON: damage +1.5 and fire delay ×0.9 (shots turn green). Always ON right after pickup | Treasure, Shop | 15¢ | Wrapped in a flag nobody owns. It's on in this room. Probably. Check the shot colour. |
-| ![Benchmark Overfitting](images/item_benchmark_overfitting.png) | **Benchmark Overfitting** `benchmark_overfitting` | Damage ×0.9, but every hit on a boss deals +60 % bonus damage | Treasure, Boss | — | Scores 98 % on the boss benchmark. Struggles with literally everything else. |
+| ![Benchmark Overfitting](images/item_benchmark_overfitting.png) | **Benchmark Overfitting** `benchmark_overfitting` | Damage ×0.9, but every hit on a boss deals +60 % bonus damage (also on boss segments, arms and rings, scaled like the hit) | Treasure, Boss | — | Scores 98 % on the boss benchmark. Struggles with literally everything else. |
 | ![Sharp Left Turn](images/item_sharp_left_turn.png) | **Sharp Left Turn** `sharp_left_turn` | Damage +1, shot speed +0.2; every shot turns 90° to the left once, 140–200 px after being fired | Treasure, Shop, Boss | 15¢ | And there we go! |
 
 ### Health and protection
