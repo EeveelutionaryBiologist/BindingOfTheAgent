@@ -506,10 +506,13 @@
     /**
      * Durch ein Rohr springen: einseitig in einen zufaelligen anderen Raum der Etage (nicht Boss, nicht
      * Geheimraum, nicht der aktuelle; besucht oder nicht). Die Wahl laeuft ueber game.rng.
+     * Nur Raeume, die man ohne Approval wieder verlassen kann (pipeExitOk): Ein noch verschlossener Schatzraum oder
+     * Shop hat nur seine verschlossene Tuer (plus hoechstens eine verdeckte Geheimtuer), und wer ohne Approval dort
+     * landete, saesse fest (Softlock, Review 2026-11-09). Ist die Tuer einmal aufgeschlossen, ist der Raum wieder Ziel.
      */
     pipeWarp(pipe) {
       const cur = this.room && this.room.cell;
-      const cands = [...this.floor.cells.values()].filter((c) => c !== cur && c.type !== 'boss' && c.type !== 'secret');
+      const cands = [...this.floor.cells.values()].filter((c) => c !== cur && c.type !== 'boss' && c.type !== 'secret' && this.pipeExitOk(c));
       if (!cands.length) return false;
       const cell = this.rng.pick(cands);
       B.bus.emit('pipeWarp', { game: this, x: pipe.x, y: pipe.y, to: cell.type });
@@ -523,6 +526,11 @@
       this.pipeCooldown = 1.0;
       B.bus.emit('pipeArrive', { game: this, x: p.x, y: p.y, to: cell.type });
       return true;
+    }
+
+    /** Hat die Zelle mindestens eine Tuer, durch die man ohne Approval und ohne Bombe hinauskommt? (pipeWarp) */
+    pipeExitOk(cell) {
+      return Object.values(cell.room.doors).some((door) => !door.edge.locked && !door.edge.hidden);
     }
 
     /**

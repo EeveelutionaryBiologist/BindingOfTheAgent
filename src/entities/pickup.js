@@ -536,7 +536,7 @@
   /**
    * Rohr ("|"): bleibt in manchen Kampfraeumen nach dem Clearing zurueck (dungeon.js: assignPipes,
    * gelegt in game.onRoomClear). Wer hineinlaeuft, wird einseitig in einen zufaelligen anderen Raum der
-   * Etage gespuelt (game.pipeWarp: nicht Boss-, nicht Geheimraum, egal ob schon besucht). Mehrfach nutzbar,
+   * Etage gespuelt (game.pipeWarp: nicht Boss-, nicht Geheimraum, kein noch verschlossener Raum, egal ob schon besucht). Mehrfach nutzbar,
    * jedes Mal ein neues Ziel.
    * Ausgeloest wird nur beim *Betreten* (steigende Flanke): Wer auf einem Rohr landet oder darauf steht,
    * wenn es scharf wird, muss erst herunter- und wieder herauflaufen. Dazu sperrt game.pipeCooldown kurz

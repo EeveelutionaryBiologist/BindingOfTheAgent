@@ -25,6 +25,8 @@
  *   - Zerstoerbare Objekte: richtige Arten je Etage, erlaubte Plaetze, Raeume bleiben begehbar; Spielerschuss und
  *     Explosion zerbrechen sie, Gegnerschuss nicht
  *   - Off-Brand GPU: ~12 % Blindgaenger ohne Schaden; GPU-Preise 30/20
+ *   - Benchmark Overfitting: +60 % gegen Bosse, auch ueber Koerperteile (mit deren proxyMult), auch zweimal im selben
+ *     Tick; normale Gegner bekommen nichts
  *   - The Context Limit: nur dieses Thema hat ambient 'rain'; dort kommen Fluestern und Wetterleuchten als Events
  *     (Fluestern landet als Effekt im Raum), das Run-RNG bleibt dabei unberuehrt; auf anderen Etagen nichts davon;
  *     Raeume backen Pfuetzen, Regen/Ringe zeichnen ohne Konsolenfehler (Screenshot 08-context-rain)
@@ -579,7 +581,30 @@ const URL = 'file://' + path.join(ROOT, 'index.html').replace(/\\/g, '/') + '?se
       g.pipeCooldown = 0;
       g.pipeWarp({ x: g.player.x, y: g.player.y });
       if (g.room === before || g.room.type === 'boss' || g.room.type === 'secret') { out.push('Rohr-Ziel unzulaessig: ' + g.room.type); break; }
+      if (!Object.values(g.room.doors).some((dr) => !dr.edge.locked && !dr.edge.hidden)) { out.push('Rohr fuehrt in einen Raum ohne freien Ausgang: ' + g.room.type); break; }
       BOTA.debug.killAll();
+    }
+    // Verschlossener Schatzraum (ab Etage 2): nie Ziel, solange er zu ist (sonst Softlock ohne Approval);
+    // aufgeschlossen ist er wieder erreichbar
+    const tre = g.floor.findType('treasure');
+    const treEdges = tre ? Object.values(tre.room.doors).filter((dr) => dr.edge.locked) : [];
+    if (!treEdges.length) out.push('Rohr-Test: Schatzraum ist auf Etage ' + g.depth + ' nicht verschlossen');
+    else {
+      let reached = false;
+      for (let i = 0; i < 300 && !reached; i++) {
+        g.pipeCooldown = 0;
+        g.pipeWarp({ x: g.player.x, y: g.player.y });
+        reached = g.room === tre.room;
+      }
+      if (reached) out.push('Rohr fuehrt in den verschlossenen Schatzraum');
+      for (const dr of treEdges) dr.edge.locked = false;
+      reached = false;
+      for (let i = 0; i < 300 && !reached; i++) {
+        g.pipeCooldown = 0;
+        g.pipeWarp({ x: g.player.x, y: g.player.y });
+        reached = g.room === tre.room;
+      }
+      if (!reached) out.push('Rohr erreicht den aufgeschlossenen Schatzraum nie');
     }
     return out;
   });
@@ -679,6 +704,39 @@ const URL = 'file://' + path.join(ROOT, 'index.html').replace(/\\/g, '/') + '?se
     return out;
   });
   problems.push(...gpuProblems);
+
+  // --- Benchmark Overfitting: +60 % auch ueber Boss-Koerperteile (proxy), nicht bei normalen Gegnern ---
+  const benchProblems = await page.evaluate(async () => {
+    const out = [];
+    const g = BOTA.game, def = BOTA.ITEMS.benchmark_overfitting;
+    BOTA.debug.gotoRoom('start'); BOTA.debug.god(true);
+    const bonusOn = (target, host) => {
+      const before = host.hp;
+      def.onHitEnemy(g.player, target, { damage: 10 }, g);
+      return before - host.hp;
+    };
+    for (const id of ['monolith', 'infinite_loop', 'octopus_merge', 'nested_loop']) {
+      BOTA.debug.killAll();
+      const boss = BOTA.debug.spawnBoss(id);
+      await new Promise((r) => setTimeout(r, 120));   // Teile platzieren sich in afterMove
+      const part = id === 'monolith' ? boss
+        : g.room.enemies.find((x) => !x.dead && x.proxy === boss && !x.intangible && !x.invulnerable);
+      if (!part) { out.push('Benchmark: kein treffbares Teil fuer ' + id); continue; }
+      boss.invulnerable = false; boss.damageTakenMult = undefined;
+      const want = 10 * 0.6 * (part === boss ? 1 : (part.proxyMult !== undefined ? part.proxyMult : 1));
+      const got = bonusOn(part, boss);
+      if (Math.abs(got - want) > 0.01) out.push('Benchmark: Bonus gegen ' + id + ' = ' + got.toFixed(2) + ' statt ' + want.toFixed(2));
+      // Zweiter Treffer im selben Tick zaehlt auch (kein aoeDedupe-Verschlucken)
+      const again = bonusOn(part, boss);
+      if (Math.abs(again - want) > 0.01) out.push('Benchmark: zweiter Bonus im selben Tick gegen ' + id + ' = ' + again.toFixed(2));
+    }
+    BOTA.debug.killAll();
+    const bug = BOTA.debug.spawn('bug', 600, 300);
+    if (bonusOn(bug, bug) !== 0) out.push('Benchmark: Bonus gegen einen normalen Gegner');
+    BOTA.debug.killAll();
+    return out;
+  });
+  problems.push(...benchProblems);
 
   // --- Herz-Items (2026-11-03): an einem frischen Spieler, damit die vorher vergebenen Items nicht mitspielen ---
   const heartProblems = await page.evaluate(() => {
@@ -1833,7 +1891,8 @@ const URL = 'file://' + path.join(ROOT, 'index.html').replace(/\\/g, '/') + '?se
   });
   problems.push(...octoProblems);
 
-  // --- Sandbox Borders: Etage 6; Kakteen nur dort, nur aus Felsen, nie vor Tueren, ~Anteil theme.cacti;
+  // --- Sandbox Borders: Etage 6; Kakteen nur dort, nur aus Felsen, nie vor Tueren und nie in Zwischenboss-Arenen
+  //     (Etage 17), ~Anteil theme.cacti; Arenen aendern die Kakteen der anderen Raeume nicht;
   //     Kaktus sticht (einmal, dann Unverwundbarkeit) und stoesst zurueck; Explosion sprengt ihn; Sprites da ---
   const sandProblems = await page.evaluate(() => {
     const out = [];
@@ -1857,10 +1916,11 @@ const URL = 'file://' + path.join(ROOT, 'index.html').replace(/\\/g, '/') + '?se
             for (let c = 1; c < 14; c++) {
               const t = rm.tileAt(c, r);
               const fromRock = rm.layout && (rm.layout.rows[r - 1] || '')[c - 1] === 'r';
-              if (t !== T.CACTUS) { if (sandbox && cell.type === 'normal' && t === T.ROCK) rocks++; continue; }
+              if (t !== T.CACTUS) { if (sandbox && cell.type === 'normal' && !rm.encounterBoss && t === T.ROCK) rocks++; continue; }
               cacti++;
               if (!sandbox) { out.push('Kaktus auf Etage ' + d); break; }
               if (cell.type !== 'normal') out.push('Kaktus in ' + cell.type + ' (Etage ' + d + ')');
+              if (rm.encounterBoss) out.push('Kaktus in einer Zwischenboss-Arena (Etage ' + d + ')');
               if (!fromRock) out.push('Kaktus nicht aus einem Fels entstanden (' + c + ',' + r + ')');
               if (fronts.some(([fc, fr]) => Math.abs(fc - c) <= 1 && Math.abs(fr - r) <= 1)) out.push('Kaktus vor einer Tuer (' + c + ',' + r + ')');
             }
@@ -1873,6 +1933,33 @@ const URL = 'file://' + path.join(ROOT, 'index.html').replace(/\\/g, '/') + '?se
     const want = BOTA.themeFor(6).cacti;
     const share = cacti / Math.max(1, cacti + rocks);
     if (!cacti || share < want - 0.15 || share > want + 0.05) out.push('Kaktus-Anteil ' + share.toFixed(2) + ' (Ziel ~' + want + ')');
+    // Arenen ziehen ihre Zahlen weiter aus dem ':cacti'-Strom (ein Zug je Fels), setzen aber keinen Kaktus: Der Strom
+    // wird hier nachgespielt, die uebrigen Raeume muessen genau so aussehen. Etagen mit Terms-Raum fallen heraus, weil
+    // dessen urspruengliche Felsen nach dem Umbau fehlen.
+    let arenas = 0;
+    for (let i = 0; i < 60 && out.length < 6; i++) {
+      const f = new BOTA.Floor(17, 'arena-cacti:' + i);
+      if (f.termsRoom || !f.encounterRooms.length) continue;
+      arenas += f.encounterRooms.length;
+      const rng = new BOTA.RNG(BOTA.hashString(String(f.seed) + ':cacti'));
+      const ordered = [...f.cells.values()].sort((a, b) => (a.y - b.y) || (a.x - b.x));
+      for (const cell of ordered) {
+        if (cell.type !== 'normal') continue;
+        const rm = cell.room;
+        const fronts = Object.keys(rm.doors).map((dir) => FRONT[dir]);
+        for (let r = 1; r < 8; r++) {
+          for (let c = 1; c < 14; c++) {
+            const t = rm.tileAt(c, r);
+            if (t !== T.ROCK && t !== T.CACTUS) continue;
+            const hit = rng.chance(want);
+            const front = fronts.some(([fc, fr]) => Math.abs(fc - c) <= 1 && Math.abs(fr - r) <= 1);
+            const expect = hit && !front && !rm.encounterBoss ? T.CACTUS : T.ROCK;
+            if (t !== expect) out.push('Kakteen-Strom verschoben (Etage 17, ' + i + ', ' + c + ',' + r + ')');
+          }
+        }
+      }
+    }
+    if (!arenas) out.push('Kein Etage-17-Grundriss mit Zwischenboss-Arena gefunden');
 
     // 2) Stechen, Unverwundbarkeit, Rueckstoss, Sprengen — in einem leeren Raum mit einer gesetzten Kaktus-Kachel
     BOTA.debug.gotoRoom('start'); BOTA.debug.god(true);

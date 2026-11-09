@@ -183,12 +183,15 @@
       for (const cell of ordered) {
         if (cell.type !== 'normal') continue;
         const room = cell.room;
+        // Zwischenboss-Arenen bleiben ohne Kakteen wie ohne Objekte (Review 2026-11-09: ein Arena-Layout hat Felsen).
+        // Ihre Felsen ziehen trotzdem je eine Zahl, damit die Kakteen der uebrigen Raeume gleich bleiben.
+        const arena = !!room.encounterBoss;
         const fronts = Object.keys(room.doors).map((dir) => DOOR_FRONT[dir]);
         for (let r = 1; r < ROWS - 1; r++) {
           for (let c = 1; c < COLS - 1; c++) {
             if (room.tileAt(c, r) !== TT.ROCK) continue;
             const hit = rng.chance(share);
-            if (!hit || fronts.some(([fc, fr]) => Math.abs(fc - c) <= 1 && Math.abs(fr - r) <= 1)) continue;
+            if (!hit || arena || fronts.some(([fc, fr]) => Math.abs(fc - c) <= 1 && Math.abs(fr - r) <= 1)) continue;
             room.setTile(c, r, TT.CACTUS);
           }
         }

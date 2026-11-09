@@ -117,9 +117,10 @@ Live state is under `BOTA.game` (`.player`, `.room`, `.floor`, `.depth`, `.state
 - bosses never repeat on consecutive floors (300 simulated runs plus a real floor sequence), and README.md appears on
   about 50 % of floors, only in normal rooms, and reveals every room except secret rooms;
 - pipes appear in about 10 % of combat rooms after clearing (never by a door), never lead to the boss room, the
-  secret room or the current room, and can't ping-pong during their cooldown;
+  secret room, the current room or a room without an unlocked exit (a locked treasure room or shop, until it's
+  unlocked), and can't ping-pong during their cooldown;
 - floor names and themes have the same length, floor 3 is Forgotten Branches, and its maps have ≥ 7 dead ends;
-- floor 6 is Sandbox Borders; cacti appear only there, only where the layout had a rock, never in front of a door,
+- floor 6 is Sandbox Borders; cacti appear only there, only where the layout had a rock, never in front of a door or in a side-quest arena,
   at about the theme's `cacti` share; a cactus pricks once (then i-frames) with knockback, is solid like a rock,
   and explosions break it;
 - `themes` / `themeOnly` on enemies and bosses only name existing theme keys with factors ≥ 0, every floor of two full
@@ -157,6 +158,8 @@ Live state is under `BOTA.game` (`.player`, `.room`, `.floor`, `.depth`, `.state
 - the Game-breaking Bug and Dangling Pointer match the Bug and Null Pointer except for 2 contact damage, never roll
   before floor 8, stay at 2.5–9 % of enemies on floors 8–11 and 19–22 and at 0 on 12–18 (the Game-breaking Bug also at 0 on The Latent Space), and one touch costs a full heart;
 - the Off-Brand GPU turns about 12 % of shots into duds that deal no damage, and the GPU prices are 30¢ / 20¢;
+- Benchmark Overfitting adds 60 % against bosses, also through boss segments, arms and rings (times their
+  `proxyMult`) and twice in one tick, and nothing against normal enemies;
 - the Forgotten Branches family (see §4):
   - **Stale Branch** appears only on its floor (before floor 8), ages through its leaf stages, speeds up, counts up its counter,
     and lunges only after the windup (2 damage, then back to 1); leaf effects and family sounds fire on hit and death;
@@ -433,13 +436,15 @@ game.score · game.cycles`
 9. `assignPipes` marks about 10 % of combat rooms `hasPipe` (own stream `':pipe'`). `game.onRoomClear` →
    `placePipe` drops a `B.Pipe` (in `room.pickups`, not near doors or the centre). Walking onto it calls
    `game.pipeWarp`, which teleports to a random room other than boss, secret and the current one (via `game.rng`).
+   `game.pipeExitOk` also skips rooms whose only visible doors are locked (a treasure room or shop from floor 2 until
+   its door is unlocked): landing there without an Approval was a soft-lock.
    Pipes only trigger on the step *onto* them, and `game.pipeCooldown` (1 s) blocks all pipes after a jump.
 10. `assignEncounters` (floor 8+, own stream `':encounter'`, runs after `assignPipes` and before `assignProps`) turns
    1 combat room (floors 8–9) or 1–2 (from 10, 50 %) into a **side quest**: preferably not next to the start room
    (`dist ≥ 2`) or another encounter. The room is re-stamped with a `special` layout (`room.stampLayout`, the boss
    room pool: open centre), `plannedEnemies` is emptied and `room.encounterBoss` is set by `pickEncounterBosses(avoid)`
    (own stream `':encounter:boss'`, uniform from `B.ENCOUNTER_BOSSES` = Monolith, Swarm, Infinite Loop, Stakeholder,
-   never `avoid` or the boss it `replaces`, no duplicates). `game.assignFloorBoss` calls it again with the final floor boss. Props skip these
+   never `avoid` or the boss it `replaces`, no duplicates). `game.assignFloorBoss` calls it again with the final floor boss. Props and cacti skip these
    rooms; key, loose loot, README and pipe stay. `game.populate` → `spawnEncounter` spawns the boss in the centre with
    `hpMult: B.ENCOUNTER_HP` (0.5) and `encounter: true`, plus a banner (boss name, `TEXT.ENCOUNTER_LINES`). There is
    no intro card and no boss music (`pendingBossIntro` is only set for `type === 'boss'`), no trapdoor or boss
@@ -454,7 +459,8 @@ game.score · game.cycles`
    explosions call `game.breakProp`; enemy shots don't damage them. Breaking drops a random pickup with `B.PROP_LOOT_CHANCE` (10 %). Props are drawn per frame (`drawProps` in
    `renderer.js`), not baked into the background.
 12. `assignCacti` (own stream `':cacti'`) turns each rock in a normal room into a `CACTUS` tile with the theme's
-   `cacti` share (Sandbox Borders: 0.5), never in the 3 × 3 area in front of a door. Cacti are as solid as rocks, so
+   `cacti` share (Sandbox Borders: 0.5), never in the 3 × 3 area in front of a door or in a side-quest arena (its rocks still
+   draw from the stream, so other rooms keep their cacti). Cacti are as solid as rocks, so
    walkability is unchanged. `game.checkCactus` (from `updatePlay`, not while flying) pricks the player for half a
    heart with knockback when their circle touches a cactus tile; `explode` breaks cacti like rocks.
 
