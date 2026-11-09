@@ -1891,7 +1891,8 @@ const URL = 'file://' + path.join(ROOT, 'index.html').replace(/\\/g, '/') + '?se
   });
   problems.push(...octoProblems);
 
-  // --- Sandbox Borders: Etage 6; Kakteen nur dort, nur aus Felsen, nie vor Tueren, ~Anteil theme.cacti;
+  // --- Sandbox Borders: Etage 6; Kakteen nur dort, nur aus Felsen, nie vor Tueren und nie in Zwischenboss-Arenen
+  //     (Etage 17), ~Anteil theme.cacti; Arenen aendern die Kakteen der anderen Raeume nicht;
   //     Kaktus sticht (einmal, dann Unverwundbarkeit) und stoesst zurueck; Explosion sprengt ihn; Sprites da ---
   const sandProblems = await page.evaluate(() => {
     const out = [];
@@ -1915,10 +1916,11 @@ const URL = 'file://' + path.join(ROOT, 'index.html').replace(/\\/g, '/') + '?se
             for (let c = 1; c < 14; c++) {
               const t = rm.tileAt(c, r);
               const fromRock = rm.layout && (rm.layout.rows[r - 1] || '')[c - 1] === 'r';
-              if (t !== T.CACTUS) { if (sandbox && cell.type === 'normal' && t === T.ROCK) rocks++; continue; }
+              if (t !== T.CACTUS) { if (sandbox && cell.type === 'normal' && !rm.encounterBoss && t === T.ROCK) rocks++; continue; }
               cacti++;
               if (!sandbox) { out.push('Kaktus auf Etage ' + d); break; }
               if (cell.type !== 'normal') out.push('Kaktus in ' + cell.type + ' (Etage ' + d + ')');
+              if (rm.encounterBoss) out.push('Kaktus in einer Zwischenboss-Arena (Etage ' + d + ')');
               if (!fromRock) out.push('Kaktus nicht aus einem Fels entstanden (' + c + ',' + r + ')');
               if (fronts.some(([fc, fr]) => Math.abs(fc - c) <= 1 && Math.abs(fr - r) <= 1)) out.push('Kaktus vor einer Tuer (' + c + ',' + r + ')');
             }
@@ -1931,6 +1933,33 @@ const URL = 'file://' + path.join(ROOT, 'index.html').replace(/\\/g, '/') + '?se
     const want = BOTA.themeFor(6).cacti;
     const share = cacti / Math.max(1, cacti + rocks);
     if (!cacti || share < want - 0.15 || share > want + 0.05) out.push('Kaktus-Anteil ' + share.toFixed(2) + ' (Ziel ~' + want + ')');
+    // Arenen ziehen ihre Zahlen weiter aus dem ':cacti'-Strom (ein Zug je Fels), setzen aber keinen Kaktus: Der Strom
+    // wird hier nachgespielt, die uebrigen Raeume muessen genau so aussehen. Etagen mit Terms-Raum fallen heraus, weil
+    // dessen urspruengliche Felsen nach dem Umbau fehlen.
+    let arenas = 0;
+    for (let i = 0; i < 60 && out.length < 6; i++) {
+      const f = new BOTA.Floor(17, 'arena-cacti:' + i);
+      if (f.termsRoom || !f.encounterRooms.length) continue;
+      arenas += f.encounterRooms.length;
+      const rng = new BOTA.RNG(BOTA.hashString(String(f.seed) + ':cacti'));
+      const ordered = [...f.cells.values()].sort((a, b) => (a.y - b.y) || (a.x - b.x));
+      for (const cell of ordered) {
+        if (cell.type !== 'normal') continue;
+        const rm = cell.room;
+        const fronts = Object.keys(rm.doors).map((dir) => FRONT[dir]);
+        for (let r = 1; r < 8; r++) {
+          for (let c = 1; c < 14; c++) {
+            const t = rm.tileAt(c, r);
+            if (t !== T.ROCK && t !== T.CACTUS) continue;
+            const hit = rng.chance(want);
+            const front = fronts.some(([fc, fr]) => Math.abs(fc - c) <= 1 && Math.abs(fr - r) <= 1);
+            const expect = hit && !front && !rm.encounterBoss ? T.CACTUS : T.ROCK;
+            if (t !== expect) out.push('Kakteen-Strom verschoben (Etage 17, ' + i + ', ' + c + ',' + r + ')');
+          }
+        }
+      }
+    }
+    if (!arenas) out.push('Kein Etage-17-Grundriss mit Zwischenboss-Arena gefunden');
 
     // 2) Stechen, Unverwundbarkeit, Rueckstoss, Sprengen — in einem leeren Raum mit einer gesetzten Kaktus-Kachel
     BOTA.debug.gotoRoom('start'); BOTA.debug.god(true);

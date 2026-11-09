@@ -120,7 +120,7 @@ Live state is under `BOTA.game` (`.player`, `.room`, `.floor`, `.depth`, `.state
   secret room, the current room or a room without an unlocked exit (a locked treasure room or shop, until it's
   unlocked), and can't ping-pong during their cooldown;
 - floor names and themes have the same length, floor 3 is Forgotten Branches, and its maps have ≥ 7 dead ends;
-- floor 6 is Sandbox Borders; cacti appear only there, only where the layout had a rock, never in front of a door,
+- floor 6 is Sandbox Borders; cacti appear only there, only where the layout had a rock, never in front of a door or in a side-quest arena,
   at about the theme's `cacti` share; a cactus pricks once (then i-frames) with knockback, is solid like a rock,
   and explosions break it;
 - `themes` / `themeOnly` on enemies and bosses only name existing theme keys with factors ≥ 0, every floor of two full
@@ -444,7 +444,7 @@ game.score · game.cycles`
    (`dist ≥ 2`) or another encounter. The room is re-stamped with a `special` layout (`room.stampLayout`, the boss
    room pool: open centre), `plannedEnemies` is emptied and `room.encounterBoss` is set by `pickEncounterBosses(avoid)`
    (own stream `':encounter:boss'`, uniform from `B.ENCOUNTER_BOSSES` = Monolith, Swarm, Infinite Loop, Stakeholder,
-   never `avoid` or the boss it `replaces`, no duplicates). `game.assignFloorBoss` calls it again with the final floor boss. Props skip these
+   never `avoid` or the boss it `replaces`, no duplicates). `game.assignFloorBoss` calls it again with the final floor boss. Props and cacti skip these
    rooms; key, loose loot, README and pipe stay. `game.populate` → `spawnEncounter` spawns the boss in the centre with
    `hpMult: B.ENCOUNTER_HP` (0.5) and `encounter: true`, plus a banner (boss name, `TEXT.ENCOUNTER_LINES`). There is
    no intro card and no boss music (`pendingBossIntro` is only set for `type === 'boss'`), no trapdoor or boss
@@ -459,7 +459,8 @@ game.score · game.cycles`
    explosions call `game.breakProp`; enemy shots don't damage them. Breaking drops a random pickup with `B.PROP_LOOT_CHANCE` (10 %). Props are drawn per frame (`drawProps` in
    `renderer.js`), not baked into the background.
 12. `assignCacti` (own stream `':cacti'`) turns each rock in a normal room into a `CACTUS` tile with the theme's
-   `cacti` share (Sandbox Borders: 0.5), never in the 3 × 3 area in front of a door. Cacti are as solid as rocks, so
+   `cacti` share (Sandbox Borders: 0.5), never in the 3 × 3 area in front of a door or in a side-quest arena (its rocks still
+   draw from the stream, so other rooms keep their cacti). Cacti are as solid as rocks, so
    walkability is unchanged. `game.checkCactus` (from `updatePlay`, not while flying) pricks the player for half a
    heart with knockback when their circle touches a cactus tile; `explode` breaks cacti like rocks.
 
